@@ -460,6 +460,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (p.f) s += (s ? ' ' : '') + p.f + '/' + p.d;
     return (s || '0') + (o.bare ? '' : '"');
   }
+  // A typeset fraction, 15⁄16 small and raised; a screen reader hears it as 15/16, not "superscript 15 fraction slash
+  // subscript 16".
+  function frac(n, d) { return '<span class="fr"><span class="sr">' + n + '/' + d + '</span><span aria-hidden="true"><sup>' + n + '</sup>⁄<sub>' + d + '</sub></span></span>'; }
+  // A material's note with its fractions typeset: 23/32 in actual.
+  function noteH(t) { return esc(t).replace(/\b(\d+)\/(\d+)\b/g, function (m, n, d) { return frac(n, d); }); }
   // HTML: typeset fractions and primes, the way a tape reads
   function fmtH(x, o) {
     o = o || {};
@@ -469,8 +474,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       return ft + '′' + (rem ? ' ' + fmtH(rem) : '');
     }
     var p = sixteenths(x), s = p.w ? String(p.w) : '';
-    // a screen reader hears the fraction as 15/16, not "superscript 15 fraction slash subscript 16"
-    if (p.f) s += (s ? ' ' : '') + '<span class="fr"><span class="sr">' + p.f + '/' + p.d + '</span><span aria-hidden="true"><sup>' + p.f + '</sup>⁄<sub>' + p.d + '</sub></span></span>';
+    if (p.f) s += (s ? ' ' : '') + frac(p.f, p.d);
     return (s || '0') + (o.bare ? '' : '″');
   }
   // Plain text as a tape reads, with ′ and ″ for the marks: 47 3/4″, 8′ 6″. fmtT also keeps a length on one line (35 3/4
@@ -1248,7 +1252,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     P.materials.forEach(function (m) {
       var sheet = m.kind === 'sheet';
       h += '<article class="mat' + (sheet ? ' sheetmat' : '') + '" data-mid="' + m.id + '">' +
-        '<header class="mat-hd"><span class="mat-ic" aria-hidden="true">' + ICON[m.kind] + '</span><input class="mat-name" data-f="mname" value="' + esc(m.name) + '" aria-label="Material name" autocomplete="off"><span class="mat-note">' + esc(m.note) + '</span><button class="icon" type="button" data-a="delmat" title="Remove this material" aria-label="Remove ' + esc(m.name) + '">✕</button></header>' +
+        '<header class="mat-hd"><span class="mat-ic" aria-hidden="true">' + ICON[m.kind] + '</span><input class="mat-name" data-f="mname" value="' + esc(m.name) + '" aria-label="Material name" autocomplete="off"><span class="mat-note">' + noteH(m.note) + '</span><button class="icon" type="button" data-a="delmat" title="Remove this material" aria-label="Remove ' + esc(m.name) + '">✕</button></header>' +
         '<div class="parts"><div class="prow head"><span></span><span>Part</span><span style="text-align:center">Qty</span><span>' + (sheet ? 'Length' : 'Length') + '</span>' + (sheet ? '<span>Width</span><span title="Keep the grain running along the part’s length">Grain</span>' : '') + '<span></span></div>';
       // Each field is named by its part's letter, its name as typed and its column: "B Front & back rail Length".
       m.parts.forEach(function (p, i) {
@@ -1488,7 +1492,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     h += '<div class="sec"><div class="sec-hd"><h3>Shopping list</h3><button class="lbtn" type="button" id="copyList">Copy as text</button></div><div class="shop"><table><thead><tr><th>Qty</th><th>What</th><th style="text-align:right">Each</th><th style="text-align:right">Total</th></tr></thead><tbody>';
     r.mats.forEach(function (m) {
       if (!m.items.length) return;
-      h += '<tr class="grp"><td colspan="4">' + esc(m.mat.name) + (m.mat.note ? ' <span style="color:var(--ink3);font-weight:500">· ' + esc(m.mat.note) + '</span>' : '') + '</td></tr>';
+      h += '<tr class="grp"><td colspan="4">' + esc(m.mat.name) + (m.mat.note ? ' <span style="color:var(--ink3);font-weight:500">· ' + noteH(m.mat.note) + '</span>' : '') + '</td></tr>';
       shopLines(m).forEach(function (l) {
         h += '<tr' + (l.have ? ' class="have"' : '') + '><td class="q">' + l.n + ' ×</td><td>' + l.dimsH + (l.have ? ' <small>(yours)</small>' : '') + '</td><td class="n">' + (l.have ? '—' : esc(money(l.price))) + '</td><td class="n">' + (l.have ? 'free' : esc(money(l.price * l.n))) + '</td></tr>';
       });
@@ -1987,7 +1991,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     openSheet('<div class="hd"><h2>Settings for this project</h2><button class="btn sm sec" type="button" id="stx">Done</button></div><div class="bd">' +
       '<div class="fld"><span>Units</span><div class="seg" id="uSeg"><button type="button" data-v="in">Inches</button><button type="button" data-v="mm">Millimeters</button></div></div>' +
       '<div class="fld-row"><label class="fld"><span>Saw kerf</span><input id="sKerf" class="mono" autocomplete="off"></label><label class="fld"><span>Trim each board end</span><input id="sTrim" class="mono" autocomplete="off"></label><label class="fld"><span>Keep offcuts over</span><input id="sKeep" class="mono" autocomplete="off"></label><label class="fld"><span>Currency</span><input id="sCur" maxlength="3" autocomplete="off"></label></div>' +
-      '<p class="note">Kerf is the wood the blade turns to sawdust — about ⅛″ (3 mm) for a full-kerf table saw blade, 3/32″ for thin-kerf ones, and about 1/16″ for most 7¼″ circular saw blades. Trimming the ends squares up factory ends that aren’t quite square; many people skip it for studs.</p></div>');
+      '<p class="note">Kerf is the wood the blade turns to sawdust — about ' + frac(1, 8) + '″ (3&nbsp;mm) for a full-kerf table saw blade, ' + frac(3, 32) + '″ for thin-kerf ones, and about ' + frac(1, 16) + '″ for most 7&nbsp;' + frac(1, 4) + '″ circular saw blades. Trimming the ends squares up factory ends that aren’t quite square; many people skip it for studs.</p></div>');
     function draw() {
       document.querySelectorAll('#uSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === U); b.setAttribute('aria-pressed', b.dataset.v === U); });
       ['sKerf', 'sTrim', 'sKeep'].forEach(function (id) { $(id).inputMode = U === 'mm' ? 'decimal' : 'text'; });

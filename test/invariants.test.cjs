@@ -21,7 +21,7 @@ function line(start) { const i = src.indexOf(start); if (i < 0) throw new Error(
 const SOLVER = [
   "var U = 'in', CUR = '$';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
-  ...['esc', 'plural', 'sixteenths', 'mmOf', 'fmt', 'fmtH', 'sayLen', 'parseLen', 'money', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'lastIsLeft', 'orientations',
+  ...['esc', 'plural', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'sayLen', 'parseLen', 'money', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'lastIsLeft', 'orientations',
     'newSheet', 'placeIn', 'fitsStock', 'packRun', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
 ];
 const K = new Function([...SOLVER, 'return { fmt: fmt, parseLen: parseLen, solveBoards: solveBoards, solveSheets: solveSheets, units: function (u) { U = u; } };'].join('\n'))();

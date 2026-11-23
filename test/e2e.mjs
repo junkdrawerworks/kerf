@@ -853,6 +853,17 @@ assert.match(await page.textContent('details.stock .chips'), /6′ · \$2\.38.*8
 await page.click('.pbtn >> text=Other board');
 await page.keyboard.type('Poplar 1×5');
 assert.deepEqual(await page.$$eval('#mats .mat-name', is => is.map(i => i.value)), ['1×2 board', 'Poplar 1×5'], 'Other board doesn’t start on its name');
+// Plywood's note and the Settings note typeset their fractions, as the plan does: '23/32 in actual' stood beside
+// '1½ × 3½ in', and the Settings note's ⅛ came from another font (Barlow has no ⅛), next to an ASCII 3/32″.
+await page.click('.pbtn >> text=¾ plywood');
+assert.deepEqual(await page.$eval('.sheetmat .mat-note', n => [n.querySelector('.fr .sr')?.textContent, n.querySelector('[aria-hidden]')?.textContent]), ['23/32', '23⁄32'], 'plywood’s note doesn’t typeset 23/32');
+await page.click('#setBtn');
+{
+  const note = await page.$eval('#sheet .note', n => ({ text: n.textContent, fr: [...n.querySelectorAll('.fr .sr')].map(s => s.textContent) }));
+  assert.ok(!/⅛/.test(note.text) && note.text.includes('3\u00a0mm'), 'the Settings note: ' + note.text);
+  assert.deepEqual(note.fr, ['1/8', '3/32', '1/16', '1/4'], 'the Settings note’s fractions aren’t typeset');
+}
+await page.click('#stx');
 
 // A three-letter currency sits clear of the price, and a price typed over an old one isn't read as both.
 {

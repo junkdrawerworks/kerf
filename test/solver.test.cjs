@@ -22,7 +22,7 @@ function line(start) { const i = src.indexOf(start); return src.slice(i, src.ind
 const SOLVER = [
   "var U = 'in';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
-  ...['esc', 'sixteenths', 'mmOf', 'fmt', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'orientations', 'newSheet',
+  ...['esc', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'orientations', 'newSheet',
     'placeIn', 'fitsStock', 'packRun', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
 ];
 const K = new Function([
