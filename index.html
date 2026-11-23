@@ -1647,7 +1647,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var el = barFor; if (!el || !el.isConnected) { hideBar(); return; }
     if (k === 'abc') { // blurred and focused again, so the phone brings up the other keyboard
       el.inputMode = el.inputMode === 'text' ? 'decimal' : 'text';
-      el.blur(); el.focus(); var n = el.value.length; el.setSelectionRange(n, n); showBar(el);
+      el.blur(); el.focus();
+      // The blur wrote the length as a tape reads it, 35"; without that inch mark, a sixteenth typed after it reads
+      // (35 15/16). The length is the same either way, and the next blur writes the mark again.
+      el.value = el.value.replace(/ ?["″]\s*$/, '');
+      var n = el.value.length; el.setSelectionRange(n, n); showBar(el);
       return;
     }
     if (document.activeElement !== el) el.focus();

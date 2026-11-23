@@ -1138,6 +1138,15 @@ await page.click('#stx');
   await page.click('#fbar [data-k="⅞"]');
   assert.equal(await page.inputValue(rail), '48⅞″', 'a fraction after the inch mark');
   assert.equal(await page.locator(rail).evaluate(i => i.classList.contains('bad')), false, '48⅞″ isn’t read as a length');
+  // A sixteenth typed on the letter keyboard after a length: the swap leaves the length without its inch mark (the blur
+  // wrote 35"), so 35 15/16 reads.
+  await page.fill(rail, '35');
+  await page.click('#fbar .abc');
+  assert.equal(await page.inputValue(rail), '35', 'the letter keyboard key left the inch mark on the length');
+  await page.keyboard.type(' 15/16');
+  assert.equal(await page.locator(rail).evaluate(i => i.classList.contains('bad')), false, '35 15/16 typed after the letter keyboard key isn’t read');
+  await page.waitForFunction(() => { const d = JSON.parse(localStorage.getItem('kerf.v1') || 'null'); return d && d.projects[d.current].materials[0].parts[1].len === 35.9375; }, null, { timeout: 5000 }).catch(() => assert.fail('35 15/16 wasn’t kept'));
+  await page.click('#fbar .abc');
   // With the keyboard up (a visual viewport 500 px tall), the keys sit on top of it and the field stays above them.
   await page.evaluate(() => { const vv = new EventTarget(); Object.assign(vv, { offsetTop: 0, height: 500, width: 390 }); Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv }); });
   await page.evaluate(() => { document.querySelector('.sheetmat .prow[data-pid] [data-f="wid"]').scrollIntoView({ block: 'end' }); document.querySelector('.sheetmat .prow[data-pid] [data-f="wid"]').focus(); });
