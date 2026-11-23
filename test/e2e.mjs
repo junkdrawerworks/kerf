@@ -1100,6 +1100,9 @@ await page.click('#stx');
   // A single line with no tab is a name, pasted as usual.
   assert.equal(await pasteInto('#mats .mat:nth-of-type(1) .prow[data-pid] [data-f="pname"]', 'Long leg'), true, 'a name pasted as a name was taken over');
   assert.equal((await rows(1)).length, 3);
+  // A name that starts with a digit is a name, with the count before it.
+  await pasteInto('#mats .mat:nth-of-type(1) .prow[data-pid] [data-f="pname"]', '2\t1st shelf cleat\t10\n');
+  assert.equal((await rows(1))[1], '1st shelf cleat / 2 / 10"', 'a name starting with a digit was read as a count');
 }
 
 // On a touch screen an inch length takes the number pad, and while it has focus a row of keys above the keyboard types

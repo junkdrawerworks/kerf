@@ -1850,7 +1850,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var cell = function (c) { c = c.trim(); return /^"[\s\S]*"$/.test(c) ? c.slice(1, -1).replace(/""/g, '"').trim() : c; };
     var rows = String(t).replace(/\r\n?/g, '\n').split('\n').map(function (r) { return r.split('\t').map(cell); }).filter(function (r) { return r.some(Boolean); });
     if (!rows.length || (rows.length === 1 && rows[0].length === 1)) return null;
-    var number = function (c) { return /^\d/.test(c) && (parseInt(c, 10) > 0 || parseLen(c) > 0); };
+    var number = function (c) { return /^\d+$/.test(c) || parseLen(c) > 0; }; // a count or a length, not 1st shelf
+
     var NAMES = [['qty', /^(qty|quantity|count|number|no\b|#|pcs|pieces|how many)/], ['len', /^(length|len\b|l\b|long)/], ['wid', /^(width|wid\b|w\b|wide)/], ['name', /(part|name|item|desc|piece|label|what)/]];
     var head = rows[0].map(function (c) { var n = c.toLowerCase().replace(/[(\[].*$/, '').trim(), f = NAMES.filter(function (x) { return x[1].test(n); })[0]; return f ? f[0] : null; });
     var cols;
