@@ -1387,6 +1387,20 @@ for (const c of sawCases) {
   if (c.note) assert.equal(await page.textContent('#sawOut .cut.note'), c.note, what + ': the note at the saw');
 }
 
+// At the saw a measurement's fraction is nearly as big as its whole inches, and every row's text starts at the same
+// place, 47 15/16" or 9 1/2", 1213.5 mm or 150 mm.
+for (const [units, len, short] of [['in', 47 + 15 / 16, 9.5], ['mm', 1213.5 / 25.4, 150 / 25.4]]) {
+  await open(saved(project('Columns', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Rail', qty: 1, len }, { name: 'Cleat', qty: 2, len: short }])], { units })));
+  await view('saw');
+  const rows = await page.$$eval('#sawOut .cut[data-k]', els => els.map(e => {
+    const m = e.querySelector('.meas'), fr = m.querySelector('.fr');
+    return { left: e.querySelector('.what').getBoundingClientRect().left, fits: m.scrollWidth <= m.clientWidth, fr: fr ? parseFloat(getComputedStyle(fr).fontSize) / parseFloat(getComputedStyle(m).fontSize) : 1 };
+  }));
+  assert.equal(rows.length, 3);
+  assert.ok(rows.every(r => r.left === rows[0].left && r.fits), `the rows' text doesn't line up in ${units}: ${JSON.stringify(rows)}`);
+  assert.ok(rows.every(r => r.fr >= 0.8), `a fraction at the saw is small in ${units}`);
+}
+
 // Boards on hand that run short say so in the cut list, instead of stopping the page.
 await open(saved(project('Short of legs', [board('Other board', [{ len: 96, have: 2 }], [{ name: 'Leg', qty: 3, len: 72 }])])));
 await view('list');

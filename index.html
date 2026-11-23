@@ -243,7 +243,12 @@ div.sec{margin-top:22px}
 .cut .box{flex:none;width:28px;height:28px;border-radius:7px;border:2px solid var(--ink3);display:flex;align-items:center;justify-content:center;color:transparent;font-weight:800}
 .cut[aria-checked="true"] .box{background:var(--good);border-color:var(--good);color:var(--surface)}
 .cut[aria-checked="true"] .what{text-decoration:line-through;text-decoration-color:var(--ink3);color:var(--ink3)}
-.cut .meas{flex:none;min-width:92px;font:600 22px var(--mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+/* A measurement is read at arm's length, fraction and all, in a column as wide on every row (it fits 47 15/16″, or
+   1213.5 mm with its unit set small), so the text beside it lines up. */
+.cut .meas{flex:none;width:7.2ch;font:600 26px var(--mono);font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+#sawOut[data-u="mm"] .cut .meas{width:7.9ch}
+.cut .meas .fr{font-size:.82em;font-weight:700}
+.cut .meas .u{font-size:.6em;font-weight:500;color:var(--ink2)}
 .cut .what{flex:1;min-width:0;font-size:14.5px;color:var(--ink2)}
 .cut .what b{color:var(--ink);font-weight:700}
 .cut .what small{display:block;color:var(--ink3);font-size:12.5px}
@@ -333,7 +338,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .sheetmat .srow>:nth-child(2){grid-area:1/2}
   .sheetmat .srow>:nth-child(3){grid-area:2/1}.sheetmat .srow>:nth-child(4){grid-area:2/2}.sheetmat .srow>:nth-child(5){grid-area:2/3}
   .srow[data-sid]{padding:8px 0}.srow[data-sid]+.srow[data-sid]{border-top:1px solid var(--line)}
-  .cut .meas{font-size:19px;min-width:78px}
+  .cut .meas{font-size:24px}
 }
 @media (prefers-reduced-motion:reduce){.toast,.saw-bar .prog i,.stock>summary .chev{transition:none}}
 [hidden]{display:none!important}
@@ -1584,26 +1589,26 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // A part that needs no cut (a board's last part with nothing left past it, a sheet that is all one part) keeps its
   // place in the list, so the cuts after it keep their numbers, but it's a note, not a cut to tick.
   function sawTasks() {
-    var tasks = [];
+    var tasks = [], measH = function (x) { return U === 'mm' ? esc(mmOf(x)) + '<span class="u"> mm</span>' : fmtH(x); };
     RES.mats.forEach(function (m) {
       m.items.forEach(function (it, ii) {
         var s = it.stock, sheet = m.kind === 'sheet';
         var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (sheet ? fmtH(s.wid) + ' × ' + fmtH(s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
         var name = function (pi) { var part = m.mat.parts[pi]; return '<b>' + letter(pi) + '</b> ' + esc(part && part.name || 'Part'); };
         if (!sheet) {
-          if (it.trim > 0) t.cuts.push({ id: 'trim ' + it.trim.toFixed(4), meas: fmtH(it.trim), what: 'Square up one end', sub: 'Trim off ' + fmt(it.trim) + ' and measure every part from this fresh end' });
+          if (it.trim > 0) t.cuts.push({ id: 'trim ' + it.trim.toFixed(4), meas: measH(it.trim), what: 'Square up one end', sub: 'Trim off ' + fmt(it.trim) + ' and measure every part from this fresh end' });
           it.pieces.forEach(function (p, k) {
             var last = k === it.pieces.length - 1, left = last && lastIsLeft(it), far = last && it.trim > 0 && it.offcut <= 0;
             var id = p.pi + '@' + p.len.toFixed(4) + (left ? ' left' : k === 0 ? ' first' : '') + (far ? ' far' : '');
             if (left) { t.cuts.push({ id: id, noCut: true, note: 'What’s left is ' + name(p.pi) + ' — no cut needed' }); return; }
-            t.cuts.push({ id: id, meas: fmtH(p.len), what: name(p.pi), sub: (k === 0 ? 'Measure from the end, cut on the waste side of the mark' : 'Measure from the fresh end') + (far ? ' — this cut squares up the far end too' : '') });
+            t.cuts.push({ id: id, meas: measH(p.len), what: name(p.pi), sub: (k === 0 ? 'Measure from the end, cut on the waste side of the mark' : 'Measure from the fresh end') + (far ? ' — this cut squares up the far end too' : '') });
           });
           if (it.offcut > 0) t.note = esc('Leaves a ' + fmt(it.offcut) + ' offcut' + (it.offcut >= P.keep ? ' — worth keeping' : ''));
         } else {
           it.steps.forEach(function (st) {
             var g = st.gives, gives = g ? ' → ' + g.it.pi + ' ' + g.l.toFixed(4) + '×' + g.w.toFixed(4) + (g.rot ? ' turned' : '') : '';
             if (st.type === 'none') { t.cuts.push({ id: 'whole' + gives, noCut: true, note: 'The whole sheet is ' + name(g.it.pi) + ' — no cut needed' }); return; }
-            t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: fmtH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + esc(st.on) + (g ? ' → ' + name(g.it.pi) : ''), sub: (st.type === 'rip' ? 'Along the grain, ' : 'Across the grain, ') + 'measured from the edge' });
+            t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: measH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + esc(st.on) + (g ? ' → ' + name(g.it.pi) : ''), sub: (st.type === 'rip' ? 'Along the grain, ' : 'Across the grain, ') + 'measured from the edge' });
           });
         }
         tasks.push(t);
@@ -1651,6 +1656,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     syncTicks(tickKeys(tasks));
     if (!tasks.length) { host.innerHTML = '<div class="empty">The cutting steps show up here once there’s a plan.</div>'; return; }
     var ticked = function (t, ci) { var d = P.done[t.mid]; return !!(d && d.ticks[t.ii + '.' + ci]) && !t.cuts[ci].noCut; };
+    host.dataset.u = U;
     var h = '', next = null; // the first cut not ticked yet, marked as the next to make
     tasks.forEach(function (t) {
       var n = 0, d = 0;
