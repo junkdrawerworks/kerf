@@ -2593,7 +2593,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     if ($('pjNote')) $('pjNote').textContent = projectsNote();
   }
-  function projectsNote() { return UNSAVED || NEWER ? 'Projects aren’t being saved in this browser right now.' : 'Projects are saved in this browser on this device. To use one on another phone or computer, save it as a file or copy it as text, then open or paste it there.'; }
+  function projectsNote() { return UNSAVED || NEWER ? 'Projects aren’t being saved in this browser right now.' : 'Projects are saved in this browser on this device. To send one to another phone or computer, or to someone else, share it as a link, save it as a file or copy it as text, then open or paste it there.'; }
   function applyProject() { U = P.units || 'in'; CUR = P.cur || '$'; TIPS = []; SCROLL = {}; renderHead(); renderList(); resolve(); setTab(DB.tab || 'plan', true); }
 
   // ---------- sheets (dialogs) ----------
@@ -2659,15 +2659,60 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     openSheet('<div class="hd"><h2>Copy this</h2><button class="btn sm sec" type="button" id="txx">Done</button></div><div class="bd"><textarea id="txt" readonly></textarea><p class="note">Select it all and copy.</p></div>');
     $('txt').value = t; $('txt').focus(); $('txt').select(); $('txx').addEventListener('click', closeSheet);
   }
+  // A link to the open project, in the format the Claude planner writes (#k1z: the project as compact JSON, deflated,
+  // base64url): its parts, sizes, prices, settings and notes, but not its ticks. A browser without deflate gets the
+  // same JSON uncompressed (#k1j). The address is the page's own, or Kerf's where the page has none to give (a copy
+  // saved to disk, or inside Claude).
+  function linkProject(p) {
+    var o = { name: p.name, units: p.units, kerf: p.kerf, trim: p.trim || 0, edge: p.edge || 0, keep: p.keep, cur: p.cur };
+    if (p.notes) o.notes = p.notes;
+    o.materials = p.materials.map(function (m) {
+      var sheet = m.kind === 'sheet', c = { kind: m.kind, name: m.name, note: m.note || '' };
+      if (!sheet && m.wid) c.wid = m.wid;
+      if (m.examplePrices) c.examplePrices = true;
+      c.stock = m.stock.map(function (s) { var t = { len: s.len, price: s.price, have: s.have || 0 }; if (sheet) t.wid = s.wid; return t; });
+      c.parts = m.parts.map(function (q) { var t = { name: q.name, qty: q.qty, len: q.len }; if (sheet) { t.wid = q.wid; t.grain = q.grain !== false; } else if (q.wid) t.wid = q.wid; return t; });
+      return c;
+    });
+    return o;
+  }
+  function projectLink(p) {
+    var at = /^https?:$/.test(location.protocol) && !CLAUDE ? location.origin + location.pathname : 'https://kerf.junkdrawer.works/';
+    var bytes = new TextEncoder().encode(JSON.stringify({ kerf: 1, project: linkProject(p) }));
+    var b64 = function (u8) { var t = ''; for (var i = 0; i < u8.length; i += 0x8000) t += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+    var plain = function () { return at + '#k1j' + b64(bytes); };
+    try {
+      return new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()
+        .then(function (b) { return at + '#k1z' + b64(new Uint8Array(b)); }, plain);
+    } catch (e) { return Promise.resolve(plain()); }
+  }
+  // A phone or tablet with a share sheet (Messages, AirDrop, Mail) shares a link or a file there; a laptop copies the
+  // link and downloads the file, which is what it would do with them anyway.
+  function shareSheet() { return !!navigator.share && !!window.matchMedia && matchMedia('(pointer: coarse)').matches; }
+  function copyLink(url) {
+    var done = function () { toast('Link copied — it opens this project in Kerf, without your ticks'); };
+    try { navigator.clipboard.writeText(url).then(done, function () { showText(url); }); } catch (e) { showText(url); }
+  }
   function projectsSheet() {
+    // Made as the sheet opens, so a tap on the button shares it at once: a share sheet or the clipboard only answers
+    // a tap straight away, not after waiting. Nothing in the project changes while Projects is open.
+    var link = projectLink(P), url = null, phone = shareSheet();
+    link.then(function (u) { url = u; });
     openSheet('<div class="hd"><h2>Projects</h2><button class="btn sm sec" type="button" id="pjx">Done</button></div><div class="bd">' +
       '<div class="row"><button class="btn tape" type="button" id="pjNew">New project</button><button class="btn sec" type="button" id="pjDup">Duplicate this one</button></div>' +
       '<div class="plist" id="pjList"></div>' +
-      '<div class="fld"><span>Move a project between devices</span><div class="row"><button class="btn sec sm" type="button" id="pjExport">Save this project as a file</button><button class="btn sec sm" type="button" id="pjCopy">Copy as text</button><button class="btn sec sm" type="button" id="pjOpen">Open a project file</button><input type="file" id="pjFile" accept=".json,.kerf,application/json,text/plain" hidden></div>' +
+      '<div class="fld"><span>Share or move a project</span><div class="row"><button class="btn sec sm" type="button" id="pjLink">' + (phone ? 'Share a link' : 'Copy a link') + '</button><button class="btn sec sm" type="button" id="pjExport">Save this project as a file</button><button class="btn sec sm" type="button" id="pjCopy">Copy as text</button><button class="btn sec sm" type="button" id="pjOpen">Open a project file</button><input type="file" id="pjFile" accept=".json,.kerf,application/json,text/plain" hidden></div>' +
       '<textarea id="pjPaste" placeholder="…or paste a project’s text or a Kerf link here"></textarea></div>' +
       '<p class="note" id="pjNote">' + projectsNote() + '</p></div>');
     $('pjNew').addEventListener('click', function () { newProject(); });
     $('pjDup').addEventListener('click', function () { var c = JSON.parse(JSON.stringify(P)); c.id = uid(); c.name = P.name.replace(/ \(example\)$/, '') + ' copy'; c.example = false; delete c.from; c.updated = Date.now(); DB.projects[c.id] = c; DB.order.unshift(c.id); DB.current = c.id; P = c; save(true); closeSheet(); applyProject(); toast('Made “' + c.name + '”'); });
+    $('pjLink').addEventListener('click', function () {
+      var send = function (u) {
+        if (!phone) { copyLink(u); return; }
+        navigator.share({ title: P.name, url: u }).catch(function (e) { if (!e || e.name !== 'AbortError') copyLink(u); }); // AbortError: closed without sending
+      };
+      if (url) send(url); else link.then(send);
+    });
     $('pjExport').addEventListener('click', exportProject);
     $('pjCopy').addEventListener('click', function () { var t = JSON.stringify({ kerf: 1, project: P }); try { navigator.clipboard.writeText(t).then(function () { toast('Project copied — paste it into Kerf on the other device'); }, function () { showText(t); }); } catch (e) { showText(t); } });
     $('pjOpen').addEventListener('click', function () { $('pjFile').click(); }); // a button, so the keyboard reaches it

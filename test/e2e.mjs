@@ -389,6 +389,75 @@ await page.click('#lkAdd');
   }
 }
 
+// Copy a link, in Projects, makes a link that opens in a fresh browser as the same project: its parts, sizes, prices,
+// settings and notes (ticks never travel). Deflated (#k1z) where the browser can, uncompressed (#k1j) where it
+// can't. On a phone it's Share a link, and goes to the share sheet; closing that sends nothing, and a share sheet
+// that fails copies the link instead.
+{
+  const cart = project('Shop cart', [
+    board('1×6 board', [{ len: 96, price: 8.28 }, { len: 30, have: 1 }], [{ name: 'Stile', qty: 2, len: 30, wid: 1.5 }, { name: 'Shelf', qty: 1, len: 30 }]),
+    sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Top', qty: 1, len: 30, wid: 20, grain: false }, { name: 'Shelf', qty: 2, len: 28, wid: 18 }]),
+  ], { units: 'mm', kerf: 0.09375, trim: 0.5, edge: 0.25, keep: 18, cur: '€', notes: 'Glue and screw.\nTwo coats of oil.' });
+  cart.materials[0].wid = 5.5; cart.materials[0].note = '¾ × 5½ in'; cart.materials[1].examplePrices = true;
+  const bare = o => JSON.parse(JSON.stringify(o, (k, v) => ['id', 'updated', 'done', 'from', 'example'].includes(k) ? undefined : v));
+  const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+  // Kerf with the cart open, in a new browser; `stubs` runs before the page does.
+  const kerfWith = async (opts, stubs, arg) => {
+    const c = await browser.newContext(opts), q = await c.newPage();
+    q.on('pageerror', e => problems.push(e.message));
+    await q.addInitScript(stubs, arg);
+    await q.goto(base + 'blank');
+    await q.evaluate(d => localStorage.setItem('kerf.v1', JSON.stringify(d)), saved(cart));
+    await q.goto(base);
+    await q.waitForSelector('#planOut > *', { state: 'attached' });
+    return [c, q];
+  };
+  const opens = async (link, what) => {
+    const c = await browser.newContext(PHONE), q = await c.newPage();
+    q.on('pageerror', e => problems.push(e.message));
+    await q.goto(link);
+    await q.waitForSelector('#lkAdd', { timeout: 5000 }).catch(() => assert.fail(what + ': the link doesn’t open'));
+    assert.match(await q.textContent('#sheet .lk'), /^Shop cart\s*1×6 board — 3 pieces\s*¾ plywood — 3 pieces/, what);
+    await q.click('#lkAdd');
+    const db = await q.evaluate(() => JSON.parse(localStorage.getItem('kerf.v1')));
+    assert.deepEqual(bare(db.projects[db.current]), bare(cart), what + ': the link opens a different project');
+    await c.close();
+  };
+  for (const [what, deflate] of [['deflated', true], ['without deflate', false]]) {
+    const [c, q] = await kerfWith({ viewport: { width: 1280, height: 800 } }, deflate => {
+      if (!deflate) delete window.CompressionStream;
+      Object.defineProperty(navigator, 'clipboard', { get: () => ({ writeText: t => { window.copied = t; return Promise.resolve(); } }) });
+    }, deflate);
+    await q.click('#projBtn');
+    assert.equal(await q.textContent('#pjLink'), 'Copy a link');
+    await q.click('#pjLink');
+    await q.waitForFunction(() => window.copied, null, { timeout: 3000 });
+    const link = await q.evaluate(() => window.copied);
+    assert.ok(link.startsWith(base + (deflate ? '#k1z' : '#k1j')), what + ': ' + link.slice(0, 60));
+    await q.waitForFunction(() => document.getElementById('toast').textContent === 'Link copied — it opens this project in Kerf, without your ticks', null, { timeout: 3000 });
+    if (deflate) assert.ok(link.length < 600, 'a two-material link is ' + link.length + ' characters');
+    await c.close();
+    await opens(link, what);
+  }
+  for (const [what, fails] of [['shared', null], ['closed', 'AbortError'], ['failed', 'NotAllowedError']]) {
+    const [c, q] = await kerfWith(PHONE, fails => {
+      navigator.share = d => { window.shared = d; return fails ? Promise.reject(new DOMException('no', fails)) : Promise.resolve(); };
+      Object.defineProperty(navigator, 'clipboard', { get: () => ({ writeText: t => { window.copied = t; return Promise.resolve(); } }) });
+    }, fails);
+    await q.click('#projBtn');
+    assert.equal(await q.textContent('#pjLink'), 'Share a link');
+    await q.click('#pjLink');
+    await q.waitForFunction(() => window.shared, null, { timeout: 3000 });
+    const sent = await q.evaluate(() => window.shared);
+    assert.equal(sent.title, 'Shop cart');
+    assert.ok(sent.url.startsWith(base + '#k1z'), 'the share sheet got ' + sent.url.slice(0, 60));
+    await q.waitForTimeout(300);
+    assert.equal(await q.evaluate(() => window.copied || null), fails === 'NotAllowedError' ? sent.url : null, what + ': the link was copied, or not');
+    await c.close();
+    if (!fails) await opens(sent.url, 'shared from a phone');
+  }
+}
+
 // The same plan saved as a .kerf.json file opens from Projects, shown first the way a link is.
 const file = { kerf: 1, project: { ...MUDROOM.project, name: 'Garage bench' } };
 await page.click('#projBtn');
