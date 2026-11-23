@@ -1596,14 +1596,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (sheet ? fmtH(s.wid) + ' × ' + fmtH(s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
         var name = function (pi) { var part = m.mat.parts[pi]; return '<b>' + letter(pi) + '</b> ' + esc(part && part.name || 'Part'); };
         if (!sheet) {
-          if (it.trim > 0) t.cuts.push({ id: 'trim ' + it.trim.toFixed(4), meas: measH(it.trim), what: 'Square up one end', sub: 'Trim off ' + fmt(it.trim) + ' and measure every part from this fresh end' });
+          if (it.trim > 0) t.cuts.push({ id: 'trim ' + it.trim.toFixed(4), meas: measH(it.trim), what: 'Square up one end', sub: 'Trim off ' + fmtH(it.trim) + ' and measure every part from this fresh end' });
           it.pieces.forEach(function (p, k) {
             var last = k === it.pieces.length - 1, left = last && lastIsLeft(it), far = last && it.trim > 0 && it.offcut <= 0;
             var id = p.pi + '@' + p.len.toFixed(4) + (left ? ' left' : k === 0 ? ' first' : '') + (far ? ' far' : '');
-            if (left) { t.cuts.push({ id: id, noCut: true, note: 'What’s left is ' + name(p.pi) + ' — no cut needed' }); return; }
-            t.cuts.push({ id: id, meas: measH(p.len), what: name(p.pi), sub: (k === 0 ? 'Measure from the end, cut on the waste side of the mark' : 'Measure from the fresh end') + (far ? ' — this cut squares up the far end too' : '') });
+            // A part that fills the board exactly is what's left, if the board is as long as it says, which isn't always so.
+            if (left) { t.cuts.push({ id: id, noCut: true, note: k === 0 ? 'The whole board is ' + name(p.pi) + ' — no cut needed' : 'What’s left should be ' + name(p.pi) + ' (' + fmtH(p.len) + '). Measure it, and trim it if the board ran long.' }); return; }
+            t.cuts.push({ id: id, meas: measH(p.len), what: name(p.pi), sub: (k === 0 ? 'Measure from the ' + (it.trim > 0 ? 'squared ' : '') + 'end, cut on the waste side of the mark' : 'Measure from the fresh end') + (far ? ' — this cut squares up the far end too' : '') });
           });
-          if (it.offcut > 0) t.note = esc('Leaves a ' + fmt(it.offcut) + ' offcut' + (it.offcut >= P.keep ? ' — worth keeping' : ''));
+          // With end trim, the offcut still has its factory end: it's that much longer on the bench than once squared.
+          if (it.offcut > 0) t.note = 'Leaves a ' + fmtH(it.offcut + it.trim) + ' offcut' + (it.trim > 0 ? ' (' + fmtH(it.offcut) + ' once its end is squared)' : '') + (it.offcut >= P.keep ? ' — worth keeping' : '');
         } else {
           it.steps.forEach(function (st) {
             var g = st.gives, gives = g ? ' → ' + g.it.pi + ' ' + g.l.toFixed(4) + '×' + g.w.toFixed(4) + (g.rot ? ' turned' : '') : '';
@@ -1669,7 +1671,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         if (nx) next = k;
         h += '<button class="cut' + (nx ? ' next' : '') + '" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + k + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + (nx ? '<span class="nx">Next</span> ' : '') + c.what + '<small>' + c.sub + '</small></span></button>';
       });
-      if (t.note) h += '<div class="cut note">' + t.note + '</div>';
+      if (t.note) h += '<div class="cut note"><span>' + t.note + '</span></div>';
       h += '</div>';
     });
     host.innerHTML = '<div class="saw-bar"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div><b>' + done + '<small> of </small>' + total + '<small> ' + (total === 1 ? 'cut' : 'cuts') + '</small></b>' + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>' + h;

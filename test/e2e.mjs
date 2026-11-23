@@ -182,7 +182,7 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   await page.waitForTimeout(600);
   assert.equal(parseInt(await cutsFact()), 23);
   assert.equal(await sawTotal(), 23, 'after the tip, the saw counts more cuts than the plan');
-  assert.ok((await page.textContent('#sawOut')).includes('What’s left is B Front & back rail — no cut needed'), 'no note for a rail that needs no cut');
+  assert.ok((await page.textContent('#sawOut')).includes('What’s left should be B Front & back rail (47 15⁄16″). Measure it, and trim it if the board ran long.'), 'no note for a rail that needs no cut');
   // It reads as a line of text: the letter sits a space after "is", not spread out like the parts of a cut's row.
   await view('saw');
   assert.ok(await page.$eval('#sawOut .cut.note b', b => { const r = document.createRange(); r.selectNodeContents(b.previousSibling); return b.getBoundingClientRect().left - r.getBoundingClientRect().right < 6; }), 'the no-cut note is spread out');
@@ -1367,13 +1367,18 @@ await page.emulateMedia({ media: null });
 
 // A board's last part comes off without a cut only when it's all that's left. Two 47 7/8" rails from an 8' board
 // (the planner's advice) leave 48" after the first cut, so the second rail is measured and cut too.
-const RAIL = 'Measure from the end, cut on the waste side of the mark', FRESH = 'Measure from the fresh end';
+// With end trim, the first part is measured from the squared end, and an offcut is longer on the bench than once squared.
+const RAIL = 'Measure from the end, cut on the waste side of the mark', FRESH = 'Measure from the fresh end', SQUARED = 'Measure from the squared end, cut on the waste side of the mark';
+const TRIM = q => `Trim off ${q} and measure every part from this fresh end`;
 const sawCases = [
   { trim: 0, parts: [{ name: 'Rail', qty: 2, len: 47.875 }], steps: [RAIL, FRESH], cuts: 2, lines: 2 },
-  { trim: 0.25, parts: [{ name: 'Rail', qty: 2, len: 47 + 11 / 16 }], steps: ['Trim off 1/4" and measure every part from this fresh end', RAIL, FRESH + ' — this cut squares up the far end too'], cuts: 3, lines: 2 },
-  { trim: 0.25, parts: [{ name: 'Top', qty: 1, len: 95.5 }], steps: ['Trim off 1/4" and measure every part from this fresh end', RAIL + ' — this cut squares up the far end too'], cuts: 2, lines: 1 },
-  { trim: 0, parts: [{ name: 'Top', qty: 1, len: 96 }], steps: [], note: 'What’s left is A Top — no cut needed', cuts: 0, lines: 0 },
-  { trim: 0, parts: [{ name: 'Leg', qty: 1, len: 72 }], steps: [RAIL], cuts: 1, lines: 1 },
+  { trim: 0, parts: [{ name: 'Rail', qty: 2, len: 47 + 15 / 16 }], steps: [RAIL], note: 'What’s left should be A Rail (47 15⁄16″). Measure it, and trim it if the board ran long.', cuts: 1, lines: 1 },
+  { trim: 0.25, parts: [{ name: 'Rail', qty: 2, len: 47 + 11 / 16 }], steps: [TRIM('1⁄4″'), SQUARED, FRESH + ' — this cut squares up the far end too'], cuts: 3, lines: 2 },
+  { trim: 0.25, parts: [{ name: 'Top', qty: 1, len: 95.5 }], steps: [TRIM('1⁄4″'), SQUARED + ' — this cut squares up the far end too'], cuts: 2, lines: 1 },
+  { trim: 0, parts: [{ name: 'Top', qty: 1, len: 96 }], steps: [], note: 'The whole board is A Top — no cut needed', cuts: 0, lines: 0 },
+  { trim: 0, parts: [{ name: 'Leg', qty: 1, len: 72 }], steps: [RAIL], note: 'Leaves a 23 7⁄8″ offcut — worth keeping', cuts: 1, lines: 1 },
+  { trim: 0.5, parts: [{ name: 'Leg', qty: 1, len: 72 }, { name: 'Brace', qty: 1, len: 20 }], steps: [TRIM('1⁄2″'), SQUARED, FRESH], note: 'Leaves a 3 1⁄4″ offcut (2 3⁄4″ once its end is squared)', cuts: 3, lines: 2 },
+  { trim: 0.5, parts: [{ name: 'Slat', qty: 1, len: 47.5 }], steps: [TRIM('1⁄2″'), SQUARED], note: 'Leaves a 47 7⁄8″ offcut (47 3⁄8″ once its end is squared) — worth keeping', cuts: 2, lines: 1 },
 ];
 for (const c of sawCases) {
   await open(saved(project('Saw', [board('2×4', [{ len: 96, price: 4.28 }], c.parts)], { trim: c.trim })));
@@ -1385,6 +1390,8 @@ for (const c of sawCases) {
   assert.deepEqual(await sawSteps(), c.steps, what + ': steps at the saw');
   assert.equal(await page.textContent('.saw-bar b'), `0 of ${c.cuts} ${c.cuts === 1 ? 'cut' : 'cuts'}`, what + ': cuts at the saw');
   if (c.note) assert.equal(await page.textContent('#sawOut .cut.note'), c.note, what + ': the note at the saw');
+  // a note reads as a line of text, its fractions typeset in it, not spread out like the parts of a cut's row
+  assert.ok(await page.$$eval('#sawOut .cut.note', ns => ns.every(n => n.childNodes.length === 1 && n.firstChild.tagName === 'SPAN')), what + ': a note at the saw is spread out');
 }
 
 // At the saw a measurement's fraction is nearly as big as its whole inches, and every row's text starts at the same
