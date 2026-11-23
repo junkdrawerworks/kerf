@@ -37,6 +37,8 @@
   --body:"Barlow","Helvetica Neue",Arial,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --r:10px;
+  /* the page's side gutters, wider where a notch or a rounded corner needs it (the page asks for viewport-fit=cover) */
+  --gl:max(16px,env(safe-area-inset-left,0px));--gr:max(16px,env(safe-area-inset-right,0px));
   --shadow:0 1px 0 rgba(28,31,34,.04),0 6px 18px -12px rgba(28,31,34,.28);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
@@ -79,9 +81,10 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .mono .fr,.cut .meas .fr,.steps .m .fr{font-family:var(--body)}
 .cut .meas .fr,.steps .m .fr{margin-left:-.2em}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.wrap{max-width:1320px;margin:0 auto;padding-inline:16px;padding-block:0 40px}
+.wrap{max-width:1320px;margin:0 auto;padding-inline:var(--gl) var(--gr);padding-block:0 40px}
 /* top bar */
-.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--ground);border-bottom:1px solid var(--line);margin-inline:-16px;padding:10px 16px}
+/* The bar's own background runs up under the status bar, so nothing shows above it as the page scrolls. */
+.top{position:sticky;top:0;z-index:20;background:var(--ground);border-bottom:1px solid var(--line);margin-inline:calc(-1 * var(--gl)) calc(-1 * var(--gr));padding:calc(10px + env(safe-area-inset-top,0px)) var(--gr) 10px var(--gl)}
 .top-in{display:flex;align-items:center;gap:10px;max-width:1320px;margin:0 auto}
 .brand{flex:none;display:inline-flex;align-items:center;justify-content:center;background:var(--tape);color:var(--tape-ink);font:800 26px/1 var(--disp);letter-spacing:.06em;padding:5px 10px 4px 12px;border-radius:6px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.14)}
 .pname{flex:1;min-width:0;font:600 18px var(--body);background:transparent;border:1px solid transparent;border-radius:7px;padding:6px 8px}
@@ -318,7 +321,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
 }
 @media (prefers-reduced-motion:reduce){.toast,.saw-bar .prog i,.stock>summary .chev{transition:none}}
 [hidden]{display:none!important}
-.jd-foot{text-align:center;font-size:13px;color:var(--ink2);padding:0 16px calc(24px + env(safe-area-inset-bottom,0px))}
+.jd-foot{text-align:center;font-size:13px;color:var(--ink2);padding:0 var(--gr) calc(24px + env(safe-area-inset-bottom,0px)) var(--gl)}
 .jd-foot a{color:inherit;text-underline-offset:3px}
 .jd-foot a:hover{color:var(--ink)}
 .noscript{margin:18px 0 0}

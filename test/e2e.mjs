@@ -452,6 +452,24 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   await page.setViewportSize({ width: 390, height: 844 });
 }
 
+// On a phone with a notch the page keeps clear of it: the side gutters widen to the safe area, and the top bar sits
+// at the very top with its own background under the status bar, so nothing scrolls past above it.
+{
+  const cdp = await page.context().newCDPSession(page);
+  const insets = i => cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, left: 0, right: 0, bottom: 0, ...i } });
+  await open(null);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await insets({ left: 47, right: 47, bottom: 21 });
+  await view('list');
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('.brand, #mats .icon, #mats .plet, .tbtn:not([hidden])')].every(e => { const r = e.getBoundingClientRect(); return r.left >= 47 && r.right <= innerWidth - 47; })), 'something sits in the notch');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await insets({ top: 47, bottom: 34 });
+  await page.evaluate(() => scrollTo(0, 400));
+  assert.deepEqual(await page.evaluate(() => { const t = document.querySelector('.top'); return [t.getBoundingClientRect().top, getComputedStyle(t).paddingTop]; }), [0, '57px'], 'a strip shows above the top bar');
+  await cdp.send('Emulation.clearSafeAreaInsetsOverride').catch(() => insets({}));
+  await cdp.detach();
+}
+
 // A three-letter currency sits clear of the price.
 {
   await open(saved(project('Franken', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }], [{ name: 'Shelf', qty: 2, len: 30, wid: 12 }])], { cur: 'CHF' })));
