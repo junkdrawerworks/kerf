@@ -2236,6 +2236,12 @@ for (const c of sawCases) {
   await page.waitForTimeout(300);
   assert.ok(await sheetCard.evaluate(c => c.querySelector('.sdg svg').getBoundingClientRect().width <= 721), 'the saw’s drawing grows past 720 px on a laptop');
   await page.setViewportSize({ width: 390, height: 844 });
+  // With the factory edges to trim first, that's the next cut, and it isn't in the drawing: no cut stands out until it's ticked.
+  await open(saved(project('Edges', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])], { edge: 0.25 })));
+  await view('saw');
+  assert.deepEqual(await drawn(), { next: [], lines: 0, faded: [], open: true }, 'a cut stands out in the drawing while the edges are still to trim');
+  await sheetCard.locator('.cut[data-k]').first().click();
+  assert.deepEqual(await drawn(), { next: ['1'], lines: 1, faded: [], open: true }, 'the drawing once the edges are trimmed');
 }
 
 // The shop PDF is a checklist for the saw on paper: a box to tick before every cut, the same cuts the saw counts. Under

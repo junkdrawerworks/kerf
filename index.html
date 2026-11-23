@@ -2342,8 +2342,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // each cut below gives its number in the drawing (drawn by the style sheet, so a cut's words stay as they were).
       // A tap on "Drawing" folds it away, for as long as the page is open.
       if (t.m.kind === 'sheet') {
-        var nd = null, dn = {};
-        t.cuts.forEach(function (c, ci) { if (c.step == null) return; if (ticked(t, ci)) dn[c.step] = 1; else if (nd == null) nd = c.step; });
+        // The card's next cut stands out only if it's in the drawing: while the factory edges are still to trim, none does.
+        var nd = null, dn = {}, seen = false;
+        t.cuts.forEach(function (c, ci) { if (c.noCut) return; if (ticked(t, ci)) { if (c.step != null) dn[c.step] = 1; } else if (!seen) { seen = true; if (c.step != null) nd = c.step; } });
         h += '<details class="sdg" data-dg="' + fk + '"' + (SAWDG[fk] ? '' : ' open') + '><summary><span>Drawing</span><span class="chev" aria-hidden="true">›</span></summary>' + sheetSvg(t.m, t.it, t.ii, { width: Math.min(W.saw, 720), named: W.saw >= 560, bare: true, next: nd, done: dn }) + '</details>';
       }
       t.cuts.forEach(function (c, ci) {
