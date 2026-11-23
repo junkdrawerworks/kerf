@@ -2173,6 +2173,18 @@ for (const c of sawCases) {
   assert.ok(await page.$$eval('#sawOut .cut.note', ns => ns.every(n => n.childNodes.length === 1 && n.firstChild.tagName === 'SPAN')), what + ': a note at the saw is spread out');
 }
 
+// A rip wider than what's left past the blade gives the fence setting for that too, for a saw whose fence can't go that
+// far: 31 1/4" off a 48" sheet leaves 16 5/8" past an 1/8" kerf. A rip narrower than what's left has no such line.
+{
+  await open(saved(project('Wide rip', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Top', qty: 1, len: 96, wid: 31.25 }, { name: 'Shelf', qty: 1, len: 96, wid: 6 }])])));
+  await view('saw');
+  const rows = await page.$$eval('#sawOut .cut[data-k] .what', ws => ws.map(w => [...w.querySelectorAll('small')].map(s => s.textContent))).then(a => a.map(r => r.map(shown)));
+  assert.deepEqual(rows, [
+    ['Along the grain — set the fence at 31 1⁄4″, or mark it and cut on the waste side', 'or set the fence at 16 5⁄8″ — the part is the piece past the blade'],
+    ['Along the grain — set the fence at 6″, or mark it and cut on the waste side']], 'the wide rip’s fence settings at the saw');
+  await fitsPhone('saw with a wide rip');
+}
+
 // A sheet's steps name the piece each cut is made on, typeset like the measurements; a rip says where to set the fence
 // and a crosscut to measure from the end, both to cut on the waste side; and a piece worth keeping gets a note. The
 // shop PDF writes the same steps in plain text.
