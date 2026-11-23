@@ -10,6 +10,7 @@ plan.json (lengths may be numbers in the plan's units, or strings the way a tape
   "name": "Mudroom bench",
   "units": "in",                      # "in" or "mm": what Kerf shows; bare numbers are in these units
   "kerf": "1/8", "trim": 0, "edge": 0, "keep": 12, "currency": "$",      # all optional
+  "examplePrices": true,              # optional: false only when the prices are their store's real ones
   "notes": ["Pocket screws: 16 × 2½″ for the frame", "Finish: two coats of wipe-on poly"],   # optional: a string, or a list of lines
   "materials": [
     {"kind": "board", "name": "2×4", "note": "1½ × 3½ in",
@@ -23,6 +24,9 @@ plan.json (lengths may be numbers in the plan's units, or strings the way a tape
      "parts": [{"name": "Seat", "qty": 1, "len": "48", "wid": "16", "grain": true}]}
   ]
 }
+
+Every material is marked as on example prices ("examplePrices": true in Kerf's format), so Kerf says so under its
+sizes until a price is changed, unless the plan (or that material) says "examplePrices": false.
 
 Kerf stores every length in inches whatever the display units; this script does that conversion,
 checks that every part fits some stock and that the plan is within what Kerf opens (LIMITS), and exits 1
@@ -188,6 +192,9 @@ def build(plan):
             out['stock'].append(st)
         if not out['stock']:
             errors.append(f'{mname}: list at least one size to buy (or have)')
+        # Rough prices unless they're the store's own: Kerf then says "Example prices — tap to set yours" under them.
+        if m.get('examplePrices', plan.get('examplePrices', True)) is not False and any(not s['have'] for s in out['stock']):
+            out['examplePrices'] = True
 
         trim = project['trim']
         for pi, p in enumerate(m.get('parts') or []):
@@ -256,7 +263,7 @@ def summary(project):
         lines.append(f"{m['name']}" + (f" ({m['note']})" if m['note'] else ''))
         stock = ', '.join((f"{show(s['wid'], units)} × {show(s['len'], units)}" if m['kind'] == 'sheet' else show(s['len'], units))
                           + (f" (have {s['have']})" if s['have'] else f" @ {project['cur']}{s['price']:.2f}") for s in m['stock'])
-        lines.append(f'  stock: {stock}')
+        lines.append(f'  stock: {stock}' + (' (example prices)' if m.get('examplePrices') else ''))
         for p in m['parts']:
             dims = f"{show(p['len'], units)} × {show(p['wid'], units)}" + (' grain' if p['grain'] else '') if m['kind'] == 'sheet' else show(p['len'], units) + (f" × {show(p['wid'], units)} ripped" if 'wid' in p and abs(p['wid'] - m.get('wid', 0)) > 1e-9 else '')
             lines.append(f"  {p['qty']:>3} × {p['name'] or '(unnamed)'}  {dims}")

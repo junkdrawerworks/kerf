@@ -68,7 +68,7 @@ How Kerf sees materials, so the plan maps cleanly:
 Stock sizes and prices:
 - Offer what's usual for their region (the reference has US and metric sizes, with rough prices).
 - Include more than one length or sheet size where it's sold. Kerf picks the cheapest mix, and half sheets or longer boards often win.
-- Say plainly that prices are examples to update.
+- Say plainly that prices are examples to update. The script marks every material's prices as examples, so Kerf shows *Example prices — tap to set yours* under them until one is changed. Only when they've given you their store's real prices, add `"examplePrices": false` to the plan (or to the one material whose prices are real).
 - Ask about offcuts they already have. Kerf uses them whenever they save buying, for free (`"have": N`).
 - For construction lumber, suggest buying a spare board for knots and warps rather than quietly padding the list.
 - Leave end trim at 0 unless the ends are rough or split, which is common with framing lumber and hardwood; then use ¼–½″ per end, and say so.
@@ -97,6 +97,8 @@ In `plan.json`, lengths are written the way a tape reads — `"35 3/4"`, `"8'"`,
 ```
 
 Optional top-level `"notes"`: a string or a list of lines, up to 2,000 characters in all. Put in what Kerf won't cover, so it travels with the project and prints on the shop PDF: the hardware (screw sizes and counts), glue-ups, the finish, the spare board. Keep it to short lines, the way they'd read at the bench.
+
+Optional top-level `"examplePrices"`: leave it out (every material is on example prices) unless they gave you their store's real prices; then `false`, on the plan or on a material.
 
 Optional top-level settings: `"kerf"` (default ⅛″, or 3 mm in a metric plan), `"trim"` (squaring each board end, default 0), `"edge"` (trimming each factory edge of a sheet, default 0), `"keep"` (the smallest offcut worth keeping, default 12″ or 300 mm), and `"currency"`. For a metric plan, use `"units": "mm"`; bare numbers are then millimetres. Set `"currency"` for the region, such as `"£"` or `"€"`.
 

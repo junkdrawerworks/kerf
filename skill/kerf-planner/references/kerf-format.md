@@ -11,13 +11,13 @@ Kerf reads a project as JSON: from a file (**Projects → Open a project file**)
   "kerf": 0.125, "trim": 0, "edge": 0, "keep": 12, "cur": "$",
   "notes": "Pocket screws: 16 × 2½″ for the frame.\nFinish: two coats of wipe-on poly.",
   "materials": [
-    {"kind": "board", "name": "2×4", "note": "1½ × 3½ in",
+    {"kind": "board", "name": "2×4", "note": "1½ × 3½ in", "examplePrices": true,
      "stock": [{"len": 96, "price": 4.28, "have": 0}, {"len": 120, "price": 6.38, "have": 0}, {"len": 30, "price": 0, "have": 1}],
      "parts": [{"name": "Leg", "qty": 4, "len": 16.5}, {"name": "Long rail", "qty": 4, "len": 41}]},
-    {"kind": "board", "name": "1×6 board", "note": "¾ × 5½ in", "wid": 5.5,
+    {"kind": "board", "name": "1×6 board", "note": "¾ × 5½ in", "wid": 5.5, "examplePrices": true,
      "stock": [{"len": 96, "price": 8.28, "have": 0}],
      "parts": [{"name": "Stile", "qty": 2, "len": 30, "wid": 1.5}, {"name": "Shelf", "qty": 1, "len": 30}]},
-    {"kind": "sheet", "name": "¾ plywood", "note": "23/32 in actual",
+    {"kind": "sheet", "name": "¾ plywood", "note": "23/32 in actual", "examplePrices": true,
      "stock": [{"len": 96, "wid": 48, "price": 58, "have": 0}],
      "parts": [{"name": "Seat", "qty": 1, "len": 48, "wid": 16, "grain": true}]}
   ]}}
@@ -40,7 +40,7 @@ Kerf reads a project as JSON: from a file (**Projects → Open a project file**)
 | `materials[]` | Up to 100 materials | — |
 | `materials[].kind` | `"board"` (one cross-section; parts have a length) or `"sheet"` (parts have a length and a width) | `"board"` |
 | `materials[].name`, `note` | Shown as the material's title and subtitle, up to 200 characters each | `"Board"` or `"Sheet"`, and no note |
-| `materials[].examplePrices` | `true` while the material's prices are Kerf's own examples: the cut list says so until one is changed. Leave it out for prices you were given | none |
+| `materials[].examplePrices` | `true` while the material's prices are examples (Kerf's own, or rough ones from the planner): the cut list says *Example prices — tap to set yours* until one is changed. `make_kerf.py` sets it on every material with a size to buy unless the plan says `"examplePrices": false`. Leave it out for prices you were given | none |
 | `materials[].wid` | Boards only: the board's actual width in inches (a 1×6 is 5.5), up to 1200. With it, board parts can have a `wid` too, and are ripped from the board | none, and board parts' widths are ignored |
 | `stock[]` | Up to 50 sizes per material, to buy or already on hand: `len` (and `wid` for sheets) in inches, up to 1200, a sheet's `len` being the way its grain runs (a 4×8 sheet is `len` 96, `wid` 48); `price` each, up to 100000; `have` = pieces on hand (0 = buy; on-hand pieces are free and used whenever they save buying; at most 10) | `price` 0, which makes the size free, so always give one; `have` 0 |
 | `parts[]` | Up to 1000 rows per material: `name` (up to 200 characters), `qty` (whole number 1–500), `len` (inches, up to 1200), and for sheets `wid` and `grain`; for boards with a `wid`, an optional `wid` for a part ripped narrower than the board | `qty` 1; a board part's `wid`, the whole board's |

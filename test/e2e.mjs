@@ -50,10 +50,10 @@ const base = `http://localhost:${server.address().port}/`;
 const MUDROOM = { kerf: 1, project: {
   name: 'Mudroom bench', units: 'in', kerf: 0.125, trim: 0, keep: 12, cur: '$',
   materials: [
-    { kind: 'board', name: '2×4', note: '1½ × 3½ in',
+    { kind: 'board', name: '2×4', note: '1½ × 3½ in', examplePrices: true,
       stock: [{ len: 96, price: 4.28, have: 0 }, { len: 120, price: 6.38, have: 0 }, { len: 30, price: 0, have: 1 }],
       parts: [{ name: 'Leg', qty: 4, len: 16.5 }, { name: 'Long rail', qty: 4, len: 41 }] },
-    { kind: 'sheet', name: '¾ plywood', note: '23/32 in actual',
+    { kind: 'sheet', name: '¾ plywood', note: '23/32 in actual', examplePrices: true,
       stock: [{ len: 96, wid: 48, price: 58, have: 0 }],
       parts: [{ name: 'Seat', qty: 1, len: 48, wid: 16, grain: true }] },
   ] } };
@@ -528,6 +528,17 @@ assert.equal((await stored()).order.length, 2);
       await page.waitForFunction(() => document.getElementById('sheet').hidden);
       assert.deepEqual(await cutList(), want, 'make_kerf.py’s file in the cut list');
       assert.equal((await stored()).projects[(await stored()).current].kerf, 0.125, 'make_kerf.py’s kerf');
+      // Its prices are rough, so every material says they're examples, unless the plan says they're the store's own.
+      const egs = () => page.$$eval('#mats .mat', ms => ms.map(m => m.querySelector('details.stock .eg')?.textContent || null));
+      assert.deepEqual(await egs(), Array(3).fill('Example prices — tap to set yours'), 'make_kerf.py’s prices aren’t said to be examples');
+      writeFileSync(join(tmp, 'plan.json'), JSON.stringify({ ...JSON.parse(doc), name: 'Store bench', examplePrices: false }));
+      const store = spawnSync('python3', ['-I', '-B', script, join(tmp, 'plan.json'), '--out', tmp, '--base', base], { encoding: 'utf8' });
+      assert.equal(store.status, 0, 'make_kerf.py failed on a plan at store prices:\n' + store.stdout + store.stderr);
+      await page.click('#projBtn');
+      await page.setInputFiles('#pjFile', /^File: (.+)$/m.exec(store.stdout)[1]);
+      await page.click('#lkAdd');
+      await page.waitForFunction(() => document.getElementById('pname').value === 'Store bench');
+      assert.deepEqual(await egs(), [null, null, null], 'a plan at the store’s prices says they’re examples');
     }
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 }
