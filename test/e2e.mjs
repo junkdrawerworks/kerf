@@ -532,6 +532,32 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   assert.ok(await name.evaluate(e => e.getBoundingClientRect().top >= document.querySelector('.top').getBoundingClientRect().bottom), 'a focused field is under the top bar');
 }
 
+// Each view keeps its own place: the plan opens at the top the first time, and the cut list comes back where it was.
+// New project opens on the cut list, and an empty plan has a button to it.
+{
+  // (tapped in the page: Playwright's own click scrolls the page to the top first, to reach the sticky tabs)
+  const tab = t => page.$eval(`#tabs button[data-t="${t}"]`, b => b.click());
+  await open(null);
+  await tab('list');
+  await page.evaluate(() => { document.querySelectorAll('details.stock').forEach(d => { d.open = true; }); scrollTo(0, 300); });
+  await tab('plan');
+  assert.equal(await page.evaluate(() => scrollY), 0, 'the plan opened where the cut list was scrolled to');
+  await page.evaluate(() => scrollTo(0, 700));
+  await tab('list');
+  assert.equal(await page.evaluate(() => scrollY), 300, 'the cut list didn’t come back where it was');
+  await tab('plan');
+  assert.equal(await page.evaluate(() => scrollY), 700, 'the plan didn’t come back where it was');
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.click('#exNew');
+  assert.equal(await page.getAttribute('#app', 'data-tab'), 'list', 'New project doesn’t open on the cut list');
+  await view('plan');
+  await page.click('#planOut .empty button');
+  assert.equal(await page.getAttribute('#app', 'data-tab'), 'list', 'the empty plan’s button doesn’t go to the cut list');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  assert.ok(await page.isHidden('#planOut .empty button'), 'the empty plan shows a button to the cut list beside it');
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 // The Source menu offers every count on hand from 1 to 10, the range a planner link can carry.
 await open(saved(project('Offcuts', [board('2×4', [{ len: 96, price: 4.28 }, { len: 40, have: 7 }], [{ name: 'Leg', qty: 2, len: 30 }])])));
 await view('list');

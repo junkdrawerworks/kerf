@@ -221,6 +221,7 @@ div.sec{margin-top:22px}
 .steps li>b{flex:none;width:20px;height:20px;border-radius:50%;background:var(--chalk);color:var(--surface);font:700 10.5px/20px var(--mono);text-align:center}
 .steps .m{font:600 13.5px var(--mono);color:var(--ink)}
 .empty{background:var(--surface);border:1px dashed var(--line2);border-radius:var(--r);padding:26px 18px;text-align:center;color:var(--ink2)}
+.empty .btn{display:none;margin-top:14px} /* to the cut list, shown where it's a tab of its own */
 /* at the saw */
 .saw-bar{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:12px}
 .saw-bar .prog{flex:1;height:10px;border-radius:99px;background:var(--sunk);overflow:hidden}
@@ -281,6 +282,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .right-tabs .seg{display:none}
   .app[data-tab="list"] .pane.plan,.app[data-tab="plan"] .pane.list,.app[data-tab="saw"] .pane.list{display:none}
   .pane-hd.lhd{display:none}
+  .empty .btn{display:inline-block}
   /* Every field keeps the 16px text set above: iOS zooms the page into a field with smaller text, and stays zoomed. */
   textarea{font-size:16px}
 }
@@ -1215,7 +1217,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function renderPlan() {
     var host = $('planOut'), r = RES;
     if (!P.materials.length || !r.mats.some(function (m) { return m.items.length; })) {
-      host.innerHTML = leftOut(r) || '<div class="empty"><b>Nothing to cut yet.</b><br>Add a material in the cut list, then the parts you need from it — Kerf works out what to buy and how to cut it.</div>';
+      host.innerHTML = leftOut(r) || '<div class="empty"><b>Nothing to cut yet.</b><br>Add a material in the cut list, then the parts you need from it — Kerf works out what to buy and how to cut it.<br><button class="btn" type="button" data-go="list">Go to the cut list</button></div>';
+      var go = host.querySelector('[data-go]'); if (go) go.addEventListener('click', function () { setTab('list'); });
       return;
     }
     W.plan = planWidth();
@@ -1498,13 +1501,19 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
 
   // ---------- views ----------
+  // Where the cut list, the plan and the saw are tabs of their own (a phone or a narrow window), each keeps its place:
+  // switching back finds a view where it was left, and a view seen the first time opens at its top. Not kept anywhere.
+  var SCROLL = {}, NARROW = window.matchMedia('(max-width:960px)');
   function setTab(t, quiet) {
+    var from = $('app').dataset.tab, keep = NARROW.matches && from !== t;
+    if (keep) SCROLL[from] = scrollY;
     DB.tab = t; if (t !== 'list') DB.rtab = t; if (!quiet) save(false, true);
     $('app').dataset.tab = t;
     document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
     document.querySelectorAll('#rseg button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === DB.rtab); });
     $('planOut').hidden = DB.rtab !== 'plan'; $('sawOut').hidden = DB.rtab !== 'saw';
     if (t === 'plan' || t === 'saw') { var w = planWidth(); if (Math.abs(w - W.plan) > 4) renderPlan(); }
+    if (keep) scrollTo(0, SCROLL[t] || 0);
   }
   function renderHead() {
     $('pname').value = P.name;
@@ -1513,7 +1522,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     ex.innerHTML = P.example ? '<div class="example"><span>This is an example project — change anything, or start your own.</span><button class="btn sm" type="button" id="exNew">New project</button></div>' : '';
     if (P.example) $('exNew').addEventListener('click', function () { newProject(); });
   }
-  function applyProject() { U = P.units || 'in'; CUR = P.cur || '$'; TIPS = []; renderHead(); renderList(); resolve(); setTab(DB.tab || 'plan', true); }
+  function applyProject() { U = P.units || 'in'; CUR = P.cur || '$'; TIPS = []; SCROLL = {}; renderHead(); renderList(); resolve(); setTab(DB.tab || 'plan', true); }
 
   // ---------- sheets (dialogs) ----------
   // A dialog is named by its heading and takes the keyboard: the page behind it is inert while it's open,
@@ -1556,7 +1565,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     $('stx').addEventListener('click', closeSheet); draw();
   }
   function newProject(units) {
-    var p = blankProject(units || U); DB.projects[p.id] = p; DB.order.unshift(p.id); DB.current = p.id; P = p; save(true); closeSheet(); applyProject();
+    var p = blankProject(units || U); DB.projects[p.id] = p; DB.order.unshift(p.id); DB.current = p.id; P = p; save(true); closeSheet(); applyProject(); setTab('list'); // where its first material is added
     toast('New project — add a material to start');
   }
   var DL = null, CLAUDE = window.claude && typeof window.claude.use === 'function';
