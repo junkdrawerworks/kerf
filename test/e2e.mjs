@@ -402,6 +402,39 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   } finally { await blocked.close(); }
 }
 
+// Every save carries the format's number (v). A page that finds a higher one, written by a newer Kerf in another
+// window, neither repairs it, takes it in nor writes over it: it stops saving and asks for a reload. Whether it finds
+// it at startup, from the other window's save as it happens, or just before writing its own.
+{
+  const strip = () => page.textContent('#storeBar');
+  const reload = 'Kerf was updated in another window — reload to keep working.Reload';
+  const leg = () => project('Shelves', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 2, len: 30 }])]);
+  await open(null);
+  await page.fill('#pname', 'Numbered');
+  await page.waitForFunction(() => (localStorage.getItem('kerf.v1') || '').includes('Numbered'), null, { timeout: 3000 });
+  assert.equal((await stored()).v, 1, 'a save has no format number');
+  const p = leg(), newer = JSON.stringify({ ...saved(p), v: 99, projects: { [p.id]: { ...p, done: { [p.materials[0].id]: { key: 'x', ticks: { '0.0': 1700000000000 } } } } } });
+  const unchanged = async what => {
+    await page.fill('#pname', 'Edited in the older page');
+    await page.waitForTimeout(700);
+    assert.equal(await page.evaluate(() => localStorage.getItem('kerf.v1')), newer, what + ': the older page wrote over a newer save');
+    assert.equal(await page.evaluate(() => localStorage.getItem('kerf.v1.bad')), null, what + ': a newer save was kept as damaged');
+    assert.equal(await strip(), reload, what + ': no strip asking for a reload');
+  };
+  await open(newer);
+  assert.equal(await strip(), reload);
+  await unchanged('at startup');
+  await open(saved(leg()));
+  await page.evaluate(t => { localStorage.setItem('kerf.v1', t); window.dispatchEvent(new StorageEvent('storage', { key: 'kerf.v1', newValue: t })); }, newer);
+  await unchanged('from another window');
+  await open(saved(leg()));
+  await page.evaluate(t => localStorage.setItem('kerf.v1', t), newer);
+  await unchanged('just before saving');
+  await Promise.all([page.waitForNavigation(), page.click('#storeBar button >> text=Reload')]);
+  await page.waitForSelector('#planOut > *', { state: 'attached' });
+  assert.equal(await strip(), reload, 'the reload strip goes after a reload that didn’t help');
+}
+
 // Two windows open at once keep each other's work: a project added in one isn't undone when the other saves, nor
 // brought back once deleted, a tick in one and an edit in the other are both kept, and an edit still waiting to
 // be saved isn't lost when the other window saves.

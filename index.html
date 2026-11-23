@@ -501,12 +501,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
 
   // ---------- storage (this browser only; projects export as files) ----------
-  var LS = 'kerf.v1', DB = { projects: {}, order: [], current: null, tab: 'plan', rtab: 'plan', deleted: {} }, kept = false;
+  // FORMAT is the number of the saved shape, written with every save as `v`: one higher whenever that shape changes.
+  var LS = 'kerf.v1', FORMAT = 1, DB = { v: FORMAT, projects: {}, order: [], current: null, tab: 'plan', rtab: 'plan', deleted: {} }, kept = false;
   // Why this browser isn't keeping projects, while it isn't: 'blocked' (no storage at all: cookies blocked, or some
   // private windows) or 'full'. Shown in the strip under the top bar (storeBar).
   var UNSAVED = null;
   // What was stored when it couldn't all be read at startup, until it's saved as a file or put away (Not now).
   var DAMAGED = null;
+  // Set once storage holds a save from a newer Kerf (a higher v), in another window: this page then stops saving.
+  var NEWER = false;
   function isFull(e) { return !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014); }
   // Only Kerf writes kerf.v1, but a browser add-on, a hand edit or a half-written save could leave something the
   // page would stop on. So what's stored is checked as it's read: each field of the wrong type is repaired, and
@@ -553,7 +556,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var tab = ['list', 'plan', 'saw'].indexOf(o.tab) >= 0 ? o.tab : 'plan', rtab = o.rtab === 'saw' ? 'saw' : 'plan', deleted = {};
     if (obj(o.deleted)) Object.keys(o.deleted).forEach(function (id) { if (goodId(id) && num(o.deleted[id])) deleted[id] = o.deleted[id]; else lost = true; });
     else if (o.deleted !== undefined) lost = true; // saves from before deletions were remembered have none
-    return { db: { projects: projects, order: order, current: projects.hasOwnProperty(o.current) ? o.current : order[0], tab: tab, rtab: rtab, deleted: deleted }, lost: lost };
+    return { db: { v: FORMAT, projects: projects, order: order, current: projects.hasOwnProperty(o.current) ? o.current : order[0], tab: tab, rtab: rtab, deleted: deleted }, lost: lost };
+  }
+  // Reads what's stored: repairDB's answer, null when it can't be used, or false for a save from a newer Kerf, which
+  // isn't repaired or taken in at all (its shape is one this page doesn't know).
+  function readDB(raw) {
+    try {
+      var o = JSON.parse(raw);
+      if (o && typeof o.v === 'number' && o.v > FORMAT) return false;
+      return repairDB(o);
+    } catch (e) { return null; }
   }
   // What can't be read, or had to be repaired, is kept as it was under kerf.v1.bad; Kerf then starts on what it
   // could read, or on the example.
@@ -561,9 +573,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   try {
     var raw = localStorage.getItem(LS);
     if (raw != null) {
-      var got = null; try { got = repairDB(JSON.parse(raw)); } catch (e) { }
+      var got = readDB(raw);
       if (got) { DB = got.db; kept = true; }
-      if (!got || got.lost) { DAMAGED = raw; try { localStorage.setItem(LS + '.bad', raw); } catch (e) { } }
+      if (got === false) NEWER = true;
+      else if (!got || got.lost) { DAMAGED = raw; try { localStorage.setItem(LS + '.bad', raw); } catch (e) { } }
     }
     localStorage.setItem(LS + '.probe', '1'); localStorage.removeItem(LS + '.probe');
   } catch (e) { if (!isFull(e)) UNSAVED = 'blocked'; } // full: said once an edit can't be saved
@@ -577,14 +590,17 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // A save that fails says so in a strip under the top bar (storeBar), until one works.
   var saveT, pending = false, written = null;
   function save(now, view) {
-    if (view && !kept) return;
+    if ((view && !kept) || NEWER) return false;
     clearTimeout(saveT);
     var go = function () {
-      pending = false; kept = true;
+      pending = false;
+      if (NEWER) return false;
+      kept = true;
       try {
         var raw = localStorage.getItem(LS);
         if (raw != null && raw !== written) {
-          var got = null; try { got = repairDB(JSON.parse(raw)); } catch (e) { }
+          var got = readDB(raw);
+          if (got === false) { newer(); return false; }
           if (!got || got.lost) try { localStorage.setItem(LS + '.bad', raw); } catch (e) { } // a full store still saves the projects
           if (got) { mergeDB(got.db); adopt(); }
         }
@@ -629,9 +645,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // Another window saved: take its changes in now, keeping anything here that's newer or still waiting to save.
   window.addEventListener('storage', function (e) {
     if (e.key !== LS || e.newValue == null) return;
-    var got = null; try { got = repairDB(JSON.parse(e.newValue)); } catch (err) { }
-    if (got) { mergeDB(got.db); adopt(); }
+    var got = readDB(e.newValue);
+    if (got === false) newer();
+    else if (got) { mergeDB(got.db); adopt(); }
   });
+  function newer() { NEWER = true; pending = false; clearTimeout(saveT); storeBar(); }
 
   // ---------- boards: one-dimensional cutting ----------
   // How long each search goes on, in steps of work rather than milliseconds, so a project gets the same plan
@@ -1675,12 +1693,14 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     full: 'This browser’s storage is full, so the last change isn’t saved. Save the project as a file.'
   };
   function unsaved(why) { if (why !== UNSAVED) { UNSAVED = why; storeBar(); } }
-  // Not saving comes first; damaged storage is said once saves work.
+  // A newer Kerf comes first, then not saving; damaged storage is said once saves work.
   function storeBar() {
-    var b = $('storeBar'), msg = STORE_MSG[UNSAVED], bad = !msg && DAMAGED != null;
+    var b = $('storeBar'), msg = !NEWER && STORE_MSG[UNSAVED], bad = !NEWER && !msg && DAMAGED != null;
     var strip = function (text, acts) { return '<div class="example store"><span>' + text + '</span><div class="acts">' + acts + '</div></div>'; };
-    b.innerHTML = msg ? strip(msg, '<button class="btn sm" type="button" id="stFile">Save as a file</button>')
+    b.innerHTML = NEWER ? strip('Kerf was updated in another window — reload to keep working.', '<button class="btn sm" type="button" id="stReload">Reload</button>')
+      : msg ? strip(msg, '<button class="btn sm" type="button" id="stFile">Save as a file</button>')
       : bad ? strip('Kerf couldn’t read everything this browser had saved. What it could read is here; the rest is kept as it was.', '<button class="btn sm" type="button" id="stBad">Save the damaged copy as a file</button><button class="btn sm sec" type="button" id="stNo">Not now</button>') : '';
+    if (NEWER) $('stReload').addEventListener('click', function () { location.reload(); });
     if (msg) $('stFile').addEventListener('click', exportProject);
     if (bad) {
       $('stBad').addEventListener('click', function () { saveFile('kerf-damaged.txt', DAMAGED, 'text/plain').then(function (ok) { if (ok) { DAMAGED = null; storeBar(); toast('Saved kerf-damaged.txt'); } }, function (e) { toast(e.message || 'Couldn’t save the file'); }); });
@@ -1688,7 +1708,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     if ($('pjNote')) $('pjNote').textContent = projectsNote();
   }
-  function projectsNote() { return UNSAVED ? 'Projects aren’t being saved in this browser right now.' : 'Projects are saved in this browser on this device. To use one on another phone or computer, save it as a file or copy it as text, then open or paste it there.'; }
+  function projectsNote() { return UNSAVED || NEWER ? 'Projects aren’t being saved in this browser right now.' : 'Projects are saved in this browser on this device. To use one on another phone or computer, save it as a file or copy it as text, then open or paste it there.'; }
   function applyProject() { U = P.units || 'in'; CUR = P.cur || '$'; TIPS = []; SCROLL = {}; renderHead(); renderList(); resolve(); setTab(DB.tab || 'plan', true); }
 
   // ---------- sheets (dialogs) ----------

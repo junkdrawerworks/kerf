@@ -66,7 +66,7 @@ The format is the project JSON, compressed with raw DEFLATE and base64url-encode
 
 A saved project is JSON: `{"kerf": 1, "project": {…}}`. Lengths are stored in inches whatever the display units. Opening a file keeps only fields Kerf understands and clamps the numbers, so a hand-edited file can't break the page.
 
-In the browser, projects are kept under `kerf.v1` in local storage. If that's ever damaged, by a browser add-on or a hand edit, Kerf repairs what it can, keeps the text as it was under `kerf.v1.bad`, and says so in a strip under the top bar, with a button to save that copy as a file (`kerf-damaged.txt`).
+In the browser, projects are kept under `kerf.v1` in local storage, with the number of the format they're saved in, `v` (now 1), raised whenever that shape changes. A page that finds a higher number, saved by a newer Kerf in another window, doesn't read it, take it in or write over it: it stops saving and asks for a reload. If that's ever damaged, by a browser add-on or a hand edit, Kerf repairs what it can, keeps the text as it was under `kerf.v1.bad`, and says so in a strip under the top bar, with a button to save that copy as a file (`kerf-damaged.txt`).
 
 ## Running it
 
