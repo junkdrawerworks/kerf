@@ -208,6 +208,7 @@ div.sec{margin-top:22px}
 .dg-cut{stroke:var(--chalk);stroke-width:1.6;stroke-dasharray:5 3}
 .dg-num{fill:var(--chalk)}
 .dg-numt{fill:var(--surface);font:700 10px var(--mono);text-anchor:middle;dominant-baseline:central}
+.dg-numt.sm{font-size:8px}
 .dg-lbl{fill:#2E220F;font:600 12px var(--mono);dominant-baseline:central}
 .dg-lblb{fill:#2E220F;font:700 12px var(--mono);dominant-baseline:central}
 .dg-meta{fill:var(--ink2);font:500 12px var(--mono);dominant-baseline:central}
@@ -1395,6 +1396,38 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     return s;
   }
+  // The first of `texts` that fits `room` px across, at `cw` px a character (12px mono is 7.2) with 4 px to spare each
+  // side, or ''.
+  function fitLabel(texts, room, cw) { return texts.filter(function (t) { return t.length * cw + 8 <= room; })[0] || ''; }
+  // Where each cut's number goes: on its cut line (`lines`, [x1, y1, x2, y2]), as near the middle as it can be while
+  // clear of the labels (`boxes`, [x, y, w, h]) and of the numbers placed before it, and inside `bound` ([x1, y1, x2,
+  // y2]). Each number is `r` from its centre either way (a circle's radius, or half a box), or `small` where no place
+  // on the line has room for `r`; where none has room even then, it goes where it covers fewest numbers, then labels.
+  // Returns [x, y, r] for each line.
+  function placeNums(lines, boxes, bound, r, small) {
+    var placed = [], clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
+    return lines.map(function (l) {
+      var x1 = l[0], y1 = l[1], x2 = l[2], y2 = l[3], len = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1)), pad = r + 1;
+      var lx = Math.min(x1, x2) - pad, hx = Math.max(x1, x2) + pad, ly = Math.min(y1, y2) - pad, hy = Math.max(y1, y2) + pad;
+      // only what's near this line can be in the way
+      var bs = boxes.filter(function (b) { return b[0] < hx && b[0] + b[2] > lx && b[1] < hy && b[1] + b[3] > ly; });
+      var ns = placed.filter(function (q) { return q[0] + q[2] + pad > lx && q[0] - q[2] - pad < hx && q[1] + q[2] + pad > ly && q[1] - q[2] - pad < hy; });
+      var step = Math.max(2, len / 40), ds = [0], best = null;
+      for (var d = step; d <= len / 2 + 1e-9; d += step) ds.push(d, -d);
+      [r, small].forEach(function (rr, ri) {
+        if (best && !best.score) return;
+        ds.forEach(function (d) {
+          var t = len ? 0.5 + d / len : 0.5, cx = clamp(x1 + (x2 - x1) * t, bound[0] + rr, bound[2] - rr), cy = clamp(y1 + (y2 - y1) * t, bound[1] + rr, bound[3] - rr);
+          var nums = ns.filter(function (q) { return Math.abs(q[0] - cx) < q[2] + rr + 1 && Math.abs(q[1] - cy) < q[2] + rr + 1; }).length;
+          var lbls = bs.filter(function (b) { return Math.abs(cx - b[0] - b[2] / 2) < rr + b[2] / 2 && Math.abs(cy - b[1] - b[3] / 2) < rr + b[3] / 2; }).length;
+          var score = nums * 100 + lbls * 10 + ri;
+          if (!best || score < best.score) best = { x: cx, y: cy, r: rr, score: score };
+        });
+      });
+      placed.push([best.x, best.y, best.r]);
+      return placed[placed.length - 1];
+    });
+  }
   function boardDiagram(m) {
     var width = W.plan, labelW = 40, maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; }));
     var rightW = m.items.some(function (b) { return b.stock.have; }) ? 44 : 0; // room for "yours" after a board you have
@@ -1408,7 +1441,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // both trimmed ends first, so the cut that squares up the far end draws over its hatching
       if (b.trim > 0) s += '<rect class="dg-scrap" x="' + x + '" y="' + y + '" width="' + (b.trim * px).toFixed(1) + '" height="' + rowH + '"/><rect class="dg-scrap" x="' + (x + bw - b.trim * px).toFixed(1) + '" y="' + y + '" width="' + (b.trim * px).toFixed(1) + '" height="' + rowH + '"/>';
       b.pieces.forEach(function (p, k) {
-        var w = p.len * px, part = m.mat.parts[p.pi], L = letter(p.pi), lbl = w > 92 ? L + ' ' + fmt(p.len) : w > 46 ? fmt(p.len) : w > 16 ? L : '';
+        var w = p.len * px, part = m.mat.parts[p.pi], L = letter(p.pi), lbl = fitLabel([L + ' ' + fmt(p.len), fmt(p.len), fmt(p.len, { bare: true }), L], w, 7.2);
         s += '<rect class="dg-part" x="' + cx.toFixed(1) + '" y="' + (y + 0.5) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmt(p.len)) + '</title></rect>';
         if (lbl) s += '<text class="dg-lbl" x="' + (cx + w / 2).toFixed(1) + '" y="' + (y + rowH / 2) + '" text-anchor="middle">' + esc(lbl) + '</text>';
         cx += w;
@@ -1442,29 +1475,43 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var ox = 1, oy = top;
       s += '<rect class="dg-ply" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
       s += '<rect class="dg-scrap" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
+      // Each label is noted as a box ([x, y, w, h]) for the cut numbers to keep off, and drawn once they're placed.
+      // `lo` and `hi` say how far along its part a label may move, should a number land on it anyway.
+      var boxes = [], labels = [], label = function (cls, x, y, t, cw, lo, hi) { var b = [x - t.length * cw / 2 - 1, y - 7, t.length * cw + 2, 14]; boxes.push(b); labels.push({ cls: cls, x: x, y: y, t: t, b: b, lo: lo, hi: hi }); return labels[labels.length - 1]; };
       sh.placed.forEach(function (p, k) {
         var x = ox + p.x * px, y = oy + p.y * px, w = p.l * px, h = p.w * px, part = m.mat.parts[p.pi], L = letter(p.pi);
         s += '<rect class="dg-ply" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"/><path class="dg-grain" d="' + grainPaths(x, y, w, h, 7 + k * 13 + si * 101) + '"/>';
         s += '<rect class="dg-part" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmt(p.l) + ' × ' + fmt(p.w)) + '</title></rect>';
         if (w > 30 && h > 16) {
-          var big = w > 110 && h > 34;
-          s += '<text class="dg-lblb" x="' + (x + w / 2).toFixed(1) + '" y="' + (y + h / 2 - (big ? 8 : 0)).toFixed(1) + '" text-anchor="middle">' + L + '</text>';
-          if (big) s += '<text class="dg-lbl" x="' + (x + w / 2).toFixed(1) + '" y="' + (y + h / 2 + 9).toFixed(1) + '" text-anchor="middle">' + esc(fmt(p.l) + ' × ' + fmt(p.w)) + '</text>';
+          // under the letter, the size as wide as fits: with inch marks, without, or the length alone
+          var dims = h > 34 ? fitLabel([fmt(p.l) + ' × ' + fmt(p.w), fmt(p.l, { bare: true }) + ' × ' + fmt(p.w, { bare: true }), fmt(p.l)], w, 7.2) : '';
+          var a = label('dg-lblb', x + w / 2, y + h / 2 - (dims ? 8 : 0), L, 7.2, x + 2, x + w - 2);
+          if (dims) a.with = label('dg-lbl', x + w / 2, y + h / 2 + 9, dims, 7.2, x + 2, x + w - 2);
         }
       });
-      sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * px; if (w > 90 && h > 18) s += '<text class="dg-scrapt" x="' + (ox + f.x * px + w / 2).toFixed(1) + '" y="' + (oy + f.y * px + h / 2).toFixed(1) + '" text-anchor="middle">' + esc(fmt(f.w) + ' × ' + fmt(f.h)) + '</text>'; });
+      sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * px, t = fitLabel([fmt(f.w) + ' × ' + fmt(f.h)], w, 6.6); if (t && h > 18) label('dg-scrapt', ox + f.x * px + w / 2, oy + f.y * px + h / 2, t, 6.6, ox + f.x * px + 2, ox + (f.x + f.w) * px - 2); });
+      var at = s.length; // the labels go here, under the outline, the cuts and their numbers
       s += '<rect class="dg-pedge" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>'; // under the cuts and their numbers
       sh.steps.forEach(function (st, k) {
         if (st.type === 'none') return;
         var l = st.line, x1 = ox + l[0] * px, y1 = oy + l[1] * px, x2 = ox + l[2] * px, y2 = oy + l[3] * px;
         s += '<line class="dg-cut" x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>';
       });
-      var n = 0;
-      sh.steps.forEach(function (st) {
-        if (st.type === 'none') return; n++;
-        var l = st.line, cx = ox + (l[0] + l[2]) / 2 * px, cy = oy + (l[1] + l[3]) / 2 * px;
-        s += '<circle class="dg-num" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="8"/><text class="dg-numt" x="' + cx.toFixed(1) + '" y="' + cy.toFixed(1) + '">' + n + '</text>';
+      var cuts = sh.steps.filter(function (st) { return st.type !== 'none'; }).map(function (st) { var l = st.line; return [ox + l[0] * px, oy + l[1] * px, ox + l[2] * px, oy + l[3] * px]; });
+      var nums = placeNums(cuts, boxes, [ox, oy, ox + sh.L * px, oy + H], 8, 6);
+      nums.forEach(function (c, k) {
+        s += '<circle class="dg-num" cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="' + c[2] + '"/><text class="dg-numt' + (c[2] < 8 ? ' sm' : '') + '" x="' + c[0].toFixed(1) + '" y="' + c[1].toFixed(1) + '">' + (k + 1) + '</text>';
       });
+      // A label a number still covers moves along its part (with the size under it) to where none does, if there's room.
+      var covered = function (b, dx) { return nums.some(function (c) { return Math.abs(c[0] - b[0] - dx - b[2] / 2) < c[2] + b[2] / 2 && Math.abs(c[1] - b[1] - b[3] / 2) < c[2] + b[3] / 2; }); };
+      var lbls = '';
+      labels.forEach(function (l) {
+        if (l.moved != null) return;
+        var group = l.with ? [l, l.with] : [l], hit = function (dx) { return group.some(function (g) { return covered(g.b, dx) || g.b[0] + dx < g.lo || g.b[0] + g.b[2] + dx > g.hi; }); }, dx = 0;
+        if (group.some(function (g) { return covered(g.b, 0); })) for (var d = 2; d < 200; d += 2) { if (!hit(d)) { dx = d; break; } if (!hit(-d)) { dx = -d; break; } if (l.x + d > l.hi && l.x - d < l.lo) break; }
+        group.forEach(function (g) { g.moved = dx; lbls += '<text class="' + g.cls + '" x="' + (g.x + dx).toFixed(1) + '" y="' + g.y.toFixed(1) + '" text-anchor="middle">' + esc(g.t) + '</text>'; });
+      });
+      s = s.slice(0, at) + lbls + s.slice(at);
       out += s + '</svg>';
       var steps = sh.steps.filter(function (x) { return x.type !== 'none'; });
       if (steps.length) out += '<ol class="steps">' + steps.map(function (st, k) { return '<li><b>' + (k + 1) + '</b><span>' + stepText(st, m) + '</span></li>'; }).join('') + '</ol>';
@@ -1896,19 +1943,27 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           need(sheetBlock(sh, lines) + (last && lines.length < 3 ? legendH : 0)); y += 14;
           text('HB', 10, M, y, 'Sheet ' + (si + 1)); text('H', 9, M + 50, y, fmt(sh.W) + ' × ' + fmt(sh.L) + (sh.stock.have ? '  (yours)' : '')); y += 6;
           rect(M, y, sh.L * px, H, '#CDD2CA');
+          var boxes = [];
           sh.placed.forEach(function (p) {
             var x = M + p.x * px, yy = y + p.y * px, w = p.l * px, h = p.w * px;
             rect(x, yy, w, h, '#E8D7B2', '#9E7F52', 0.6);
-            var t = letter(p.pi); if (w > 16 && h > 12) text('HB', 9, x + (w - textW('HB', 9, t)) / 2, yy + h / 2 + (w > 70 && h > 26 ? -2 : 3), t, '#2E220F');
-            var d = fmt(p.l) + ' × ' + fmt(p.w); if (w > 70 && h > 26 && textW('H', 7.5, d) < w - 4) text('H', 7.5, x + (w - textW('H', 7.5, d)) / 2, yy + h / 2 + 9, d, '#2E220F');
+            if (!(w > 16 && h > 12)) return;
+            var t = letter(p.pi), d = '', tw = textW('HB', 9, t), dw;
+            if (w > 70 && h > 26) [fmt(p.l) + ' × ' + fmt(p.w), fmt(p.l, { bare: true }) + ' × ' + fmt(p.w, { bare: true }), fmt(p.l)].some(function (c) { return textW('H', 7.5, c) < w - 4 && (d = c); });
+            var base = yy + h / 2 + (d ? -2 : 3);
+            text('HB', 9, x + (w - tw) / 2, base, t, '#2E220F'); boxes.push([x + (w - tw) / 2 - 1, base - 8, tw + 2, 10]);
+            if (d) { dw = textW('H', 7.5, d); text('H', 7.5, x + (w - dw) / 2, yy + h / 2 + 9, d, '#2E220F'); boxes.push([x + (w - dw) / 2 - 1, yy + h / 2 + 3, dw + 2, 8]); }
           });
           rect(M, y, sh.L * px, H, null, '#9E7F52', 0.8); // under the cuts and their numbers
-          var n = 0;
+          var cuts = [];
           sh.steps.forEach(function (st) {
-            if (st.type === 'none') return; n++;
+            if (st.type === 'none') return;
             var l = st.line; line(M + l[0] * px, y + l[1] * px, M + l[2] * px, y + l[3] * px, '#2361CC', 1, true);
-            var cx = M + (l[0] + l[2]) / 2 * px, cy = y + (l[1] + l[3]) / 2 * px, t = String(n);
-            rect(cx - 6, cy - 6, 12, 12, '#2361CC'); text('HB', 7.5, cx - textW('HB', 7.5, t) / 2, cy + 2.7, t, '#FFFFFF');
+            cuts.push([M + l[0] * px, y + l[1] * px, M + l[2] * px, y + l[3] * px]);
+          });
+          placeNums(cuts, boxes, [M, y, M + sh.L * px, y + H], 6, 4.5).forEach(function (c, k) {
+            var t = String(k + 1), fs = c[2] < 6 ? 6 : 7.5;
+            rect(c[0] - c[2], c[1] - c[2], 2 * c[2], 2 * c[2], '#2361CC'); text('HB', fs, c[0] - textW('HB', fs, t) / 2, c[1] + fs * 0.36, t, '#FFFFFF');
           });
           y += H + 4;
           // The steps flow on from page to page a line at a time; the last sheet's final two lines stay with the legend.

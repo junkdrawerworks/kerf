@@ -671,6 +671,49 @@ assert.equal(await page.$eval('#planOut div.sec', d => getComputedStyle(d).margi
   assert.match(pages[0].find(r => r.size === 9).text, /^Saw kerf 1\/8" · /, 'the header names the saw kerf');
 }
 
+// Labels fit their parts, and cut numbers stay on the sheet, clear of each other and of the part letters. On a phone the
+// drawer parts are small: their numbers used to stack on each other and on the letters, and hang off the sheet; the
+// bookcase's shelves read "34 1/2" × 11 1/434 1/2" × 11 1/4", run together; and a workbench's 2×4s "24 1/4"24 1/4"".
+{
+  const studs = [{ len: 96, price: 4.28 }, { len: 120, price: 6.38 }, { len: 144, price: 7.68 }, { len: 192, price: 10.98 }];
+  const jobs = [
+    project('Drawer boxes', [sheet('½ plywood', [{ len: 96, wid: 48, price: 44 }, { len: 48, wid: 48, price: 26 }],
+      [{ name: 'Drawer side', qty: 12, len: 20, wid: 5 }, { name: 'Drawer front/back', qty: 12, len: 14, wid: 5 }, { name: 'Drawer bottom', qty: 6, len: 19.5, wid: 13.5, grain: false }])]),
+    project('Bookcase', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }, { len: 48, wid: 24, price: 21 }],
+      [{ name: 'Side', qty: 2, len: 72, wid: 11.25 }, { name: 'Shelf', qty: 5, len: 34.5, wid: 11.25 }, { name: 'Top', qty: 1, len: 36, wid: 12 }])]),
+    project('Workbench', [board('2×4', studs, [['Leg', 4, 33.25], ['Long apron', 2, 72], ['Short apron', 2, 24.25], ['Top frame long', 2, 72], ['Top frame short', 2, 27.25], ['Top joist', 8, 24.25],
+      ['Shelf long', 2, 65], ['Shelf short', 4, 24.25], ['Shelf joist', 6, 24.25], ['Leg doubler', 4, 30.75], ['Brace', 4, 15.5]].map(([name, qty, len]) => ({ name, qty, len })))]),
+  ];
+  for (const job of jobs) for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await open(saved(job));
+    const bad = await page.evaluate(() => {
+      const out = [], box = e => e.getBBox(), inside = (a, b, slack = 0.5) => a.x >= b.x - slack && a.y >= b.y - slack && a.x + a.width <= b.x + b.width + slack && a.y + a.height <= b.y + b.height + slack;
+      const meet = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+      for (const svg of document.querySelectorAll('#planOut svg.diag')) {
+        const parts = [...svg.querySelectorAll('rect.dg-part')].map(box), sheet = svg.querySelector('rect.dg-pedge');
+        for (const t of svg.querySelectorAll('.dg-lbl, .dg-lblb')) if (!parts.some(p => inside(box(t), p))) out.push(`"${t.textContent}" runs out of its part`);
+        if (!sheet) continue;
+        const nums = [...svg.querySelectorAll('circle.dg-num')].map(c => ({ x: +c.getAttribute('cx'), y: +c.getAttribute('cy'), r: +c.getAttribute('r'), n: c.nextElementSibling.textContent }));
+        const letters = [...svg.querySelectorAll('.dg-lblb')].map(t => ({ b: box(t), t: t.textContent }));
+        const s = box(sheet);
+        nums.forEach((a, i) => {
+          if (!inside({ x: a.x - a.r, y: a.y - a.r, width: 2 * a.r, height: 2 * a.r }, s)) out.push(`number ${a.n} hangs off the sheet`);
+          nums.slice(i + 1).forEach(b => { if (Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r) out.push(`numbers ${a.n} and ${b.n} overlap`); });
+          const covers = letters.filter(l => meet({ x: a.x - a.r, y: a.y - a.r, width: 2 * a.r, height: 2 * a.r }, l.b));
+          if (covers.length) out.push(`number ${a.n} covers ${covers.map(l => l.t).join(', ')}`);
+        });
+      }
+      return out;
+    });
+    // On a phone, the drawers' right-hand column holds three small parts and five cuts in two fingers' width: one
+    // number there can't help touching a letter.
+    const allowed = job.name === 'Drawer boxes' && width === 390 ? 1 : 0;
+    assert.ok(bad.filter(b => / covers /.test(b)).length <= allowed && !bad.some(b => !/ covers /.test(b)), `${job.name} at ${width} wide: ${bad.join('; ')}`);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 // A board you already have is labelled "yours" inside its drawing, not cut off past the edge.
 await open(saved(project('Yours', [board('2×4', [{ len: 96, price: 4.28 }, { len: 96, have: 1 }], [{ name: 'Leg', qty: 3, len: 72 }])])));
 assert.ok(await page.evaluate(() => {
