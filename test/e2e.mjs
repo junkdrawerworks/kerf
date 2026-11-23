@@ -1617,9 +1617,9 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   const stuck = await page.evaluate(() => {
     const bar = document.querySelector('.top').getBoundingClientRect().bottom, card = [...document.querySelectorAll('#sawOut .stk')].pop();
     scrollBy(0, card.getBoundingClientRect().top - bar + 90);
-    return [Math.round(card.querySelector('.stk-hd').getBoundingClientRect().top), Math.round(bar), card.querySelector('.stk-hd b').textContent];
+    return [Math.round(card.querySelector('.stk-hd').getBoundingClientRect().top), Math.round(bar), card.querySelector('.stk-hd b').textContent.replace(/\u00a0/g, ' ')];
   });
-  assert.deepEqual(stuck, [stuck[1], stuck[1], 'Sheet 1'], 'a board\'s heading scrolls away with its cuts');
+  assert.deepEqual(stuck, [stuck[1], stuck[1], '¾ plywood · Sheet 1'], 'a board\'s heading scrolls away with its cuts');
   assert.deepEqual(await page.evaluate(() => ['.stk', '.seg', '.cut'].map(s => getComputedStyle(document.querySelector(s)).overflow)), ['visible', 'visible', 'visible'], 'a card clips its focus rings');
   await page.setViewportSize({ width: 390, height: 844 });
 }
@@ -2171,6 +2171,32 @@ for (const c of sawCases) {
   if (c.note) assert.equal(shown(await page.textContent('#sawOut .cut.note')), c.note, what + ': the note at the saw');
   // a note reads as a line of text, its fractions typeset in it, not spread out like the parts of a cut's row
   assert.ok(await page.$$eval('#sawOut .cut.note', ns => ns.every(n => n.childNodes.length === 1 && n.firstChild.tagName === 'SPAN')), what + ': a note at the saw is spread out');
+}
+
+// At the saw a sheet's card is headed with its material and starts with the sheet's drawing, its next cut standing out
+// (a yellow line and number) and the cuts ticked faded; each cut gives its number in the drawing. "Drawing" folds it
+// away, and it stays folded through a tick. Boards keep to text.
+{
+  await open(null);
+  await view('saw');
+  const sheetCard = page.locator('#sawOut .stk').filter({ has: page.locator('.sdg') });
+  assert.equal(await page.locator('#sawOut .sdg').count(), 1, 'only the sheet has a drawing at the saw');
+  assert.equal((await sheetCard.locator('.stk-hd b').textContent()).replace(/\u00a0/g, ' '), '¾ plywood · Sheet 1', 'the sheet card’s heading');
+  const drawn = () => sheetCard.evaluate(c => ({ next: [...c.querySelectorAll('.dg-numt.nx')].map(t => t.textContent), lines: c.querySelectorAll('.dg-cut.nx').length, faded: [...c.querySelectorAll('.dg-numt.dn')].map(t => t.textContent), open: c.querySelector('.sdg').open }));
+  assert.deepEqual(await drawn(), { next: ['1'], lines: 1, faded: [], open: true }, 'the sheet’s drawing at the saw');
+  assert.deepEqual(await sheetCard.locator('.cut[data-k] .cn').evaluateAll(ns => ns.map(n => n.dataset.n)), ['1', '2', '3', '4', '5', '6'], 'the sheet’s cuts give their numbers in the drawing');
+  await sheetCard.locator('.cut[data-k]').first().click();
+  assert.deepEqual(await drawn(), { next: ['2'], lines: 1, faded: ['1'], open: true }, 'the drawing after a tick');
+  await sheetCard.locator('.sdg summary').click();
+  await sheetCard.locator('.cut[data-k]').nth(1).click();
+  assert.deepEqual(await drawn(), { next: ['3'], lines: 1, faded: ['1', '2'], open: false }, 'the drawing folded away stays folded through a tick');
+  await fitsPhone('saw with a sheet’s drawing');
+  // the drawing's labels and numbers sit where the plan's do: the same picture, but for its heading and marks
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await sheetCard.locator('.sdg summary').click();
+  await page.waitForTimeout(300);
+  assert.ok(await sheetCard.evaluate(c => c.querySelector('.sdg svg').getBoundingClientRect().width <= 721), 'the saw’s drawing grows past 720 px on a laptop');
+  await page.setViewportSize({ width: 390, height: 844 });
 }
 
 // The shop PDF is a checklist for the saw on paper: a box to tick before every cut, the same cuts the saw counts. Under

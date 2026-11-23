@@ -261,6 +261,19 @@ div.sec{margin-top:22px}
 .stk-hd b{font:700 16px var(--body);white-space:nowrap;flex:none}
 .stk-hd span{color:var(--ink2);font-size:13.5px;min-width:0}
 .stk-hd .n{margin-left:auto;font:600 13px var(--mono);color:var(--ink3)}
+.stk-hd b{display:flex;min-width:0;flex:0 1 auto}.stk-hd .sz{flex:none;white-space:nowrap}.stk-hd b span{font-size:inherit;color:inherit}.stk-hd .mn{overflow:hidden;text-overflow:ellipsis;min-width:0}.stk-hd .dot{flex:none}
+.sdg{border-bottom:1px solid var(--line)}
+.sdg>summary{scroll-margin-top:60px;list-style:none;display:flex;align-items:center;gap:8px;padding:6px 14px;cursor:pointer;font-size:13px;color:var(--ink3)}
+.sdg>summary::-webkit-details-marker{display:none}
+.sdg>summary .chev{transition:transform .15s;font-size:16px;line-height:1}
+.sdg[open]>summary .chev{transform:rotate(90deg)}
+.sdg .diag{padding:0 12px 10px;box-sizing:content-box;width:calc(100% - 24px);max-width:720px}
+.dg-cut.nx{stroke:var(--tape);stroke-width:3;stroke-dasharray:none}
+.dg-under.nx{stroke:var(--tape-ink);stroke-width:5.5;stroke-dasharray:none}
+.dg-num.nx{fill:var(--tape);stroke:var(--tape-ink);stroke-width:1.5}
+.dg-numt.nx{fill:var(--tape-ink)}
+.dg-cut.dn,.dg-under.dn,.dg-num.dn,.dg-numt.dn{opacity:.35}
+.cut .cn::before{content:attr(data-n)}.cut .cn{display:inline-block;min-width:18px;height:18px;border-radius:9px;background:var(--chalk);color:var(--surface);font:700 10.5px/18px var(--mono);text-align:center;margin-right:6px;vertical-align:1px;padding:0 4px;box-sizing:border-box}
 button.stk-hd{width:100%;font:inherit;color:inherit;text-align:left;border:0;border-bottom:1px solid var(--line);cursor:pointer;min-height:44px}
 button.stk-hd .chev{margin-left:auto;color:var(--ink3);font-size:20px;line-height:1;transition:transform .15s;flex:none}
 button.stk-hd .n+.chev{margin-left:0}
@@ -340,7 +353,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
    bigger type: WCAG 2.2's Target Size (Enhanced), 2.5.5, asks 44 × 44 CSS px. The grain lock and the ✕ beside it are
    44 px square and 8 px apart, and a part or size on one line makes room for them. */
 @media (pointer:coarse){
-  input,select,.tbtn,.addpart,.lbtn,.btn,.pbtn,.tabs button,.seg button,.stock>summary,.pitem{min-height:44px}
+  input,select,.tbtn,.addpart,.lbtn,.btn,.pbtn,.tabs button,.seg button,.stock>summary,.sdg>summary,.pitem{min-height:44px}
   .icon,.grain{width:44px;height:44px}
   .prow{grid-template-columns:22px minmax(0,1fr) 52px 104px 44px}
   .sheetmat .prow{grid-template-columns:22px minmax(0,1fr) 46px 92px 92px 46px 44px}
@@ -396,7 +409,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .tip{flex-wrap:wrap}
   .tip>span:not(.tag){flex:1 1 180px;min-width:0}
 }
-@media (prefers-reduced-motion:reduce){.toast,.saw-bar .prog i,.stock>summary .chev,button.stk-hd .chev{transition:none}}
+@media (prefers-reduced-motion:reduce){.toast,.saw-bar .prog i,.stock>summary .chev,button.stk-hd .chev,.sdg>summary .chev{transition:none}}
 [hidden]{display:none!important}
 .jd-foot{text-align:center;font-size:13px;color:var(--ink2);padding:0 var(--gr) calc(24px + env(safe-area-inset-bottom,0px)) var(--gl)}
 .jd-foot a{color:inherit;text-underline-offset:3px}
@@ -1814,7 +1827,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
 
   // ---------- plan ----------
-  var W = { plan: 640 };
+  var W = { plan: 640, saw: 640 };
   // The plan's width, or the width it will have where it's hidden: its pane's, or, with the pane hidden too, the page's.
   function planWidth() {
     var el = $('planOut'), a = $('app'), cs = getComputedStyle(a), w = el.clientWidth || el.parentNode.clientWidth;
@@ -2098,8 +2111,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function sheetDiagrams(m) {
     var out = '';
     m.items.forEach(function (sh, si) {
-      // A ripped board is drawn at least 64 px deep, deeper than it is to scale, so its narrow parts and cuts can be read.
-      var width = Math.min(W.plan, 720), px = (width - 2) / sh.L, py = m.rip ? Math.max(px, 64 / sh.W) : px, H = sh.W * py, top = 22, rip = !!m.rip, what = rip ? 'Board ' : 'Sheet ';
+      var rip = !!m.rip, what = rip ? 'Board ' : 'Sheet ';
       // A screen reader gets the sheet in words instead of the drawing: "Sheet 1, 4 ft × 8 ft: 4 × A Shelf 47 3/4 in × 23 3/4
       // in; left over 48 in × 6 in", the pieces left over 6" or more each way, as the shop PDF labels them.
       var count = {}, order = [];
@@ -2108,87 +2120,99 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       out += '<p class="sr">' + what + (si + 1) + ', ' + esc(rip ? sayLen(sh.L, { ft: true }) + ', ' + sayLen(sh.W) + ' wide' : sayLen(sh.W) + ' × ' + sayLen(sh.L)) + (sh.stock.have ? ', yours' : '') + ': ' + (sh.edge > 0 ? 'trim ' + esc(sayLen(sh.edge)) + ' off each edge, ' : '') + (sh.ends > 0 ? 'trim ' + esc(sayLen(sh.ends)) + ' off each end, ' : '') + order.map(function (pi) {
         var q = m.mat.parts[pi]; return count[pi] + ' × ' + letter(pi, m.mat) + (q && q.name ? ' ' + esc(q.name) : '') + ' ' + esc(partDims(m, q, sayLen));
       }).join(', ') + (spare.length ? '; left over ' + spare.map(function (f) { return esc(sayLen(f.w) + ' × ' + sayLen(f.h)); }).join(' and ') : '') + '</p>';
-      var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + (H + top + 8).toFixed(1) + '" aria-hidden="true" style="margin-top:' + (si ? 16 : 6) + 'px">';
-      s += '<text class="dg-metab" x="0" y="8">' + what + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + (rip ? esc(fmtD(sh.L, { ft: true }) + ' · ' + fmtD(sh.W) + ' wide') : sheetSize(sh.W, sh.L, true)) + (sh.stock.have ? '<tspan class="dg-yours"> · yours</tspan>' : '') + '</text>';
-      var ox = 1, oy = top;
-      s += '<rect class="' + (rip ? 'dg-wood' : 'dg-ply') + '" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
-      s += '<rect class="dg-scrap" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
-      // Each label is noted as a box ([x, y, w, h]) for the cut numbers to keep off, and drawn once they're placed.
-      // `lo` and `hi` say how far along its part a label may move, should a number land on it anyway.
-      var boxes = [], labels = [], boxOf = function (x, y, t, cw) { return [x - t.length * cw / 2 - 1, y - 8, t.length * cw + 2, 16]; };
-      var label = function (cls, x, y, t, cw, lo, hi) { var l = { cls: cls, x: x, y: y, t: t, cw: cw, b: boxOf(x, y, t, cw), lo: lo, hi: hi }; boxes.push(l.b); labels.push(l); return l; };
-      // One size form for the whole sheet, so neighbours don't flip between 34 1/2 × 15 1/4 and 45 3/4″ × 14″: with
-      // marks if every part that has room for a size fits it with them, else without. A part too narrow for that form
-      // takes the length alone.
-      var forms = function (p) { return [fmtD(p.l) + ' × ' + fmtD(p.w), fmtD(p.l, { bare: true }) + ' × ' + fmtD(p.w, { bare: true }), fmtD(p.l)]; };
-      var sized = sh.placed.filter(function (p) { return p.l * px > 30 && p.w * py > 34 && fitLabel(forms(p).slice(1, 2), p.l * px, 7.2); }), named = namesFit();
-      var form = sized.every(function (p) { return fitLabel(forms(p).slice(0, 1), p.l * px, 7.2); }) ? 0 : 1;
-      sh.placed.forEach(function (p, k) {
-        var x = ox + p.x * px, y = oy + p.y * py, w = p.l * px, h = p.w * py, part = m.mat.parts[p.pi], L = letter(p.pi, m.mat);
-        s += '<rect class="' + (rip ? 'dg-wood' : 'dg-ply') + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"/><path class="dg-grain" d="' + grainPaths(x, y, w, h, 7 + k * 13 + si * 101) + '"/>';
-        s += '<rect class="dg-part" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmtD(p.l) + ' × ' + fmtD(p.w)) + '</title></rect>';
-        if (w > 30 && h > 16) {
-          // under the letter, the size in the sheet's form, or the length alone; with room for three lines, the part's
-          // name between them
-          var dims = h > 34 ? fitLabel(forms(p).slice(form), w, 7.2) : '', nm = named && dims && h > 54 ? fitLabel(nameForms(part && part.name, '', ''), w, 7.2) : '';
-          var a = label('dg-lblb', x + w / 2, y + h / 2 - (nm ? 17 : dims ? 8 : 0), L, 7.2, x + 2, x + w - 2);
-          a.cy = y + h / 2;
-          if (nm) { a.name = label('dg-lbl dg-nm', x + w / 2, y + h / 2, nm, 7.2, x + 2, x + w - 2); a.name.sub = true; }
-          if (dims) { a.with = label('dg-lbl', x + w / 2, y + h / 2 + (nm ? 17 : 9), dims, 7.2, x + 2, x + w - 2); a.with.sub = true; a.alt = fitLabel([fmtD(p.l)], w, 7.2); }
-        }
-      });
-      sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * py, t = fitLabel([fmtD(f.w) + ' × ' + fmtD(f.h)], w, 6.6); if (t && h > 18) label('dg-scrapt', ox + f.x * px + w / 2, oy + f.y * py + h / 2, t, 6.6, ox + f.x * px + 2, ox + (f.x + f.w) * px - 2); });
-      var at = s.length; // the labels go here, under the outline, the cuts and their numbers
-      s += '<rect class="' + (rip ? 'dg-edge' + (sh.stock.have ? ' have' : '') : 'dg-pedge') + '" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>'; // under the cuts and their numbers
-      sh.steps.forEach(function (st, k) {
-        if (st.type === 'none') return;
-        var l = st.line, x1 = ox + l[0] * px, y1 = oy + l[1] * py, x2 = ox + l[2] * px, y2 = oy + l[3] * py;
-        var xy = '" x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>';
-        s += '<line class="dg-under cu' + xy + '<line class="dg-cut' + xy;
-      });
-      var cuts = sh.steps.filter(function (st) { return st.type !== 'none'; }).map(function (st) { var l = st.line; return [ox + l[0] * px, oy + l[1] * py, ox + l[2] * px, oy + l[3] * py]; });
-      var nums = placeNums(cuts, boxes, [ox, oy, ox + sh.L * px, oy + H], 8, 6);
-      nums.forEach(function (c, k) {
-        s += '<circle class="dg-num" cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="' + c[2] + '"/><text class="dg-numt' + (c[2] < 8 ? ' sm' : '') + '" x="' + c[0].toFixed(1) + '" y="' + c[1].toFixed(1) + '">' + (k + 1) + '</text>';
-      });
-      // A label a number still covers moves along its part (with the size under it) to where none does, if there's room.
-      // Where there's none, the size steps down to the length alone, then goes, leaving the letter in the middle of its
-      // part (the steps and the legend still give the size).
-      var covered = function (b, dx) { return nums.some(function (c) { return Math.abs(c[0] - b[0] - dx - b[2] / 2) < c[2] + b[2] / 2 && Math.abs(c[1] - b[1] - b[3] / 2) < c[2] + b[3] / 2; }); };
-      var clear = function (group) { // how far the group moves to be clear of every number, or null
-        var hit = function (dx) { return group.some(function (g) { return covered(g.b, dx) || g.b[0] + dx < g.lo || g.b[0] + g.b[2] + dx > g.hi; }); };
-        if (!hit(0)) return 0;
-        for (var d = 2; d < 200; d += 2) { if (!hit(d)) return d; if (!hit(-d)) return -d; if (group[0].x + d > group[0].hi && group[0].x - d < group[0].lo) break; }
-        return null;
-      };
-      var relabel = function (g, t, y) { return { cls: g.cls, x: g.x, y: y, t: t, b: boxOf(g.x, y, t, g.cw), lo: g.lo, hi: g.hi }; };
-      var lbls = '';
-      labels.forEach(function (l) {
-        if (l.sub) return;
-        // with a name: the three lines, then with the length alone, then as a part with no room for a name
-        var mid = l.name ? [l.name] : [], tries = [l.with ? [l].concat(mid, [l.with]) : [l]], dx = null, pick;
-        if (l.with) {
-          if (l.alt && l.alt !== l.with.t) tries.push([l].concat(mid, [relabel(l.with, l.alt, l.with.y)]));
-          if (l.name) {
-            var two = relabel(l, l.t, l.cy - 8);
-            tries.push([two, relabel(l.with, l.with.t, l.cy + 9)]);
-            if (l.alt && l.alt !== l.with.t) tries.push([two, relabel(l.with, l.alt, l.cy + 9)]);
-          }
-          tries.push([relabel(l, l.t, l.cy)], [l]);
-        }
-        tries.some(function (g) { dx = clear(g); pick = g; return dx != null; });
-        // nowhere clear, even for the letter alone: the longest size no number covers stays, under its letter
-        if (dx == null) { dx = 0; pick = tries.filter(function (g) { return !g.slice(1).some(function (x) { return covered(x.b, 0); }); })[0]; }
-        pick.forEach(function (g) { lbls += '<text class="' + g.cls + '" x="' + (g.x + dx).toFixed(1) + '" y="' + g.y.toFixed(1) + '" text-anchor="middle">' + esc(g.t) + '</text>'; });
-      });
-      s = s.slice(0, at) + lbls + s.slice(at);
-      out += s + '</svg>';
+      out += sheetSvg(m, sh, si, { width: Math.min(W.plan, 720), named: namesFit() });
       var steps = sh.steps.filter(function (x) { return x.type !== 'none'; });
       if (sh.ends > 0) out += '<p class="steps-first">First square up both ends: trim <span class="m">' + fmtH(sh.ends) + '</span> off each, leaving <span class="nw">' + fmtH(sh.L - 2 * sh.ends) + '</span>. Every crosscut is measured from a squared end.</p>';
       if (sh.edge > 0) out += '<p class="steps-first">First trim <span class="m">' + fmtH(sh.edge) + '</span> off each factory edge, leaving <span class="nw">' + sheetSize(sh.W - 2 * sh.edge, sh.L - 2 * sh.edge) + '</span>. Every cut is measured from a trimmed edge.</p>';
       if (steps.length) out += '<ol class="steps">' + steps.map(function (st, k) { return '<li><b>' + (k + 1) + '</b><span>' + stepText(st, m) + '</span></li>'; }).join('') + '</ol>';
     });
     return out + legendParts(m);
+  }
+  // One sheet's drawing (or a ripped board's), `o.width` px wide, with its parts' names where they fit when `o.named`.
+  // At the saw (`o.bare`) it goes without its heading, which the card has, and the cut numbered `o.next` (its place
+  // among the cuts, from 0) stands out as the next to make, with the cuts ticked (`o.done`) faded. Nothing else about
+  // it changes, so its labels and numbers sit where the plan's do.
+  function sheetSvg(m, sh, si, o) {
+    // A ripped board is drawn at least 64 px deep, deeper than it is to scale, so its narrow parts and cuts can be read.
+    var width = o.width, px = (width - 2) / sh.L, py = m.rip ? Math.max(px, 64 / sh.W) : px, H = sh.W * py, top = o.bare ? 4 : 22, rip = !!m.rip, what = rip ? 'Board ' : 'Sheet ';
+    var done = o.done || {}, mark = function (j) { return j === o.next ? ' nx' : done[j] ? ' dn' : ''; };
+    var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + (H + top + 8).toFixed(1) + '" aria-hidden="true"' + (o.bare ? '' : ' style="margin-top:' + (si ? 16 : 6) + 'px"') + '>';
+    if (!o.bare) s += '<text class="dg-metab" x="0" y="8">' + what + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + (rip ? esc(fmtD(sh.L, { ft: true }) + ' · ' + fmtD(sh.W) + ' wide') : sheetSize(sh.W, sh.L, true)) + (sh.stock.have ? '<tspan class="dg-yours"> · yours</tspan>' : '') + '</text>';
+    var ox = 1, oy = top;
+    s += '<rect class="' + (rip ? 'dg-wood' : 'dg-ply') + '" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
+    s += '<rect class="dg-scrap" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
+    // Each label is noted as a box ([x, y, w, h]) for the cut numbers to keep off, and drawn once they're placed.
+    // `lo` and `hi` say how far along its part a label may move, should a number land on it anyway.
+    var boxes = [], labels = [], boxOf = function (x, y, t, cw) { return [x - t.length * cw / 2 - 1, y - 8, t.length * cw + 2, 16]; };
+    var label = function (cls, x, y, t, cw, lo, hi) { var l = { cls: cls, x: x, y: y, t: t, cw: cw, b: boxOf(x, y, t, cw), lo: lo, hi: hi }; boxes.push(l.b); labels.push(l); return l; };
+    // One size form for the whole sheet, so neighbours don't flip between 34 1/2 × 15 1/4 and 45 3/4″ × 14″: with
+    // marks if every part that has room for a size fits it with them, else without. A part too narrow for that form
+    // takes the length alone.
+    var forms = function (p) { return [fmtD(p.l) + ' × ' + fmtD(p.w), fmtD(p.l, { bare: true }) + ' × ' + fmtD(p.w, { bare: true }), fmtD(p.l)]; };
+    var sized = sh.placed.filter(function (p) { return p.l * px > 30 && p.w * py > 34 && fitLabel(forms(p).slice(1, 2), p.l * px, 7.2); }), named = o.named;
+    var form = sized.every(function (p) { return fitLabel(forms(p).slice(0, 1), p.l * px, 7.2); }) ? 0 : 1;
+    sh.placed.forEach(function (p, k) {
+      var x = ox + p.x * px, y = oy + p.y * py, w = p.l * px, h = p.w * py, part = m.mat.parts[p.pi], L = letter(p.pi, m.mat);
+      s += '<rect class="' + (rip ? 'dg-wood' : 'dg-ply') + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"/><path class="dg-grain" d="' + grainPaths(x, y, w, h, 7 + k * 13 + si * 101) + '"/>';
+      s += '<rect class="dg-part" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmtD(p.l) + ' × ' + fmtD(p.w)) + '</title></rect>';
+      if (w > 30 && h > 16) {
+        // under the letter, the size in the sheet's form, or the length alone; with room for three lines, the part's
+        // name between them
+        var dims = h > 34 ? fitLabel(forms(p).slice(form), w, 7.2) : '', nm = named && dims && h > 54 ? fitLabel(nameForms(part && part.name, '', ''), w, 7.2) : '';
+        var a = label('dg-lblb', x + w / 2, y + h / 2 - (nm ? 17 : dims ? 8 : 0), L, 7.2, x + 2, x + w - 2);
+        a.cy = y + h / 2;
+        if (nm) { a.name = label('dg-lbl dg-nm', x + w / 2, y + h / 2, nm, 7.2, x + 2, x + w - 2); a.name.sub = true; }
+        if (dims) { a.with = label('dg-lbl', x + w / 2, y + h / 2 + (nm ? 17 : 9), dims, 7.2, x + 2, x + w - 2); a.with.sub = true; a.alt = fitLabel([fmtD(p.l)], w, 7.2); }
+      }
+    });
+    sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * py, t = fitLabel([fmtD(f.w) + ' × ' + fmtD(f.h)], w, 6.6); if (t && h > 18) label('dg-scrapt', ox + f.x * px + w / 2, oy + f.y * py + h / 2, t, 6.6, ox + f.x * px + 2, ox + (f.x + f.w) * px - 2); });
+    var at = s.length; // the labels go here, under the outline, the cuts and their numbers
+    s += '<rect class="' + (rip ? 'dg-edge' + (sh.stock.have ? ' have' : '') : 'dg-pedge') + '" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>'; // under the cuts and their numbers
+    var lines = '', last = '';
+    sh.steps.filter(function (st) { return st.type !== 'none'; }).forEach(function (st, j) {
+      var l = st.line, x1 = ox + l[0] * px, y1 = oy + l[1] * py, x2 = ox + l[2] * px, y2 = oy + l[3] * py;
+      var xy = '" x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>';
+      var c = '<line class="dg-under cu' + mark(j) + xy + '<line class="dg-cut' + mark(j) + xy;
+      if (j === o.next) last = c; else lines += c; // the next cut over the others
+    });
+    s += lines + last;
+    var cuts = sh.steps.filter(function (st) { return st.type !== 'none'; }).map(function (st) { var l = st.line; return [ox + l[0] * px, oy + l[1] * py, ox + l[2] * px, oy + l[3] * py]; });
+    var nums = placeNums(cuts, boxes, [ox, oy, ox + sh.L * px, oy + H], 8, 6);
+    nums.forEach(function (c, k) {
+      s += '<circle class="dg-num' + mark(k) + '" cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="' + c[2] + '"/><text class="dg-numt' + (c[2] < 8 ? ' sm' : '') + mark(k) + '" x="' + c[0].toFixed(1) + '" y="' + c[1].toFixed(1) + '">' + (k + 1) + '</text>';
+    });
+    // A label a number still covers moves along its part (with the size under it) to where none does, if there's room.
+    // Where there's none, the size steps down to the length alone, then goes, leaving the letter in the middle of its
+    // part (the steps and the legend still give the size).
+    var covered = function (b, dx) { return nums.some(function (c) { return Math.abs(c[0] - b[0] - dx - b[2] / 2) < c[2] + b[2] / 2 && Math.abs(c[1] - b[1] - b[3] / 2) < c[2] + b[3] / 2; }); };
+    var clear = function (group) { // how far the group moves to be clear of every number, or null
+      var hit = function (dx) { return group.some(function (g) { return covered(g.b, dx) || g.b[0] + dx < g.lo || g.b[0] + g.b[2] + dx > g.hi; }); };
+      if (!hit(0)) return 0;
+      for (var d = 2; d < 200; d += 2) { if (!hit(d)) return d; if (!hit(-d)) return -d; if (group[0].x + d > group[0].hi && group[0].x - d < group[0].lo) break; }
+      return null;
+    };
+    var relabel = function (g, t, y) { return { cls: g.cls, x: g.x, y: y, t: t, b: boxOf(g.x, y, t, g.cw), lo: g.lo, hi: g.hi }; };
+    var lbls = '';
+    labels.forEach(function (l) {
+      if (l.sub) return;
+      // with a name: the three lines, then with the length alone, then as a part with no room for a name
+      var mid = l.name ? [l.name] : [], tries = [l.with ? [l].concat(mid, [l.with]) : [l]], dx = null, pick;
+      if (l.with) {
+        if (l.alt && l.alt !== l.with.t) tries.push([l].concat(mid, [relabel(l.with, l.alt, l.with.y)]));
+        if (l.name) {
+          var two = relabel(l, l.t, l.cy - 8);
+          tries.push([two, relabel(l.with, l.with.t, l.cy + 9)]);
+          if (l.alt && l.alt !== l.with.t) tries.push([two, relabel(l.with, l.alt, l.cy + 9)]);
+        }
+        tries.push([relabel(l, l.t, l.cy)], [l]);
+      }
+      tries.some(function (g) { dx = clear(g); pick = g; return dx != null; });
+      // nowhere clear, even for the letter alone: the longest size no number covers stays, under its letter
+      if (dx == null) { dx = 0; pick = tries.filter(function (g) { return !g.slice(1).some(function (x) { return covered(x.b, 0); }); })[0]; }
+      pick.forEach(function (g) { lbls += '<text class="' + g.cls + '" x="' + (g.x + dx).toFixed(1) + '" y="' + g.y.toFixed(1) + '" text-anchor="middle">' + esc(g.t) + '</text>'; });
+    });
+    s = s.slice(0, at) + lbls + s.slice(at);
+    return s + '</svg>';
   }
   function stepText(st, m) {
     var name = function (pi) { var part = m.mat.parts[pi]; return letter(pi, m.mat) + (part && part.name ? ' ' + esc(part.name) : ''); };
@@ -2205,7 +2229,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     RES.mats.forEach(function (m) {
       m.items.forEach(function (it, ii) {
         var s = it.stock, sheet = m.kind === 'sheet', rip = !!m.rip;
-        var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : rip ? s.len + '×' + it.W + ' ripped' : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (sheet ? sheetSize(s.wid, s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
+        // A sheet's card is headed with its material, "¾ plywood · Sheet 1", so it isn't taken for the ¼ plywood's sheet 1.
+        var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : rip ? s.len + '×' + it.W + ' ripped' : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: (sheet ? '' : esc(m.mat.name) + ' · ') + (sheet ? sheetSize(s.wid, s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
+        t.head = sheet ? '<span class="mn">' + esc(m.mat.name) + '</span><span class="dot">\u00a0·\u00a0' + t.title + '</span>' : t.title;
         t.say = m.mat.name + ', ' + (sheet ? sayLen(s.wid) + ' × ' + sayLen(s.len) : sayLen(s.len, { ft: true })) + (s.have ? ', yours' : ''); // the heading as a screen reader names its group
         var name = function (pi) { var part = m.mat.parts[pi]; return '<b>' + letter(pi, m.mat) + '</b> ' + esc(part && part.name || 'Part'); };
         if (!sheet && !rip) {
@@ -2223,6 +2249,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           // With the factory edges to trim, that comes first, and every cut is measured from a trimmed edge.
           if (it.ends > 0) t.cuts.push({ id: 'ends ' + it.ends.toFixed(4), meas: measH(it.ends), what: 'Square up both ends', sub: 'Trim ' + fmtH(it.ends) + ' off each end, leaving ' + fmtH(it.L - 2 * it.ends) + ', and measure every crosscut from a squared end' });
           if (it.edge > 0) t.cuts.push({ id: 'edges ' + it.edge.toFixed(4), meas: measH(it.edge), what: 'Trim the factory edges', sub: 'Take ' + fmtH(it.edge) + ' off each edge, leaving ' + sheetSize(it.W - 2 * it.edge, it.L - 2 * it.edge) + ', and measure every cut from a trimmed edge' });
+          var j = 0; // each cut's number in the drawing
           it.steps.forEach(function (st) {
             var g = st.gives, tag = function (g) { return g.it.pi + ' ' + g.l.toFixed(4) + '×' + g.w.toFixed(4) + (g.rot ? ' turned' : ''); };
             var gives = (g ? ' → ' + tag(g) : '') + (st.also ? ' · left ' + st.also.map(tag).join(' + ') : '');
@@ -2232,7 +2259,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             // Not for less than an inch, which would leave a thin strip trapped between the blade and the fence.
             var far = st.type === 'rip' ? (st.on ? st.on.h : it.W) - st.at - P.kerf : 0;
             t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: measH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + pieceName(st.on, fmtH, rip) + stepGives(st, name, ' → '), sub: st.type === 'rip' ? 'Along the grain — set the fence at ' + fmtH(st.at) + ', or mark it and cut on the waste side' : 'Across the grain — measure from the end, cut on the waste side',
-              alt: far >= 1 - 1e-9 && far < st.at - 1e-9 ? 'or set the fence at ' + fmtH(far) + ' — ' + (st.gives ? 'the part is the piece' : 'the ' + fmtH(st.at) + ' piece is the one') + ' past the blade' : '' });
+              alt: far >= 1 - 1e-9 && far < st.at - 1e-9 ? 'or set the fence at ' + fmtH(far) + ' — ' + (st.gives ? 'the part is the piece' : 'the ' + fmtH(st.at) + ' piece is the one') + ' past the blade' : '', step: j++ });
           });
           // What's left that's worth keeping, at least the smallest offcut worth keeping each way (on a ripped board, long).
           var keep = it.spare.filter(function (f) { return worthKeeping(f.w) && (rip || worthKeeping(f.h)); });
@@ -2278,9 +2305,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   var SAW = { done: 0, total: 0 }; // the saw's count as last drawn
   var SAWOPEN = {}; // the folded boards opened with a tap ('material id/board'), for as long as the page is open
+  var SAWDG = {}; // the sheets whose drawing is folded away at the saw, the same way
+  function sawWidth() { var w = $('sawOut').clientWidth; return Math.max(240, Math.floor(w || planWidth() + 26) - 26); }
   function renderSaw() {
     var host = $('sawOut');
     if (!RES) { host.innerHTML = ''; return; }
+    W.saw = sawWidth();
     var tasks = sawTasks(), total = 0, done = 0;
     syncTicks(tickKeys(tasks));
     if (!tasks.length) { host.innerHTML = '<h2 class="sr">At the saw</h2><div class="empty">The cutting steps show up here once there’s a plan.<br><button class="btn" type="button" data-go="list">Go to the cut list</button></div>'; return; }
@@ -2298,13 +2328,21 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       total += n; done += d;
       var like = first === t.ii ? '' : '<span>— same as board ' + (first + 1) + '</span>', count = n ? '<span class="n">' + d + '/' + n + (d === n ? ' ✓' : '') + '</span>' : '';
       h += '<div class="stk' + (n && d === n ? ' done' : '') + (open ? '' : ' fold') + '" role="group" aria-label="' + t.title + ', ' + (like ? 'same as board ' + (first + 1) + ', ' : '') + esc(t.say) + '">' +
-        (like && !forced ? '<button class="stk-hd" type="button" aria-expanded="' + open + '" data-fold="' + fk + '"><b>' + t.title + '</b>' + like + count + '<span class="chev" aria-hidden="true">›</span></button>' : '<div class="stk-hd"><b>' + t.title + '</b>' + (like || '<span>' + t.sub + '</span>') + count + '</div>');
+        (like && !forced ? '<button class="stk-hd" type="button" aria-expanded="' + open + '" data-fold="' + fk + '"><b>' + t.head + '</b>' + like + count + '<span class="chev" aria-hidden="true">›</span></button>' : '<div class="stk-hd"><b>' + t.head + '</b>' + (like || '<span' + (t.head !== t.title ? ' class="sz"' : '') + '>' + t.sub + '</span>') + count + '</div>');
       if (!open) { h += '</div>'; return; }
+      // A sheet's card starts with its drawing, the card's next cut standing out in it and the cuts ticked faded, and
+      // each cut below gives its number in the drawing (drawn by the style sheet, so a cut's words stay as they were).
+      // A tap on "Drawing" folds it away, for as long as the page is open.
+      if (t.m.kind === 'sheet') {
+        var nd = null, dn = {};
+        t.cuts.forEach(function (c, ci) { if (c.step == null) return; if (ticked(t, ci)) dn[c.step] = 1; else if (nd == null) nd = c.step; });
+        h += '<details class="sdg" data-dg="' + fk + '"' + (SAWDG[fk] ? '' : ' open') + '><summary><span>Drawing</span><span class="chev" aria-hidden="true">›</span></summary>' + sheetSvg(t.m, t.it, t.ii, { width: Math.min(W.saw, 720), named: W.saw >= 560, bare: true, next: nd, done: dn }) + '</details>';
+      }
       t.cuts.forEach(function (c, ci) {
         if (c.noCut) { h += '<div class="cut note"><span>' + c.note + '</span></div>'; return; }
         var on = ticked(t, ci), k = t.mid + '/' + t.ii + '.' + ci, nx = !on && !next;
         if (nx) next = k;
-        h += '<button class="cut' + (nx ? ' next' : '') + '" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + k + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + (nx ? '<span class="nx">Next</span> ' : '') + c.what + '<small>' + c.sub + '</small>' + (c.alt ? '<small>' + c.alt + '</small>' : '') + '</span><span class="sr">, cut ' + (++at) + ' of ' + n + '</span></button>';
+        h += '<button class="cut' + (nx ? ' next' : '') + '" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + k + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + (nx ? '<span class="nx">Next</span> ' : '') + (c.step != null && t.m.kind === 'sheet' ? '<span class="cn" data-n="' + (c.step + 1) + '" aria-hidden="true"></span>' : '') + c.what + '<small>' + c.sub + '</small>' + (c.alt ? '<small>' + c.alt + '</small>' : '') + '</span><span class="sr">, cut ' + (++at) + ' of ' + n + '</span></button>';
       });
       if (t.note) h += '<div class="cut note"><span>' + t.note + '</span></div>';
       h += '</div>';
@@ -2325,6 +2363,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         if (on && SAW.total && SAW.done === SAW.total) toast('That’s every cut. ' + (P.name.replace(/ \(example\)$/, '') || 'The project') + ' is ready to put together.');
       });
     });
+    host.querySelectorAll('details[data-dg]').forEach(function (d) { d.addEventListener('toggle', function () { SAWDG[d.dataset.dg] = !d.open; }); });
     host.querySelectorAll('[data-fold]').forEach(function (b) {
       b.addEventListener('click', function () { var k = b.dataset.fold; SAWOPEN[k] = !SAWOPEN[k]; renderSaw(); var f = host.querySelector('[data-fold="' + k + '"]'); if (f) f.focus({ preventScroll: true }); });
     });
@@ -2930,7 +2969,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); awake(); });
   $('planOut').addEventListener('click', onGo); $('sawOut').addEventListener('click', onGo);
-  var rT; window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(function () { if ($('planOut').clientWidth && Math.abs(planWidth() - W.plan) > 4) renderPlan(); }, 120); });
+  var rT; window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(function () { if ($('planOut').clientWidth && Math.abs(planWidth() - W.plan) > 4) renderPlan(); if ($('sawOut').clientWidth && Math.abs(sawWidth() - W.saw) > 4) renderSaw(); }, 120); });
   // A window widened past 960 px shows the plan beside the cut list: drawn before that frame, so an old plan never shows.
   var widthChange = function () { reveal(); awake(); }; // the cut list's tab shows the saw beside it, or hides it
   if (NARROW.addEventListener) NARROW.addEventListener('change', widthChange); else NARROW.addListener(widthChange);
