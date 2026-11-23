@@ -1106,7 +1106,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       else if (f === 'price') {
         // a decimal comma (4,28 or 1.234,50) reads as a point; a thousands comma (1,234) doesn't
         var t = el.value.trim(); if (/,\d{1,2}(?!\d)/.test(t) && t.lastIndexOf(',') > t.lastIndexOf('.')) t = t.replace(/\./g, '').replace(/,(\d{1,2})(?!\d)/, '.$1');
-        v = parseFloat(t.replace(/[^\d.]/g, '')); el.classList.toggle('bad', !!t && !(v >= 0)); s.price = v >= 0 ? v : 0;
+        // what's left must be one number: "3439.98.00", a new price typed after an old one, is marked and not used
+        var n = t.replace(/[^\d.]/g, ''), bad = !!t && (n.split('.').length > 2 || !(parseFloat(n) >= 0));
+        v = parseFloat(n); el.classList.toggle('bad', bad); if (!bad) s.price = v >= 0 ? v : 0;
       }
       else if (f === 'have') { s.have = +el.value || 0; renderList(); }
       if (f !== 'have') refreshChips(m);
@@ -1121,7 +1123,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (p && (f === 'len' || f === 'wid') && p[f] > 0) el.value = fmt(p[f]);
     if (p && f === 'qty' && p.qty > 0 && el.value.trim() !== String(p.qty)) { el.value = p.qty; el.classList.remove('bad'); } // 600 becomes the 500 planned
     if (s && (f === 'slen' || f === 'swid')) el.value = fmt(f === 'slen' ? s.len : s.wid, { ft: f === 'slen' && m.kind === 'board' });
-    if (s && f === 'price' && !s.have) el.value = (+s.price || 0).toFixed(2);
+    if (s && f === 'price' && !s.have) { el.value = (+s.price || 0).toFixed(2); el.classList.remove('bad'); }
+  }
+  // A count, a price or a stock size is usually typed over whole, so a tap selects it (after the tap, or iOS drops the
+  // selection). A part's name and length aren't: a tap there is often to fix one character.
+  function onFocus(e) {
+    var el = e.target, f = el.dataset && el.dataset.f;
+    if (f === 'qty' || f === 'price' || f === 'slen' || f === 'swid') setTimeout(function () { if (document.activeElement === el) el.select(); }, 0);
   }
   function onKey(e) {
     var el = e.target;
@@ -1805,6 +1813,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   $('mats').addEventListener('input', onInput);
   $('mats').addEventListener('change', function (e) { if (e.target.tagName === 'SELECT') onInput(e); });
   $('mats').addEventListener('focusout', onBlur);
+  $('mats').addEventListener('focusin', onFocus);
   $('mats').addEventListener('keydown', onKey);
   $('mats').addEventListener('click', onClick);
   $('pname').addEventListener('input', function () { P.name = this.value; if (P.example) { P.example = false; renderHead(); $('pname').focus(); } touch(); });

@@ -470,12 +470,23 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   await cdp.detach();
 }
 
-// A three-letter currency sits clear of the price.
+// A three-letter currency sits clear of the price, and a price typed over an old one isn't read as both.
 {
   await open(saved(project('Franken', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }], [{ name: 'Shelf', qty: 2, len: 30, wid: 12 }])], { cur: 'CHF' })));
   await view('list');
   await page.click('details.stock summary');
   assert.ok(await page.$eval('.srow[data-sid] .money', m => m.querySelector('span').getBoundingClientRect().right <= m.querySelector('input').getBoundingClientRect().left + parseFloat(getComputedStyle(m.querySelector('input')).paddingLeft)), 'CHF covers the price');
+  const price = page.locator('.srow[data-sid] input[data-f="price"]').nth(1);
+  await price.fill('3439.98.00');
+  assert.ok(await price.evaluate(e => e.classList.contains('bad')), 'a price with two decimal points isn’t marked');
+  assert.doesNotMatch(await page.textContent('details.stock .chips'), /3439/, 'a price with two decimal points was read as a price');
+  // Tapping a count, a price or a stock length selects it, so what's typed replaces it (a part's name and length don't).
+  for (const [field, typed] of [['.prow[data-pid] input[data-f="qty"]', '3'], ['.srow[data-sid] input[data-f="price"]', '39.98'], ['.srow[data-sid] input[data-f="slen"]', '50']]) {
+    await page.locator(field).first().tap();
+    await page.waitForTimeout(50);
+    await page.keyboard.type(typed);
+    assert.equal(await page.locator(field).first().inputValue(), typed, `typing into a tapped ${field} added to what was there`);
+  }
 }
 
 // On a phone a sheet part takes two lines, its name across the top, so the name isn't cut to a few letters. Enter
