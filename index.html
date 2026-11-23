@@ -461,9 +461,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       return ft + '′' + (rem ? ' ' + fmtH(rem) : '');
     }
     var p = sixteenths(x), s = p.w ? String(p.w) : '';
-    if (p.f) s += (s ? ' ' : '') + '<span class="fr"><sup>' + p.f + '</sup>⁄<sub>' + p.d + '</sub></span>';
+    // a screen reader hears the fraction as 15/16, not "superscript 15 fraction slash subscript 16"
+    if (p.f) s += (s ? ' ' : '') + '<span class="fr"><span class="sr">' + p.f + '/' + p.d + '</span><span aria-hidden="true"><sup>' + p.f + '</sup>⁄<sub>' + p.d + '</sub></span></span>';
     return (s || '0') + (o.bare ? '' : '″');
   }
+  // A length for a name a screen reader says: 8 ft, 8 ft 6 in, 47 3/4 in, 2.4 m.
+  function sayLen(x, o) { return fmt(x, o).replace(/'/g, ' ft').replace(/"$/, ' in'); }
   var VULGAR = { '½': ' 1/2', '¼': ' 1/4', '¾': ' 3/4', '⅛': ' 1/8', '⅜': ' 3/8', '⅝': ' 5/8', '⅞': ' 7/8' };
   function parseLen(str) {
     var s = String(str == null ? '' : str).trim().toLowerCase();
@@ -1184,6 +1187,14 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // A length in a field: in mm the bare number, so the field stays short (the cut list says it's in mm) and a phone can
   // offer its number pad; in inches as a tape reads, with the letter keyboard for the ' and " marks.
   function fieldLen(x, o) { return U === 'mm' ? fmt(x, { bare: true }) : fmt(x, o); }
+  // A size to buy as a screen reader names it: the 8 ft size, the 4 ft × 8 ft size.
+  function sizeName(m, s) { return m.kind === 'sheet' ? sayLen(s.wid, { ft: true }) + ' × ' + sayLen(s.len, { ft: true }) : sayLen(s.len, { ft: true }); }
+  function nameSize(m, s, row) {
+    var nm = sizeName(m, s);
+    row.querySelector('[data-f="price"]').setAttribute('aria-label', 'Price for the ' + nm + ' size');
+    row.querySelector('[data-f="have"]').setAttribute('aria-label', 'Where the ' + nm + ' size comes from');
+    row.querySelector('[data-a="delstock"]').setAttribute('aria-label', 'Remove the ' + nm + ' size');
+  }
   function lenMode() { return U === 'mm' ? ' inputmode="decimal"' : ''; }
   function renderList() {
     var host = $('mats'), open = {};
@@ -1194,27 +1205,32 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       h += '<article class="mat' + (sheet ? ' sheetmat' : '') + '" data-mid="' + m.id + '">' +
         '<header class="mat-hd"><span class="mat-ic" aria-hidden="true">' + ICON[m.kind] + '</span><input class="mat-name" data-f="mname" value="' + esc(m.name) + '" aria-label="Material name" autocomplete="off"><span class="mat-note">' + esc(m.note) + '</span><button class="icon" type="button" data-a="delmat" title="Remove this material" aria-label="Remove ' + esc(m.name) + '">✕</button></header>' +
         '<div class="parts"><div class="prow head"><span></span><span>Part</span><span style="text-align:center">Qty</span><span>' + (sheet ? 'Length' : 'Length') + '</span>' + (sheet ? '<span>Width</span><span title="Keep the grain running along the part’s length">Grain</span>' : '') + '<span></span></div>';
+      // Each field is named by its part's letter, its name as typed and its column: "B Front & back rail Length".
       m.parts.forEach(function (p, i) {
-        h += '<div class="prow" data-pid="' + p.id + '"><span class="plet">' + letter(i) + '</span>' +
-          '<input data-f="pname" value="' + esc(p.name) + '" aria-label="Part name" autocomplete="off" enterkeyhint="next" placeholder="Part">' +
-          '<input class="pq mono" data-f="qty" value="' + (p.qty || '') + '" inputmode="numeric" enterkeyhint="next" aria-label="Quantity" autocomplete="off">' +
-          '<input class="mono" data-f="len" value="' + (p.len > 0 ? esc(fieldLen(p.len)) : '') + '"' + lenMode() + ' enterkeyhint="next" aria-label="Length" autocomplete="off" placeholder="' + (U === 'mm' ? '900' : '35 3/4') + '">' +
-          (sheet ? '<input class="mono" data-f="wid" value="' + (p.wid > 0 ? esc(fieldLen(p.wid)) : '') + '"' + lenMode() + ' enterkeyhint="next" aria-label="Width" autocomplete="off" placeholder="' + (U === 'mm' ? '400' : '16') + '"><button class="grain" type="button" data-a="grain" aria-pressed="' + (p.grain ? 'true' : 'false') + '" title="' + (p.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned') + '" aria-label="Keep grain along the length">' + ICON.grain + '</button>' : '') +
+        var by = function (col) { return ' aria-labelledby="L-' + p.id + ' n-' + p.id + ' ' + col + '"'; };
+        h += '<div class="prow" data-pid="' + p.id + '"><span class="plet" id="L-' + p.id + '">' + letter(i) + '</span>' +
+          '<input data-f="pname" id="n-' + p.id + '" value="' + esc(p.name) + '" aria-label="Part ' + letter(i) + ' name" autocomplete="off" enterkeyhint="next" placeholder="Part">' +
+          '<input class="pq mono" data-f="qty" value="' + (p.qty || '') + '" inputmode="numeric" enterkeyhint="next"' + by('c-qty') + ' autocomplete="off">' +
+          '<input class="mono" data-f="len" value="' + (p.len > 0 ? esc(fieldLen(p.len)) : '') + '"' + lenMode() + ' enterkeyhint="next"' + by('c-len') + ' autocomplete="off" placeholder="' + (U === 'mm' ? '900' : '35 3/4') + '">' +
+          (sheet ? '<input class="mono" data-f="wid" value="' + (p.wid > 0 ? esc(fieldLen(p.wid)) : '') + '"' + lenMode() + ' enterkeyhint="next"' + by('c-wid') + ' autocomplete="off" placeholder="' + (U === 'mm' ? '400' : '16') + '"><button class="grain" type="button" data-a="grain" aria-pressed="' + (p.grain ? 'true' : 'false') + '" title="' + (p.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned') + '"' + by('c-grain') + '>' + ICON.grain + '</button>' : '') +
           '<button class="icon" type="button" data-a="delpart" aria-label="Remove ' + esc(p.name || 'part') + '">✕</button></div>';
       });
       h += '<button class="addpart" type="button" data-a="addpart">+ Add a part</button></div><div class="perr" data-err="' + m.id + '" hidden></div>' +
         '<details class="stock" data-mid="' + m.id + '"' + (open[m.id] ? ' open' : '') + '><summary><span class="chips">' + stockSummary(m) + '</span><span class="chev" aria-hidden="true">›</span><span class="sr">Edit stock and prices</span></summary><div class="stock-bd">' +
         '<div class="srow head"><span>' + (sheet ? 'Length' : 'Length') + '</span>' + (sheet ? '<span>Width</span>' : '') + '<span>Price</span><span>Source</span><span></span></div>';
       m.stock.forEach(function (s) {
+        var nm = sizeName(m, s);
         h += '<div class="srow" data-sid="' + s.id + '"><input class="mono" data-f="slen" value="' + esc(fieldLen(s.len, { ft: !sheet })) + '"' + lenMode() + ' enterkeyhint="next" aria-label="Stock length" autocomplete="off">' +
           (sheet ? '<input class="mono" data-f="swid" value="' + esc(fieldLen(s.wid)) + '"' + lenMode() + ' enterkeyhint="next" aria-label="Stock width" autocomplete="off">' : '') +
-          '<span class="money"><span>' + esc(CUR) + '</span><input class="mono" data-f="price" style="padding-left:' + (12 + Array.from(CUR).length * 9) + 'px" value="' + (s.have ? '' : (+s.price || 0).toFixed(2)) + '" inputmode="decimal" enterkeyhint="next" aria-label="Price" autocomplete="off"' + (s.have ? ' disabled placeholder="free"' : '') + '></span>' +
-          '<select data-f="have" aria-label="Where it comes from"><option value="0"' + (s.have ? '' : ' selected') + '>Buy</option>' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return '<option value="' + n + '"' + (s.have === n ? ' selected' : '') + '>Have ' + n + '</option>'; }).join('') + '</select>' +
-          '<button class="icon" type="button" data-a="delstock" aria-label="Remove this size">✕</button></div>';
+          '<span class="money"><span>' + esc(CUR) + '</span><input class="mono" data-f="price" style="padding-left:' + (12 + Array.from(CUR).length * 9) + 'px" value="' + (s.have ? '' : (+s.price || 0).toFixed(2)) + '" inputmode="decimal" enterkeyhint="next" aria-label="Price for the ' + nm + ' size" autocomplete="off"' + (s.have ? ' disabled placeholder="free"' : '') + '></span>' +
+          '<select data-f="have" aria-label="Where the ' + nm + ' size comes from"><option value="0"' + (s.have ? '' : ' selected') + '>Buy</option>' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return '<option value="' + n + '"' + (s.have === n ? ' selected' : '') + '>Have ' + n + '</option>'; }).join('') + '</select>' +
+          '<button class="icon" type="button" data-a="delstock" aria-label="Remove the ' + nm + ' size">✕</button></div>';
       });
       h += '<div class="addrow"><button class="lbtn" type="button" data-a="addstock">+ Size to buy</button><button class="lbtn" type="button" data-a="addhave">+ Offcut I already have</button></div>' +
         '<p class="hint">Prices start as examples — set them to what your store charges. Offcuts you have are free, and used whenever they save buying.</p></div></details></article>';
     });
+    // the columns' names, for the fields' names
+    h += '<span id="c-qty" hidden>Quantity</span><span id="c-len" hidden>Length</span><span id="c-wid" hidden>Width</span><span id="c-grain" hidden>Keep grain along the length</span>';
     var pre = PRESETS[U];
     h += '<div class="addmat"><span class="lbl">Add material</span>' + pre.board.map(function (b, i) { return '<button class="pbtn" type="button" data-add="board:' + i + '">' + esc(b.name) + '</button>'; }).join('') + pre.sheet.map(function (b, i) { return '<button class="pbtn" type="button" data-add="sheet:' + i + '">' + esc(b.name) + '</button>'; }).join('') + '<button class="pbtn" type="button" data-add="board:x">Other board</button><button class="pbtn" type="button" data-add="sheet:x">Other sheet</button></div>';
     host.innerHTML = h;
@@ -1287,7 +1303,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var p = findPart(m, el), s = findStock(m, el);
     if (p && (f === 'len' || f === 'wid') && p[f] > 0) el.value = fieldLen(p[f]);
     if (p && f === 'qty' && p.qty > 0 && el.value.trim() !== String(p.qty)) { el.value = p.qty; el.classList.remove('bad'); } // 600 becomes the 500 planned
-    if (s && (f === 'slen' || f === 'swid')) el.value = fieldLen(f === 'slen' ? s.len : s.wid, { ft: f === 'slen' && m.kind === 'board' });
+    if (s && (f === 'slen' || f === 'swid')) { el.value = fieldLen(f === 'slen' ? s.len : s.wid, { ft: f === 'slen' && m.kind === 'board' }); nameSize(m, s, el.closest('.srow')); }
     if (s && f === 'price' && !s.have) { el.value = (+s.price || 0).toFixed(2); el.classList.remove('bad'); }
   }
   // A count, a price or a stock size is usually typed over whole, so a tap selects it (after the tap, or iOS drops the
@@ -1476,7 +1492,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var shown = TIPS.filter(tipFor).slice(0, 3);
     el.innerHTML = shown.map(function (t, i) {
       var at = tipFor(t);
-      return '<div class="tip"><span class="tag">TIP</span><span>Make <b>' + esc(at.p.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and the ' + esc(at.m.name) + ' costs <b>' + esc(money(t.save)) + ' less</b>.</span><button class="btn sm sec" type="button" data-tip="' + i + '">Use ' + esc(fmt(t.to)) + '</button></div>';
+      return '<div class="tip"><span class="tag">TIP</span><span id="tip' + i + '">Make <b>' + esc(at.p.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and the ' + esc(at.m.name) + ' costs <b>' + esc(money(t.save)) + ' less</b>.</span><button class="btn sm sec" type="button" data-tip="' + i + '" aria-describedby="tip' + i + '">Use ' + esc(fmt(t.to)) + '</button></div>';
     }).join('');
     el.querySelectorAll('[data-tip]').forEach(function (b) {
       var t = shown[+b.dataset.tip]; // the tip this button shows, whatever the next check finds
@@ -1650,6 +1666,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       m.items.forEach(function (it, ii) {
         var s = it.stock, sheet = m.kind === 'sheet';
         var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (sheet ? fmtH(s.wid) + ' × ' + fmtH(s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
+        t.say = m.mat.name + ', ' + (sheet ? sayLen(s.wid) + ' × ' + sayLen(s.len) : sayLen(s.len, { ft: true })) + (s.have ? ', yours' : ''); // the heading as a screen reader names its group
         var name = function (pi) { var part = m.mat.parts[pi]; return '<b>' + letter(pi) + '</b> ' + esc(part && part.name || 'Part'); };
         if (!sheet) {
           if (it.trim > 0) t.cuts.push({ id: 'trim ' + it.trim.toFixed(4), meas: measH(it.trim), what: 'Square up one end', sub: 'Trim off ' + fmtH(it.trim) + ' and measure every part from this fresh end' });
@@ -1719,16 +1736,17 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var ticked = function (t, ci) { var d = P.done[t.mid]; return !!(d && d.ticks[t.ii + '.' + ci]) && !t.cuts[ci].noCut; };
     host.dataset.u = U;
     var h = '', next = null; // the first cut not ticked yet, marked as the next to make
-    tasks.forEach(function (t) {
-      var n = 0, d = 0;
+    // Each board is a group named by its heading ("Board 2, 2×4, 10 ft"), and each cut says which of the board's it is.
+    tasks.forEach(function (t, ti) {
+      var n = 0, d = 0, at = 0;
       t.cuts.forEach(function (c, ci) { if (!c.noCut) { n++; if (ticked(t, ci)) d++; } });
       total += n; done += d;
-      h += '<div class="stk' + (n && d === n ? ' done' : '') + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span>' + (n ? '<span class="n">' + d + '/' + n + (d === n ? ' ✓' : '') + '</span>' : '') + '</div>';
+      h += '<div class="stk' + (n && d === n ? ' done' : '') + '" role="group" aria-label="' + t.title + ', ' + esc(t.say) + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span>' + (n ? '<span class="n">' + d + '/' + n + (d === n ? ' ✓' : '') + '</span>' : '') + '</div>';
       t.cuts.forEach(function (c, ci) {
         if (c.noCut) { h += '<div class="cut note"><span>' + c.note + '</span></div>'; return; }
         var on = ticked(t, ci), k = t.mid + '/' + t.ii + '.' + ci, nx = !on && !next;
         if (nx) next = k;
-        h += '<button class="cut' + (nx ? ' next' : '') + '" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + k + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + (nx ? '<span class="nx">Next</span> ' : '') + c.what + '<small>' + c.sub + '</small></span></button>';
+        h += '<button class="cut' + (nx ? ' next' : '') + '" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + k + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + (nx ? '<span class="nx">Next</span> ' : '') + c.what + '<small>' + c.sub + '</small></span><span class="sr">, cut ' + (++at) + ' of ' + n + '</span></button>';
       });
       if (t.note) h += '<div class="cut note"><span>' + t.note + '</span></div>';
       h += '</div>';

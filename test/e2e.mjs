@@ -71,7 +71,9 @@ const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('kerf.v
 const view = t => page.click(`#tabs button[data-t="${t}"]`);
 const fitsPhone = async what => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `the ${what} scrolls sideways on a phone`);
 const cutsFact = () => page.evaluate(() => [...document.querySelectorAll('.fact')].map(f => f.textContent).filter(t => /cut/.test(t))[0]);
-const sawSteps = () => page.$$eval('#sawOut .cut[data-k]', els => els.map(e => e.querySelector('small').textContent));
+// Text as it shows: a typeset fraction carries a plain 15/16 for screen readers, so its text reads 15/1615⁄16.
+const shown = t => t.replace(/(\d+)\/(\d+)(?=\1⁄\2)/g, '');
+const sawSteps = () => page.$$eval('#sawOut .cut[data-k]', els => els.map(e => e.querySelector('small').textContent)).then(a => a.map(shown));
 // Saves the shop PDF and returns it as text (its streams aren't compressed).
 async function shopPdf() {
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#pdfBtn')]);
@@ -182,7 +184,7 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   await page.waitForTimeout(600);
   assert.equal(parseInt(await cutsFact()), 23);
   assert.equal(await sawTotal(), 23, 'after the tip, the saw counts more cuts than the plan');
-  assert.ok((await page.textContent('#sawOut')).includes('What’s left should be B Front & back rail (47 15⁄16″). Measure it, and trim it if the board ran long.'), 'no note for a rail that needs no cut');
+  assert.ok(shown(await page.textContent('#sawOut')).includes('What’s left should be B Front & back rail (47 15⁄16″). Measure it, and trim it if the board ran long.'), 'no note for a rail that needs no cut');
   // It reads as a line of text: the letter sits a space after "is", not spread out like the parts of a cut's row.
   await view('saw');
   assert.ok(await page.$eval('#sawOut .cut.note b', b => { const r = document.createRange(); r.selectNodeContents(b.previousSibling); return b.getBoundingClientRect().left - r.getBoundingClientRect().right < 6; }), 'the no-cut note is spread out');
@@ -1087,6 +1089,36 @@ await page.keyboard.press('Enter');
 // On a phone the top bar's buttons show only their icons, but each still has a name.
 for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page.getByRole('button', { name, exact: true }).count(), 1, `no button named ${name} on a phone`);
 
+// Fields, tips and cuts say what they belong to. A part's fields are named by its letter, its name as typed and the
+// column ("B Front & back rail Length"), and follow a rename; a size's price, menu and ✕ name the size; a tip's button
+// is described by the tip; at the saw each board is a group named by its heading, each cut says which of the board's
+// it is, and a fraction reads 15/16, not "superscript 15 subscript 16".
+{
+  await open(null);
+  await view('list');
+  await page.evaluate(() => document.querySelectorAll('details.stock').forEach(d => { d.open = true; }));
+  const named = (role, name) => page.getByRole(role, { name, exact: true }).count();
+  assert.equal(await page.locator('.mat').first().getByRole('textbox', { name: 'Part A name', exact: true }).count(), 1, 'no textbox named “Part A name”');
+  for (const [role, name] of [['textbox', 'A Leg Quantity'], ['textbox', 'B Front & back rail Length'], ['textbox', 'A Shelf Width'], ['button', 'A Shelf Keep grain along the length'],
+    ['textbox', 'Price for the 8 ft size'], ['combobox', 'Where the 10 ft size comes from'], ['button', 'Remove the 16 ft size'], ['textbox', 'Price for the 4 ft × 8 ft size']])
+    assert.equal(await named(role, name), 1, `no ${role} named “${name}”`);
+  await page.fill('.prow[data-pid] >> nth=1 >> [data-f="pname"]', 'Rail');
+  assert.equal(await named('textbox', 'B Rail Length'), 1, 'a part’s fields keep its old name');
+  await page.fill('.srow[data-sid] >> nth=0 >> [data-f="slen"]', '7\'');
+  await page.locator('.srow[data-sid] >> nth=0 >> [data-f="slen"]').blur();
+  assert.equal(await named('textbox', 'Price for the 7 ft size'), 1, 'a price keeps its size’s old length');
+  await open(null);
+  await page.waitForSelector('[data-tip]', { timeout: 30000 });
+  assert.match(await page.locator('[data-tip]').evaluate(b => document.getElementById(b.getAttribute('aria-describedby')).textContent), /^Make Front & back rail 47 15\/16/, 'a tip’s button isn’t described by its tip');
+  assert.match(await page.locator('#tips').ariaSnapshot(), /Make Front & back rail 47 15\/16 ?″ instead of 48″/);
+  await view('saw');
+  const board2 = page.getByRole('group', { name: 'Board 2, 2×4, 10 ft', exact: true });
+  assert.equal(await board2.count(), 1, 'no group named for board 2');
+  assert.equal(await board2.getByRole('checkbox', { name: /^48″ B Front & back rail .*, cut 2 of 3$/ }).count(), 1, 'a cut doesn’t say which of its board’s it is');
+  const saw = await page.locator('#sawOut').ariaSnapshot();
+  assert.ok(/Leaves a 2 5\/8 ?″ offcut/.test(saw) && !/superscript|subscript|⁄/.test(saw), 'a fraction at the saw reads as its parts:\n' + saw.slice(0, 600));
+}
+
 // Ticking a cut from the keyboard keeps focus on that cut, and Start over moves it to the first one.
 await view('saw');
 await page.locator('#sawOut .cut[data-k]').nth(1).focus();
@@ -1153,7 +1185,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   const sizeIds = () => page.evaluate(() => [...document.querySelector('.mat').querySelectorAll('.srow[data-sid]')].map(r => r.dataset.sid));
   const before = await sizeIds();
   await press('.mat >> nth=0 >> .srow[data-sid] >> nth=0 >> [data-a="delstock"]');
-  assert.deepEqual([await focused(), await page.evaluate(() => document.activeElement.closest('.srow').dataset.sid)], [['delstock', 'Remove this size'], before[1]], 'focus after removing a size');
+  assert.deepEqual([await focused(), await page.evaluate(() => document.activeElement.closest('.srow').dataset.sid)], [['delstock', 'Remove the 10 ft size'], before[1]], 'focus after removing a size');
   await press('.mat >> nth=0 >> .srow[data-sid] >> nth=2 >> [data-a="delstock"]');
   assert.deepEqual(await focused(), ['addstock', '+ Size to buy'], 'focus after removing the last size');
   const menu = '.mat >> nth=0 >> .srow[data-sid] >> nth=0 >> select';
@@ -1189,11 +1221,11 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
     await page.evaluate(() => { window.tipsAfter = null; document.addEventListener('click', () => requestAnimationFrame(() => { window.tipsAfter = [...document.querySelectorAll('#tips .tip')].map(t => t.textContent); }), { once: true, capture: true }); });
     await tap();
     await page.waitForFunction(() => window.tipsAfter);
-    return page.evaluate(() => window.tipsAfter);
+    return (await page.evaluate(() => window.tipsAfter)).map(shown);
   };
   await open(null);
   await page.waitForSelector('[data-tip]', { timeout: 30000 });
-  assert.ok((await page.textContent('#tips')).includes(RAIL_TIP));
+  assert.ok(shown(await page.textContent('#tips')).includes(RAIL_TIP));
   const applied = await tipsAfterTap(() => page.click('[data-tip]'));
   assert.equal(await page.inputValue('.prow[data-pid] >> nth=1 >> [data-f="len"]'), '47 15/16"');
   assert.ok(!applied.some(t => t.includes(RAIL_TIP)), 'the tip just applied is still offered: ' + applied.join(' / '));
@@ -1497,7 +1529,7 @@ for (const c of sawCases) {
   await view('saw');
   assert.deepEqual(await sawSteps(), c.steps, what + ': steps at the saw');
   assert.equal(await page.textContent('.saw-bar b'), `0 of ${c.cuts} ${c.cuts === 1 ? 'cut' : 'cuts'}`, what + ': cuts at the saw');
-  if (c.note) assert.equal(await page.textContent('#sawOut .cut.note'), c.note, what + ': the note at the saw');
+  if (c.note) assert.equal(shown(await page.textContent('#sawOut .cut.note')), c.note, what + ': the note at the saw');
   // a note reads as a line of text, its fractions typeset in it, not spread out like the parts of a cut's row
   assert.ok(await page.$$eval('#sawOut .cut.note', ns => ns.every(n => n.childNodes.length === 1 && n.firstChild.tagName === 'SPAN')), what + ': a note at the saw is spread out');
 }
@@ -1507,7 +1539,7 @@ for (const c of sawCases) {
 // shop PDF writes the same steps in plain text.
 {
   await open(saved(project('Sides', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])])));
-  assert.deepEqual(await page.$$eval('#planOut ol.steps li > span', ls => ls.map(l => l.textContent)), ['Crosscut the full sheet at 30 1⁄4″', 'Rip the 30 1⁄4″ × 48″ piece at 23 3⁄4″ → A Side', 'Rip the 30 1⁄4″ × 24 1⁄8″ piece at 23 3⁄4″ → A Side']);
+  assert.deepEqual(await page.$$eval('#planOut ol.steps li > span', ls => ls.map(l => l.textContent)).then(a => a.map(shown)), ['Crosscut the full sheet at 30 1⁄4″', 'Rip the 30 1⁄4″ × 48″ piece at 23 3⁄4″ → A Side', 'Rip the 30 1⁄4″ × 24 1⁄8″ piece at 23 3⁄4″ → A Side']);
   const raw = await shopPdf(), pdf = pdfRuns(raw).map(r => r.text);
   assert.ok(pdf.includes('2.  Rip the 30 1/4" × 48" piece at 23 3/4"  »  A Side'), 'the PDF\'s sheet steps: ' + pdf.filter(t => /^\d\./.test(t)));
   // Printed in black and white, parts are white and waste is hatched, not three tans and greys that print alike; the
@@ -1515,11 +1547,11 @@ for (const c of sawCases) {
   assert.ok(pdf.includes('65 5/8" × 48"'), 'no size on the piece left over in the PDF');
   assert.ok(!/0\.92 0\.83 0\.65 rg|0\.91 0\.84 0\.7 rg|0\.8 0\.82 0\.79 rg/.test(raw) && / re W n /.test(raw), 'the PDF fills parts and waste in colours that print as the same grey');
   await view('saw');
-  assert.deepEqual(await page.$$eval('#sawOut .cut[data-k] .what', ws => ws.map(w => w.textContent.replace(/^Next /, ''))), [
+  assert.deepEqual(await page.$$eval('#sawOut .cut[data-k] .what', ws => ws.map(w => w.textContent.replace(/^Next /, ''))).then(a => a.map(shown)), [
     'Crosscut the full sheetAcross the grain — measure from the end, cut on the waste side',
     'Rip the 30 1⁄4″ × 48″ piece → A SideAlong the grain — set the fence at 23 3⁄4″, or mark it and cut on the waste side',
     'Rip the 30 1⁄4″ × 24 1⁄8″ piece → A SideAlong the grain — set the fence at 23 3⁄4″, or mark it and cut on the waste side']);
-  assert.equal(await page.textContent('#sawOut .cut.note'), 'Leaves a 65 5⁄8″ × 48″ piece — worth keeping');
+  assert.equal(shown(await page.textContent('#sawOut .cut.note')), 'Leaves a 65 5⁄8″ × 48″ piece — worth keeping');
 }
 
 // At the saw a measurement's fraction is nearly as big as its whole inches, and every row's text starts at the same

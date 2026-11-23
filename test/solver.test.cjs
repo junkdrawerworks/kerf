@@ -82,7 +82,7 @@ for (const [s, want] of Object.entries(inches)) {
 }
 check(K.fmt(35.75) === '35 3/4"' && K.fmt(96, { ft: true }) === "8'" && K.fmt(102.5, { ft: true }) === "8' 6 1/2\"", 'fmt in inches');
 // Just under a whole foot rounds up to it, not to 12": 2438 mm is 8', not 7' 12".
-for (const [x, want, wantH] of [[95.98, "8'", '8′'], [2438 / 25.4, "8'", '8′'], [107.97, "9'", '9′'], [191.975, "16'", '16′'], [95.96, "7' 11 15/16\"", '7′ 11 <span class="fr"><sup>15</sup>⁄<sub>16</sub></span>″']]) {
+for (const [x, want, wantH] of [[95.98, "8'", '8′'], [2438 / 25.4, "8'", '8′'], [107.97, "9'", '9′'], [191.975, "16'", '16′'], [95.96, "7' 11 15/16\"", '7′ 11 <span class="fr"><span class="sr">15/16</span><span aria-hidden="true"><sup>15</sup>⁄<sub>16</sub></span></span>″']]) {
   const got = K.fmt(x, { ft: true }), gotH = K.fmtH(x, { ft: true });
   check(got === want && gotH === wantH, `fmt(${x}, in feet) = ${got} and ${gotH}, want ${want}`);
 }
@@ -364,7 +364,7 @@ console.log('ticks stay on their cuts');
   // aside: renaming a part keeps its ticks). Seeded random edits to a project with a board and a sheet material.
   const saw = () => new Function([
     ...SOLVER, 'var P = null, RES = null, CUR = "$";', line('var PLANS = '),
-    ...['plural', 'lastIsLeft', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'sawTasks', 'tickKeys'].map(fn),
+    ...['plural', 'sayLen', 'lastIsLeft', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'sawTasks', 'tickKeys'].map(fn),
     'return { solve: function (p) { P = p; U = p.units; solveAll(); var t = sawTasks(); return { keys: tickKeys(t), tasks: t }; } };'
   ].join('\n'))();
   const R = rng(11), pick = a => a[Math.floor(R() * a.length)], q16 = x => Math.round(x * 16) / 16;
