@@ -268,30 +268,6 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Next Square up one end/);
   assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
-// Boards cut alike are drawn once: the example's eight 2×4s are two rows, "1–4" over "10′ ×4" and "5–8" over "8′ ×4",
-// and so on the shop PDF. At the saw each board keeps its row and its own ticks: board 2, cut like board 1, is folded
-// until board 1 is done, then opens with the next cut, while boards 3 and 4 stay folded.
-{
-  await open(null);
-  const rows = await page.$$eval('#planOut .mdiag svg.diag', ([svg]) => [...svg.querySelectorAll('text.dg-metab')].map(t => t.textContent + ' ' + t.nextElementSibling.textContent));
-  assert.deepEqual(rows, ['1–4 10′ ×4', '5–8 8′ ×4'], 'the 2×4s aren’t drawn a row to each run of boards cut alike');
-  const pdf = pdfRuns(await shopPdf()).map(r => r.text);
-  assert.ok(['1\x964', "10' ×4", '5\x968', "8' ×4"].every(t => pdf.includes(t)), 'the shop PDF doesn’t draw boards cut alike once: ' + pdf.slice(0, 40).join(' / '));
-  await view('saw');
-  const heads = () => page.$$eval('#sawOut .stk-hd', hs => hs.map(h => h.textContent));
-  assert.deepEqual((await heads()).slice(0, 4), ['Board 12×4 · 10′0/3', 'Board 2— same as board 10/3›', 'Board 3— same as board 10/3›', 'Board 4— same as board 10/3›']);
-  for (let i = 0; i < 3; i++) await page.locator('#sawOut .cut[data-k]').nth(i).click();
-  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓', 'Board 2— same as board 10/3', 'Board 3— same as board 10/3›'], 'board 2 didn’t open once board 1 was done');
-  assert.match(await page.textContent('#sawOut .cut.next'), /Next B Front & back rail/);
-  assert.match(await page.getAttribute('#sawOut .cut.next', 'data-k'), /\/1\.0$/, 'the next cut isn’t board 2’s first');
-  await page.locator('#sawOut .cut.next').click();
-  await page.waitForTimeout(600);
-  const ticks = await page.evaluate(() => { const db = JSON.parse(localStorage.getItem('kerf.v1')); const d = db.projects[db.current].done; return Object.values(d).map(x => Object.keys(x.ticks).sort().join(' ')).join(' | '); });
-  assert.equal(ticks, '0.0 0.1 0.2 1.0', 'the ticks aren’t kept board by board');
-  await page.reload(); await page.waitForSelector('#sawOut .cut[data-k]');
-  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓', 'Board 2— same as board 11/3', 'Board 3— same as board 10/3›'], 'a reload folds a board with ticks');
-}
-
   // A sheet part resized where it sits: the full sheet's rip moves from 20" to 25", so its tick clears.
   await open(saved(project('One shelf', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Shelf', qty: 1, len: 30, wid: 20 }])])));
   await view('saw');
@@ -1517,6 +1493,30 @@ await page.focus('#sawReset');
 await page.keyboard.press('Enter');
 assert.equal(await page.evaluate(() => document.activeElement.dataset.k.split('/')[1]), '0.0', 'focus after Start over');
 assert.match(await page.textContent('.saw-bar b'), /^0 of /);
+
+// Boards cut alike are drawn once: the example's eight 2×4s are two rows, "1–4" over "10′ ×4" and "5–8" over "8′ ×4",
+// and so on the shop PDF. At the saw each board keeps its row and its own ticks: board 2, cut like board 1, is folded
+// until board 1 is done, then opens with the next cut, while boards 3 and 4 stay folded.
+{
+  await open(null);
+  const rows = await page.$$eval('#planOut .mdiag svg.diag', ([svg]) => [...svg.querySelectorAll('text.dg-metab')].map(t => t.textContent + ' ' + t.nextElementSibling.textContent));
+  assert.deepEqual(rows, ['1–4 10′ ×4', '5–8 8′ ×4'], 'the 2×4s aren’t drawn a row to each run of boards cut alike');
+  const pdf = pdfRuns(await shopPdf()).map(r => r.text);
+  assert.ok(['1\x964', "10' ×4", '5\x968', "8' ×4"].every(t => pdf.includes(t)), 'the shop PDF doesn’t draw boards cut alike once: ' + pdf.slice(0, 40).join(' / '));
+  await view('saw');
+  const heads = () => page.$$eval('#sawOut .stk-hd', hs => hs.map(h => h.textContent));
+  assert.deepEqual((await heads()).slice(0, 4), ['Board 12×4 · 10′0/3', 'Board 2— same as board 10/3›', 'Board 3— same as board 10/3›', 'Board 4— same as board 10/3›']);
+  for (let i = 0; i < 3; i++) await page.locator('#sawOut .cut[data-k]').nth(i).click();
+  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓', 'Board 2— same as board 10/3', 'Board 3— same as board 10/3›'], 'board 2 didn’t open once board 1 was done');
+  assert.match(await page.textContent('#sawOut .cut.next'), /Next B Front & back rail/);
+  assert.match(await page.getAttribute('#sawOut .cut.next', 'data-k'), /\/1\.0$/, 'the next cut isn’t board 2’s first');
+  await page.locator('#sawOut .cut.next').click();
+  await page.waitForTimeout(600);
+  const ticks = await page.evaluate(() => { const db = JSON.parse(localStorage.getItem('kerf.v1')); const d = db.projects[db.current].done; return Object.values(d).map(x => Object.keys(x.ticks).sort().join(' ')).join(' | '); });
+  assert.equal(ticks, '0.0 0.1 0.2 1.0', 'the ticks aren’t kept board by board');
+  await page.reload(); await page.waitForSelector('#sawOut .cut[data-k]');
+  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓', 'Board 2— same as board 11/3', 'Board 3— same as board 10/3›'], 'a reload folds a board with ticks');
+}
 
 // On a 320 px phone the project's name had room for "Gara", cut off with no sign of more: under 360 px it gets a line of
 // its own, ending in … if it's still too long. The tip's button goes under its words, and a size in the shopping list
