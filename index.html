@@ -1185,7 +1185,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // `gives` it. A part that is exactly the piece a cut leaves needs no cut of its own: the cut that frees it (`freed`,
   // its place in the list) names it in `also`, "what's left is …". The piece to the right of a part comes off with the
   // part's crosscut, and the piece below it with its rip, whichever is made first. Only a part that is the whole
-  // sheet gets a step of its own, with no cut.
+  // sheet gets a step of its own, with no cut. Each cut notes the cut that made the piece it's made on (`dep`, -1 for the
+  // full sheet), and orderSteps then puts them in the order to make them.
   function sheetSteps(root) {
     var steps = [];
     (function walk(n, whole, freed) {
@@ -1193,8 +1194,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // `on` is what each cut is made on: null for the full sheet, or its length and width (and whether it's a strip),
       // for pieceName to write in the page's units; `of` says the same as text, whatever the units, for the ticks.
       var p = n.part, piece = whole ? null : { w: n.w, h: n.h }, pieceOf = whole ? 'sheet' : 'piece ' + n.w.toFixed(4) + '×' + n.h.toFixed(4);
-      function rip(x1, x2, y, on, of) { steps.push({ type: 'rip', at: p.w, on: on, of: of, line: [x1, y, x2, y] }); }
-      function cross(x, y1, y2, on, of) { steps.push({ type: 'cross', at: p.l, on: on, of: of, line: [x, y1, x, y2] }); }
+      function rip(x1, x2, y, on, of) { steps.push({ type: 'rip', at: p.w, on: on, of: of, line: [x1, y, x2, y], dep: steps.length > own ? own : freed }); }
+      function cross(x, y1, y2, on, of) { steps.push({ type: 'cross', at: p.l, on: on, of: of, line: [x, y1, x, y2], dep: steps.length > own ? own : freed }); }
       var strip, stripOf, ripAt = -1, crossAt = -1, own = steps.length;
       if (n.first === 'rip') {
         if (n.needH) { ripAt = steps.length; rip(n.x, n.x + n.w, n.y + p.w, piece, pieceOf); }
@@ -1213,7 +1214,26 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // placeIn lists the piece to the right of the part first, then the piece below it
       (n.kids || []).forEach(function (k) { if (!k.dust) walk(k, false, k.x > n.x + 1e-9 ? crossAt : ripAt); });
     })(root, true, -1);
-    return steps;
+    return orderSteps(steps);
+  }
+  // The order to make a sheet's cuts in, each once the piece it's made on exists: a cut at the same setting as the last
+  // one (a rip at the same fence setting, or a crosscut at the same length) next, so the fence stays put; otherwise one
+  // on the piece the latest cut made, so the piece in your hands is finished before you pick up another. Ties go in
+  // the cut tree's order. The layout and the cuts are the same; only their order, and so their numbers, change.
+  function orderSteps(steps) {
+    var n = steps.length, when = [], out = [];
+    if (n < 2) return steps;
+    for (var t = 0; t < n; t++) {
+      var last = out[t - 1], pick = -1, ps = 0;
+      for (var i = 0; i < n; i++) {
+        var st = steps[i]; if (when[i] != null || (st.dep >= 0 && when[st.dep] == null)) continue;
+        var score = (last && st.type === last.type && Math.abs(st.at - last.at) < 1e-9 ? 2 * n : 0) + (st.dep >= 0 ? when[st.dep] + 1 : 0);
+        if (pick < 0 || score > ps) { pick = i; ps = score; }
+      }
+      when[pick] = t; out.push(steps[pick]);
+    }
+    out.forEach(function (st) { delete st.dep; });
+    return out;
   }
   // What a sheet's cut is made on, as text (`f` is fmt) or HTML (fmtH): "the full sheet", "the 47 3/4" × 48" piece".
   function pieceName(on, f) { return on ? 'the ' + f(on.w) + ' × ' + f(on.h) + (on.strip ? ' strip' : ' piece') : 'the full sheet'; }

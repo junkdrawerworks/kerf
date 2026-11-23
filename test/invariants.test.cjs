@@ -22,7 +22,7 @@ const SOLVER = [
   "var U = 'in', CUR = '$';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
   ...['esc', 'plural', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'sayLen', 'parseLen', 'money', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'lastIsLeft', 'orientations',
-    'newSheet', 'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
+    'newSheet', 'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'orderSteps', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
 ];
 const K = new Function([...SOLVER, 'return { fmt: fmt, parseLen: parseLen, solveBoards: solveBoards, solveSheets: solveSheets, units: function (u) { U = u; } };'].join('\n'))();
 // The page without its DOM: the plans it keeps between edits, the saw's checklist and its tick keys, the tips search

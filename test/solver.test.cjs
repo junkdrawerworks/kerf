@@ -23,7 +23,7 @@ const SOLVER = [
   "var U = 'in';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
   ...['esc', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'orientations', 'newSheet',
-    'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
+    'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'orderSteps', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
 ];
 const K = new Function([
   ...SOLVER,
@@ -247,6 +247,50 @@ console.log('sheets: of plans that cost the same, the one kinder to a table saw'
     const rips = new Set(s.filter(x => x.startsWith('rip')).map(x => x.split(' ')[1]));
     check(r.items.length === 1 && s[0].startsWith('rip ') && s[0].endsWith('(sheet)') && rips.size === 1 && s.length === cuts, `${what}: ${JSON.stringify(s)}, want a rip of the full sheet first, one fence setting and ${cuts} cuts`);
   }
+}
+
+console.log('sheets: cuts in the order to make them');
+{
+  // A sheet's cuts come in the order to make them: each once the piece it's made on exists, cuts at the same fence
+  // setting (or crosscuts at the same length) one after another, and otherwise the piece in your hands finished first.
+  // Six 30 × 12 shelves used to rip a 12" strip, crosscut it, then set the fence at 12" again for the second strip.
+  const full = [{ len: 96, wid: 48, price: 58, have: 0 }];
+  const order = parts => K.solveSheets({ stock: full, parts }, { kerf: 0.125 }).items[0].steps.map(s => s.type + ' ' + s.at);
+  let got = order([{ len: 30, wid: 12, qty: 6, grain: true }]);
+  check(JSON.stringify(got) === JSON.stringify(['rip 12', 'rip 12', ...Array(6).fill('cross 30')]), 'six 30 × 12 shelves: ' + JSON.stringify(got));
+  got = order([{ len: 47.75, wid: 23.75, qty: 4, grain: true }]);
+  check(JSON.stringify(got) === JSON.stringify(['rip 23.75', 'rip 23.75', ...Array(4).fill('cross 47.75')]), 'the example’s shelves: ' + JSON.stringify(got));
+  // In seeded jobs, every cut is made on a piece an earlier cut made (or the full sheet), and the cuts at one setting
+  // come together wherever the pieces allow: no cut is followed by one at another setting while a cut at its own
+  // setting was ready to make.
+  const R = rng(91); let n = 0;
+  for (let t = 0; t < 150; t++) {
+    const ps = [];
+    for (let k = 0, nT = 1 + Math.floor(R() * 5); k < nT; k++) ps.push({ len: Math.round((6 + R() * 50) * 4) / 4, wid: Math.round((3 + R() * 24) * 4) / 4, qty: 1 + Math.floor(R() * 5), grain: R() < 0.6 });
+    const r = K.solveSheets({ stock: full, parts: ps }, { kerf: 0.125 });
+    r.items.forEach((sh, si) => {
+      // replay the cuts: each splits the piece its line crosses edge to edge
+      let pieces = [{ x: 0, y: 0, w: sh.L, h: sh.W }];
+      // a cut is ready once there's a piece of the size it names that its line crosses edge to edge
+      const ready = st => {
+        const [x1, y1, x2, y2] = st.line, rip = st.type === 'rip', of = st.of === 'sheet' ? [sh.L, sh.W] : st.of.split(' ')[1].split('×').map(Number);
+        return pieces.findIndex(p => Math.abs(p.w - of[0]) < 1e-3 && Math.abs(p.h - of[1]) < 1e-3 && (rip ? Math.abs(p.x - x1) < 1e-6 && Math.abs(p.x + p.w - x2) < 1e-6 && y1 > p.y + 1e-6 && y1 < p.y + p.h - 1e-6
+          : Math.abs(p.y - y1) < 1e-6 && Math.abs(p.y + p.h - y2) < 1e-6 && x1 > p.x + 1e-6 && x1 < p.x + p.w - 1e-6));
+      };
+      const cuts = sh.steps.filter(s => s.type !== 'none');
+      cuts.forEach((st, k) => {
+        const i = ready(st);
+        check(i >= 0, `order job ${t}, sheet ${si + 1}: cut ${k + 1} (${st.type} at ${st.at}) comes before the piece it's made on`);
+        if (i < 0) return;
+        const p = pieces[i], [x1, y1] = st.line;
+        pieces.splice(i, 1, ...(st.type === 'rip' ? [{ x: p.x, y: p.y, w: p.w, h: y1 - p.y }, { x: p.x, y: y1 + 0.125, w: p.w, h: p.y + p.h - y1 - 0.125 }] : [{ x: p.x, y: p.y, w: x1 - p.x, h: p.h }, { x: x1 + 0.125, y: p.y, w: p.x + p.w - x1 - 0.125, h: p.h }]));
+        const next = cuts[k + 1], same = c => c.type === st.type && Math.abs(c.at - st.at) < 1e-9;
+        if (next && !same(next)) check(!cuts.slice(k + 1).some(c => same(c) && ready(c) >= 0), `order job ${t}, sheet ${si + 1}: after cut ${k + 1} (${st.type} at ${st.at}) another at that setting was ready, but cut ${k + 2} is ${next.type} at ${next.at}`);
+      });
+      n++;
+    });
+  }
+  console.log('  ' + n + ' sheets');
 }
 
 console.log('sheets: one on hand and more to buy');
