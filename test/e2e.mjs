@@ -408,8 +408,8 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
 }
 
 // On a phone the cut list fits: a part takes two lines, its name across the top, so names, lengths and prices
-// aren't cut short, nothing scrolls sideways, and every field's text is 16px (iOS zooms the page into a smaller one).
-// Checked on the example and on materials with longer names, at 320 and 390 wide.
+// aren't cut short, nothing scrolls sideways, every field's text is 16px (iOS zooms the page into a smaller one), and
+// the controls are 44px tall. Checked on the example and on materials with longer names, at 320 and 390 wide.
 {
   const long = project('Mudroom bench', [
     { ...board('1×6 board — pine', [{ len: 72, price: 6.28 }, { len: 96, price: 8.28 }, { len: 30, have: 2 }],
@@ -434,6 +434,16 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
     assert.deepEqual(await small('#sheet input:not([type=file]), #sheet select, #sheet textarea'), [], 'fields in a dialog under 16px');
     await page.click(done);
   }
+  // Controls are 44px tall, and the grain lock sits at least 8px from the ✕ next to it.
+  const short = sel => page.$$eval(sel, els => els.filter(e => e.offsetParent && e.getBoundingClientRect().height < 44).map(e => e.dataset.f || e.dataset.a || e.textContent));
+  assert.deepEqual(await short('#mats .prow .grain, #mats .icon, #mats input, #mats select, #mats .addpart, #mats .lbtn, #mats .pbtn, #tabs button, .top .tbtn'), [], 'cut list controls under 44px tall');
+  assert.ok(await page.$eval('.sheetmat .prow[data-pid]', r => r.querySelector('[data-a="delpart"]').getBoundingClientRect().left - r.querySelector('.grain').getBoundingClientRect().right >= 8), 'the grain lock is less than 8px from the ✕');
+  await page.click('#setBtn');
+  assert.deepEqual(await short('#sheet button, #sheet input'), [], 'Settings controls under 44px tall');
+  await page.click('#stx');
+  await open(null);
+  await page.waitForSelector('[data-tip]', { timeout: 30000 });
+  assert.deepEqual(await short('#planOut button'), [], 'plan buttons under 44px tall');
   // Nothing scrolls sideways on a tablet or a laptop either.
   for (const [width, height] of [[768, 1024], [1280, 800]]) {
     await page.setViewportSize({ width, height });

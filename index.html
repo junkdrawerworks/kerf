@@ -280,7 +280,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   textarea{font-size:16px}
 }
 @media (max-width:560px){
-  .tbtn .t{display:none}.tbtn{padding:7px 9px}
+  .tbtn .t{display:none}.tbtn{padding:7px 9px;min-width:44px;justify-content:center}
+  .tabs{padding-top:8px}
+  /* Every control is at least 44 px tall, from padding rather than bigger type: WCAG 2.2's Target Size (Enhanced),
+     2.5.5, asks 44 × 44 CSS px. The grain lock and the ✕ beside it are 44 px square and 8 px apart. */
+  input,select,.tbtn,.addpart,.lbtn,.btn,.pbtn,.tabs button,.seg button,.stock>summary,.pitem{min-height:44px}
+  label.btn{display:inline-flex;align-items:center}
+  .icon,.grain{width:44px;height:44px}
   .brand{font-size:22px;padding:4px 8px 3px 10px}
   .pname{font-size:16px}
   .total{font-size:46px}
@@ -293,16 +299,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .plet{width:20px}
   .prow,.sheetmat .prow{grid-template-columns:20px 26px minmax(0,1fr) minmax(0,1fr);gap:6px 4px;padding:6px 0}
   .prow.head,.sheetmat .prow.head{padding:2px 0 0;gap:2px 4px}
-  .prow>:nth-child(2){grid-area:1/2/2/-1;justify-self:start;width:calc(100% - 34px)}
+  .prow>:nth-child(2){grid-area:1/2/2/-1;justify-self:start;width:calc(100% - 48px)}
   .prow>:nth-child(3){grid-area:2/1/3/3}
   .prow>:nth-child(4){grid-area:2/3/3/-1}
   .prow>:last-child{grid-area:1/4;justify-self:end}
-  .sheetmat .prow>:nth-child(2){width:calc(100% - 70px)}
+  .sheetmat .prow>:nth-child(2){width:calc(100% - 100px)}
   .sheetmat .prow>:nth-child(4){grid-area:2/3}
   .sheetmat .prow>:nth-child(5){grid-area:2/4}
-  .sheetmat .prow>:nth-child(6){grid-area:1/4;justify-self:end;margin-right:36px}
+  .sheetmat .prow>:nth-child(6){grid-area:1/4;justify-self:end;margin-right:52px}
   /* A size to buy takes two lines too: its length (and width), then its price, where it comes from and its ✕. */
-  .srow,.sheetmat .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 30px;gap:6px}
+  .srow,.sheetmat .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px;gap:6px}
   .srow>:nth-child(1){grid-area:1/1}
   .srow>:nth-child(2){grid-area:2/1}.srow>:nth-child(3){grid-area:2/2}.srow>:nth-child(4){grid-area:2/3}
   .sheetmat .srow>:nth-child(2){grid-area:1/2}
