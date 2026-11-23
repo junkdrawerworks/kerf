@@ -1889,7 +1889,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     openSheet('<div class="hd"><h2>Settings for this project</h2><button class="btn sm sec" type="button" id="stx">Done</button></div><div class="bd">' +
       '<div class="fld"><span>Units</span><div class="seg" id="uSeg"><button type="button" data-v="in">Inches</button><button type="button" data-v="mm">Millimeters</button></div></div>' +
       '<div class="fld-row"><label class="fld"><span>Saw kerf</span><input id="sKerf" class="mono" autocomplete="off"></label><label class="fld"><span>Trim each board end</span><input id="sTrim" class="mono" autocomplete="off"></label><label class="fld"><span>Keep offcuts over</span><input id="sKeep" class="mono" autocomplete="off"></label><label class="fld"><span>Currency</span><input id="sCur" maxlength="3" autocomplete="off"></label></div>' +
-      '<p class="note">Kerf is the wood the blade turns to sawdust — about ⅛″ (3 mm) for most circular and table saw blades, 3/32″ for thin-kerf ones. Trimming the ends squares up factory ends that aren’t quite square; many people skip it for studs.</p></div>');
+      '<p class="note">Kerf is the wood the blade turns to sawdust — about ⅛″ (3 mm) for a full-kerf table saw blade, 3/32″ for thin-kerf ones, and about 1/16″ for most 7¼″ circular saw blades. Trimming the ends squares up factory ends that aren’t quite square; many people skip it for studs.</p></div>');
     function draw() {
       document.querySelectorAll('#uSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === U); b.setAttribute('aria-pressed', b.dataset.v === U); });
       ['sKerf', 'sTrim', 'sKeep'].forEach(function (id) { $(id).inputMode = U === 'mm' ? 'decimal' : 'text'; });

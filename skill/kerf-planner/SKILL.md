@@ -21,7 +21,7 @@ Find out what's missing from:
 - the look or wood they want;
 - whether they have leftover wood to use up.
 
-Ask two to four questions at a time, not a questionnaire. Offer a sensible default with each one, so a short answer ("sure, defaults") moves things along. Tools matter more than people expect: a circular saw with no table saw changes the joinery and how sheets get broken down. A pocket-hole jig opens up simple, strong joints.
+Ask two to four questions at a time, not a questionnaire. Offer a sensible default with each one, so a short answer ("sure, defaults") moves things along. Tools matter more than people expect: a circular saw with no table saw changes the joinery and how sheets get broken down. A pocket-hole jig opens up simple, strong joints. The saw also sets the project's `"kerf"` (see `references/woodworking.md` §2).
 
 If they've already given a cut list and just want it in Kerf, skip to step 4 and carry their sizes over exactly. It's their design. Do check the sizes against each other and against the stock. If something won't work as written, say so and suggest a fix, but don't change it without asking. The usual problem is a part that won't come out of a board the way they expect.
 

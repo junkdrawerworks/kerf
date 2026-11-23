@@ -19,7 +19,7 @@ Lumber is named by its rough-sawn size; what you buy is smaller. Always design w
 | | | | 4×6 | 3½ × 5½ |
 
 Sheet goods, actual thickness:
-- **Softwood or sanded plywood:** ¾ ≈ 23/32 (0.703″); ½ ≈ 15/32; ⅝ ≈ 19/32.
+- **Softwood or sanded plywood:** ¾ is sold as 23/32 (0.719″); ½ as 15/32; ⅝ as 19/32. Measure your sheet.
 - **¼ plywood:** often 7/32 or 5.2 mm.
 - **Baltic birch** is metric: 18 mm (0.709″), 12 mm, 9 mm, 6 mm.
 - **MDF** is usually close to its nominal thickness.
@@ -42,6 +42,8 @@ Check the local names with the person.
 | Baltic birch | 5×5 ft (60 × 60″), sometimes 4×8 | 1525 × 1525 |
 
 Offer two or three lengths per board and a full plus a half sheet where the store sells them. Kerf picks the cheapest mix.
+
+**Saw kerf** (the project's `"kerf"`), from the saw they'll use: a full-kerf table saw blade ⅛″ (3 mm); a thin-kerf table saw blade 3/32″; most 7¼″ circular saw blades about 1/16″. Kerf's default, ⅛″, errs on the safe side.
 
 ## 3. Rough prices (US big-box, 2025–26 — examples only)
 
@@ -97,7 +99,7 @@ How a part's length follows from the design. Kerf adds the saw kerf itself; don'
 
 Drawers and doors:
 - **Side-mount slides:** drawer box width = opening − 1″ (½″ per side); depth = the slide length; height = opening − about 1″.
-- **Undermount slides:** follow the maker's spec, commonly opening − ⅝″.
+- **Undermount slides:** follow the maker's spec. Blum TANDEM wants inside drawer width = opening − 42 mm (1 21/32″), so with ⅝″ sides the box is about opening − 13/32″.
 - **Inset doors:** about 1/16″ gap all round, so door = opening − ⅛″.
 - **Full overlay doors:** usually ½″ past the opening on each side.
 - **Drawer bottoms in a ¼″ groove:** inside size + 2 × groove depth.
@@ -108,7 +110,7 @@ Drawers and doors:
 |---|---|
 | Dining table | 29–30 high; 36–40 deep; 24 of width per person |
 | Desk | 29–30 high; 24–30 deep |
-| Kitchen counter | 36 high: a 34½ base box plus a ¾ top on a 4″ toe kick; 24 deep |
+| Kitchen counter | 36 high: a 34½ base cabinet (toe kick included) plus a 1½ countertop; with a ¾ plywood top, make the cabinet 35¼; 24 deep |
 | Wall cabinets | 12 deep; bottom about 18 above the counter |
 | Chair or bench seat | 17–18 high; bench seat 14–18 deep |
 | Coffee table | 16–18 high |
