@@ -640,7 +640,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function rememberPrices(m, units) {
     var pr = presetOf(m, units); if (!pr) return;
     var all = yourPrices(), key = units + ' ' + m.kind + ' ' + pr.name, mine = all[key] && typeof all[key] === 'object' ? all[key] : {};
-    m.stock.forEach(function (s) { if (!s.have) mine[sizeKey(m, s)] = +s.price || 0; });
+    // a price cleared to type again (0) isn't kept, or the next one would start with that size free
+    m.stock.forEach(function (s) { if (!s.have && +s.price > 0) mine[sizeKey(m, s)] = +s.price; });
     all[key] = mine;
     try { localStorage.setItem(PRICES, JSON.stringify(all)); } catch (e) { } // not kept, a new one starts at the examples
   }

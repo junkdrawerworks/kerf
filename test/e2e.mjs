@@ -987,12 +987,15 @@ assert.equal(await page.textContent('#unitNote'), 'Lengths in inches — 35 3/4,
   await view('list');
   await page.click('.pbtn:text-is("2×4")');
   assert.deepEqual(await prices(0), ['3.98', '5.97', '7.68', '10.98'], 'a 2×4 in a new project doesn’t start at the prices set last');
-  // A sheet is remembered by its size, both ways round.
+  // A sheet is remembered by its size.
   await page.click('.pbtn:text-is("¾ plywood")');
   await page.click('#mats .mat >> nth=1 >> details.stock summary');
   await page.fill('#mats .mat >> nth=1 >> .srow[data-sid] [data-f="price"] >> nth=0', '52');
   await page.click('.pbtn:text-is("¾ plywood")');
   assert.deepEqual(await prices(2), ['52.00', '34.00', '21.00']);
+  // A price cleared to type again isn't remembered, so the next one doesn't start with that size free.
+  await page.fill('#mats .mat >> nth=1 >> .srow[data-sid] [data-f="price"] >> nth=0', '');
+  assert.equal((await page.evaluate(() => JSON.parse(localStorage.getItem('kerf.prices'))))['in sheet ¾ plywood']['96x48'], 52, 'a price cleared was remembered as free');
   // Other board starts at made-up prices and says so; the example project's materials say so too.
   await page.click('.pbtn >> text=Other board');
   assert.equal(await eg(3), 'Example prices — tap to set yours');
