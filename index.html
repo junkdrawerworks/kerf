@@ -2769,7 +2769,19 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // What a project holds, leaving out its ids, when it was changed and its ticks: the same plan signs the same whether
   // it came as a link, a file or pasted text, so opening it again can offer the copy already here.
   function sigOf(p) { return linkSig(JSON.stringify(p, function (k, v) { return k === 'id' || k === 'updated' || k === 'done' || k === 'from' ? undefined : v; })); }
-  function addProject(p) { DB.projects[p.id] = p; DB.order.unshift(p.id); DB.current = p.id; P = p; save(true); closeSheet(); applyProject(); toast('Opened “' + P.name + '”'); }
+  // The example, still just as Kerf made it: nothing changed and nothing ticked. Its currency is whatever was set when
+  // it was made, which isn't a change.
+  function untouchedExample(p) {
+    if (!p || !p.example || Object.keys(p.done || {}).length) return false;
+    var s = sampleProject(); s.cur = p.cur; return sigOf(s) === sigOf(p);
+  }
+  // A project from a link, a file or pasted text. Your first one takes the place of the example if you never changed
+  // it; one you changed stays.
+  function addProject(p) {
+    var only = DB.order.length === 1 && DB.projects[DB.order[0]];
+    if (untouchedExample(only)) { delete DB.projects[only.id]; DB.deleted[only.id] = Math.max(Date.now(), (only.updated || 0) + 1); DB.order = []; }
+    DB.projects[p.id] = p; DB.order.unshift(p.id); DB.current = p.id; P = p; save(true); closeSheet(); applyProject(); toast('Opened “' + P.name + '”');
+  }
   function importText(t, how) {
     var p, notes = []; try { p = cleanProject(JSON.parse(t), notes); } catch (e) {
       // A link pasted here opens as it would from the address bar: on an iPhone a tapped link opens in Safari,

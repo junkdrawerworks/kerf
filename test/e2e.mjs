@@ -336,7 +336,30 @@ assert.equal(await page.evaluate(() => location.hash), '', 'the project leaves t
 await page.click('#lkAdd');
 assert.equal(await page.inputValue('#pname'), 'Mudroom bench');
 assert.equal(await page.textContent('.total'), '$70.76');
-assert.deepEqual(Object.values((await stored()).projects).map(p => p.name).sort(), ['Garage shelves (example)', 'Mudroom bench']);
+// It's the first project here, so it takes the place of the example, which was never changed.
+assert.deepEqual(Object.values((await stored()).projects).map(p => p.name), ['Mudroom bench'], 'the untouched example stayed');
+// An example you changed (a price, a tick at the saw) stays, and so does the example beside a
+// project of your own.
+for (const [what, change] of [
+  ['a price', async () => { await view('list'); await page.click('#mats .mat >> nth=0 >> details.stock summary'); await page.fill('#mats .mat >> nth=0 >> .srow[data-sid] [data-f="price"] >> nth=0', '4.50'); }],
+  ['a tick', async () => { await view('saw'); await page.locator('#sawOut .cut[data-k]').first().click(); }],
+]) {
+  await open(null);
+  await change();
+  await page.waitForFunction(() => localStorage.getItem('kerf.v1'), null, { timeout: 3000 });
+  await page.evaluate(hash => { location.hash = hash; }, linkTo(MUDROOM));
+  await page.click('#lkAdd');
+  assert.deepEqual(Object.values((await stored()).projects).map(p => p.name).sort(), ['Garage shelves (example)', 'Mudroom bench'], 'an example with ' + what + ' changed went');
+}
+{
+  await open(null);
+  await page.click('#projBtn'); await page.click('#pjNew');
+  await page.evaluate(hash => { location.hash = hash; }, linkTo(MUDROOM));
+  await page.click('#lkAdd');
+  assert.deepEqual(Object.values((await stored()).projects).map(p => p.name).sort(), ['Garage shelves (example)', 'Mudroom bench', 'Untitled project'], 'the example went though it wasn’t the only project');
+}
+await open(null, linkTo(MUDROOM));
+await page.click('#lkAdd');
 
 // On an iPhone a tapped link opens in Safari, whose projects aren't the ones Kerf on the home screen keeps: there the
 // link says so and offers itself to copy, the whole link, though the page has taken it out of the address bar. Not
@@ -377,7 +400,7 @@ await page.click('#lkAdd');
 await page.waitForFunction(() => document.getElementById('pname').value === 'Garage bench');
 assert.ok(await page.isHidden('#sheet'), 'Projects closes once the file is open');
 assert.equal(await page.textContent('.total'), '$70.76');
-assert.equal((await stored()).order.length, 3);
+assert.equal((await stored()).order.length, 2);
 
 // make_kerf.py itself, run on the plan in its own instructions: the link and the file it writes open in Kerf with the
 // plan's names, counts and lengths. It writes into a folder of its own in the system's temporary folder, removed after.
@@ -495,7 +518,7 @@ await page.click('#lkx');
   };
   await open(null, linkTo(MUDROOM));
   await page.click('#lkAdd');
-  assert.equal(await count(), 2);
+  assert.equal(await count(), 1);
   await page.click('#projBtn');
   await page.setInputFiles('#pjFile', { name: 'mudroom-bench.kerf.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(MUDROOM, null, 1)) });
   await again('Open a project file');
@@ -506,7 +529,7 @@ await page.click('#lkx');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#pjExport')]);
   await page.setInputFiles('#pjFile', await dl.path());
   await again('Open a project file');
-  assert.equal(await count(), 2, 'opening the same plan again added a copy');
+  assert.equal(await count(), 1, 'opening the same plan again added a copy');
   // Duplicate this one makes a copy that didn't come from the link: opening the link again opens the original.
   await page.click('#projBtn');
   await page.click('#pjDup');
@@ -519,14 +542,14 @@ await page.click('#lkx');
   await pasteIn(JSON.stringify(MUDROOM));
   await page.waitForSelector('#lkOpen');
   await page.click('#lkAdd');
-  assert.equal(await count(), 4);
+  assert.equal(await count(), 3);
   // Updated today: the time, so two copies of one name can be told apart; on another day, the date.
   const db = await stored();
-  await open({ ...db, projects: { ...db.projects, [db.order[3]]: { ...db.projects[db.order[3]], updated: Date.now() - 3 * 86400000 } } });
+  await open({ ...db, projects: { ...db.projects, [db.order[2]]: { ...db.projects[db.order[2]], updated: Date.now() - 3 * 86400000 } } });
   await page.click('#projBtn');
   const rows = await page.$$eval('#pjList .pitem span', s => s.map(x => x.textContent));
-  assert.ok(rows.slice(0, 3).every(r => / · \d{1,2}:\d\d/.test(r)), 'a project changed today shows its date, not the time: ' + rows.join(', '));
-  assert.ok(!/:/.test(rows[3]), 'a project changed days ago shows a time: ' + rows[3]);
+  assert.ok(rows.slice(0, 2).every(r => / · \d{1,2}:\d\d/.test(r)), 'a project changed today shows its date, not the time: ' + rows.join(', '));
+  assert.ok(!/:/.test(rows[2]), 'a project changed days ago shows a time: ' + rows[2]);
   await page.click('#pjx');
 }
 
