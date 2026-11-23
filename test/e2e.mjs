@@ -673,6 +673,25 @@ assert.equal(await page.$eval('#planOut div.sec', d => getComputedStyle(d).margi
   assert.match(pages[0].find(r => r.size === 9).text, /^Saw kerf 1\/8" · /, 'the header names the saw kerf');
 }
 
+// A sheet whose steps fit on a page keeps them with its drawing: in a big project, the ½ plywood's eight steps used to
+// start under its drawing at the foot of one page and go on at the top of the next.
+{
+  const p = (name, qty, len, wid, grain = true) => wid == null ? { name, qty, len } : { name, qty, len, wid, grain };
+  const ply = [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }, { len: 48, wid: 24, price: 21 }];
+  await open(saved(project('Mudroom', [
+    board('2×4', [{ len: 96, price: 4.28 }, { len: 120, price: 6.38 }, { len: 144, price: 7.68 }, { len: 192, price: 10.98 }], [p('Bench front leg', 2, 17.25), p('Bench back leg', 2, 17.25), p('Coat wall cleat', 3, 70.5), p('Stretcher', 4, 44.75)]),
+    board('1×6 board', [{ len: 72, price: 6.28 }, { len: 96, price: 8.28 }, { len: 30, have: 2 }], [p('Seat slat', 5, 46), p('Shiplap backer', 9, 47.5), p('Cubby divider', 4, 14.25)]),
+    sheet('¾ plywood', ply, [p('Cubby side', 2, 34.5, 15.25), p('Cubby bottom', 1, 46.5, 15.25), p('Cubby top', 1, 46.5, 15.25), p('Back', 1, 46.5, 34.5, false), p('Shelf', 3, 45.75, 14)]),
+    sheet('½ plywood', [{ len: 96, wid: 48, price: 44 }, { len: 48, wid: 48, price: 26 }], [p('Drawer side', 4, 14, 5.5), p('Drawer bottom', 2, 21.5, 13.5)]),
+    board('1×4 board', [{ len: 72, price: 4.18 }, { len: 96, price: 5.48 }], [p('Face frame stile', 4, 34.5), p('Face frame rail', 3, 41)])])));
+  const pages = pdfPages(await shopPdf());
+  assert.ok(pages.length > 2, 'the project fits on too few pages to test');
+  for (const [i, runs] of pages.entries()) {
+    const first = runs.find(r => (r.bold && r.size === 10 && /^Sheet /.test(r.text)) || (!r.bold && r.size === 9 && /^\d+\. /.test(r.text)));
+    assert.ok(!first || !/^([2-9]|\d\d+)\. /.test(first.text), `page ${i + 1} goes on with a sheet's steps: "${first && first.text}"`);
+  }
+}
+
 // Labels fit their parts, and cut numbers stay on the sheet, clear of each other and of the part letters. On a phone the
 // drawer parts are small: their numbers used to stack on each other and on the letters, and hang off the sheet; the
 // bookcase's shelves read "34 1/2" × 11 1/434 1/2" × 11 1/4", run together; and a workbench's 2×4s "24 1/4"24 1/4"".

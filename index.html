@@ -1914,8 +1914,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         return lines;
       };
       var sheetPx = function (sh) { return Math.min(width / sh.L, 250 / sh.W); };
-      // A sheet's block: its title and drawing with the first few lines of its steps, kept together on one page.
-      var sheetBlock = function (sh, lines) { return 20 + sh.W * sheetPx(sh) + 4 + lines.slice(0, 3).reduce(function (a, l) { return a + l.gap; }, 0); };
+      // A sheet's block, kept together on one page: its title and drawing with all its steps when they fit on a page
+      // under a heading, or else the first few lines of them, the rest flowing on.
+      var sheetBlock = function (sh, lines) {
+        var h = function (n) { return 20 + sh.W * sheetPx(sh) + 4 + lines.slice(0, n).reduce(function (a, l) { return a + l.gap; }, 0); };
+        return h(lines.length) <= PH - 2 * M - 24 ? h(lines.length) : h(3);
+      };
       // The heading stays with the first diagram.
       need(24 + (m.kind === 'sheet' ? sheetBlock(m.items[0], stepLines(m.items[0])) : 46)); y += 18; text('HB', 12, M, y, fitText('HB', 12, m.mat.name, width - textW('HB', 12, ' — sheets')) + (m.kind === 'sheet' ? ' — sheets' : ' — boards')); y += 6;
       if (m.kind === 'board') {
