@@ -1366,6 +1366,26 @@ await page.keyboard.press('Enter');
 assert.equal(await page.evaluate(() => document.activeElement.dataset.k.split('/')[1]), '0.0', 'focus after Start over');
 assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
+// On a 320 px phone the project's name had room for "Gara", cut off with no sign of more: under 360 px it gets a line of
+// its own, ending in … if it's still too long. The tip's button goes under its words, and a size in the shopping list
+// stays on one line. At 390 the name stays beside the brand.
+{
+  await page.setViewportSize({ width: 320, height: 640 });
+  await open(null);
+  await page.waitForSelector('[data-tip]', { timeout: 30000 });
+  const top = await page.evaluate(() => {
+    const n = document.getElementById('pname'), b = document.querySelector('.brand').getBoundingClientRect(), r = n.getBoundingClientRect();
+    const tip = document.querySelector('.tip'), words = tip.querySelector('span:not(.tag)').getBoundingClientRect(), btn = tip.querySelector('button').getBoundingClientRect();
+    return { width: r.width, below: r.top >= b.bottom, ellipsis: getComputedStyle(n).textOverflow, button: btn.top >= words.bottom - 1 && btn.right > words.right - 2,
+      sizes: [...document.querySelectorAll('.shop .dims')].every(d => d.getClientRects().length === 1 && d.getBoundingClientRect().height < 26) };
+  });
+  assert.ok(top.width > 250 && top.below, 'the project name has no line of its own at 320: ' + JSON.stringify(top));
+  assert.deepEqual([top.ellipsis, top.button, top.sizes], ['ellipsis', true, true], 'at 320: ' + JSON.stringify(top));
+  await fitsPhone('plan at 320');
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.evaluate(() => { const n = document.getElementById('pname').getBoundingClientRect(), b = document.querySelector('.brand').getBoundingClientRect(); return n.top < b.bottom && n.left > b.right; }), 'at 390 the project name left the brand’s line');
+}
+
 // The last tick of the job says so: the bar reads "All 2 cuts done" in green, with Start over after it, and a toast
 // says the project is ready to put together. That toast comes from the tick, so a reload of a finished job doesn't
 // show it again, and unticking and ticking the last cut does.

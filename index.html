@@ -91,7 +91,7 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .top{position:sticky;top:0;z-index:20;background:var(--ground);border-bottom:1px solid var(--line);margin-inline:calc(-1 * var(--gl)) calc(-1 * var(--gr));padding:calc(10px + env(safe-area-inset-top,0px)) var(--gr) 10px var(--gl)}
 .top-in{display:flex;align-items:center;gap:10px;max-width:1320px;margin:0 auto}
 .brand{flex:none;display:inline-flex;align-items:center;justify-content:center;background:var(--tape);color:var(--tape-ink);font:800 26px/1 var(--disp);letter-spacing:.06em;padding:5px 10px 4px 12px;border-radius:6px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.14)}
-.pname{flex:1;min-width:0;font:600 18px var(--body);background:transparent;border:1px solid transparent;border-radius:7px;padding:6px 8px}
+.pname{flex:1;min-width:0;font:600 18px var(--body);background:transparent;border:1px solid transparent;border-radius:7px;padding:6px 8px;text-overflow:ellipsis}
 .pname:hover{border-color:var(--line)}
 .pname:focus{background:var(--surface);border-color:var(--line2)}
 .tbtn{flex:none;background:var(--surface);border:1px solid var(--line2);border-radius:999px;padding:6px 12px;font:600 13.5px var(--body);color:var(--ink2);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
@@ -195,6 +195,7 @@ div.sec{margin-top:22px}
 .shop td.q{font:600 15px var(--mono);white-space:nowrap;width:1%}
 .shop .grp td{background:var(--surface2);font-weight:700;font-size:13px;padding:6px 12px}
 .shop .have td{color:var(--good)}
+.shop .dims{white-space:nowrap}
 .shop tfoot td{font-weight:700;border-top:1px solid var(--line2)}
 .mdiag{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 12px 6px;margin-top:12px}
 .mdiag h4{margin:0 0 2px;font:700 16px var(--body)}
@@ -351,6 +352,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .sheetmat .srow>:nth-child(3){grid-area:2/1}.sheetmat .srow>:nth-child(4){grid-area:2/2}.sheetmat .srow>:nth-child(5){grid-area:2/3}
   .srow[data-sid]{padding:8px 0}.srow[data-sid]+.srow[data-sid]{border-top:1px solid var(--line)}
   .cut .meas{font-size:24px}
+}
+/* On the smallest phones the project's name gets a line of its own under the brand and buttons, where it had room for
+   four letters; a tip's button goes under its words. */
+@media (max-width:359.98px){
+  .top-in{flex-wrap:wrap;row-gap:4px}
+  .pname{order:5;flex-basis:100%}
+  #projBtn{margin-left:auto}
+  .tip{flex-wrap:wrap}
+  .tip>span:not(.tag){flex:1 1 180px;min-width:0}
 }
 @media (prefers-reduced-motion:reduce){.toast,.saw-bar .prog i,.stock>summary .chev{transition:none}}
 [hidden]{display:none!important}
@@ -1499,7 +1509,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (!m.items.length) return;
       h += '<tr class="grp"><td colspan="4">' + esc(m.mat.name) + (m.mat.note ? ' <span style="color:var(--ink3);font-weight:500">· ' + noteH(m.mat.note) + '</span>' : '') + '</td></tr>';
       shopLines(m).forEach(function (l) {
-        h += '<tr' + (l.have ? ' class="have"' : '') + '><td class="q">' + l.n + ' ×</td><td>' + l.dimsH + (l.have ? ' <small>(yours)</small>' : '') + '</td><td class="n">' + (l.have ? '—' : esc(money(l.price))) + '</td><td class="n">' + (l.have ? 'free' : esc(money(l.price * l.n))) + '</td></tr>';
+        h += '<tr' + (l.have ? ' class="have"' : '') + '><td class="q">' + l.n + ' ×</td><td><span class="dims">' + l.dimsH + '</span>' + (l.have ? ' <small>(yours)</small>' : '') + '</td><td class="n">' + (l.have ? '—' : esc(money(l.price))) + '</td><td class="n">' + (l.have ? 'free' : esc(money(l.price * l.n))) + '</td></tr>';
       });
     });
     h += '</tbody><tfoot><tr><td colspan="3">Total</td><td class="n">' + esc(money(r.cost)) + '</td></tr></tfoot></table></div></div>';
