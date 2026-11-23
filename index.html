@@ -1713,7 +1713,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
-  var rT; window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(function () { if (Math.abs(planWidth() - W.plan) > 4) renderPlan(); }, 120); });
+  var rT; window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(function () { if ($('planOut').clientWidth && Math.abs(planWidth() - W.plan) > 4) renderPlan(); }, 120); });
   applyProject();
   checkLink();
   window.addEventListener('hashchange', checkLink);
