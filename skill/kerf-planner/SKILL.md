@@ -96,7 +96,7 @@ In `plan.json`, lengths are written the way a tape reads — `"35 3/4"`, `"8'"`,
    "parts": [{"name": "Seat", "qty": 1, "len": "48", "wid": "16", "grain": true}]}]}
 ```
 
-Optional top-level settings: `"kerf"` (default ⅛″, or 3 mm in a metric plan), `"trim"` (squaring each board end, default 0), `"keep"` (the smallest offcut worth keeping, default 12″ or 300 mm), and `"currency"`. For a metric plan, use `"units": "mm"`; bare numbers are then millimetres. Set `"currency"` for the region, such as `"£"` or `"€"`.
+Optional top-level settings: `"kerf"` (default ⅛″, or 3 mm in a metric plan), `"trim"` (squaring each board end, default 0), `"edge"` (trimming each factory edge of a sheet, default 0), `"keep"` (the smallest offcut worth keeping, default 12″ or 300 mm), and `"currency"`. For a metric plan, use `"units": "mm"`; bare numbers are then millimetres. Set `"currency"` for the region, such as `"£"` or `"€"`.
 
 The script does five things:
 - converts everything to inches, which is how Kerf stores lengths;

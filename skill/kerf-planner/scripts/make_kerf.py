@@ -9,7 +9,7 @@ plan.json (lengths may be numbers in the plan's units, or strings the way a tape
 {
   "name": "Mudroom bench",
   "units": "in",                      # "in" or "mm": what Kerf shows; bare numbers are in these units
-  "kerf": "1/8", "trim": 0, "keep": 12, "currency": "$",      # all optional
+  "kerf": "1/8", "trim": 0, "edge": 0, "keep": 12, "currency": "$",      # all optional
   "materials": [
     {"kind": "board", "name": "2×4", "note": "1½ × 3½ in",
      "stock": [{"len": "8'", "price": 4.28}, {"len": "10'", "price": 6.38}, {"len": "30", "have": 1}],
@@ -112,6 +112,7 @@ def build(plan):
         'units': units,
         'kerf': setting('kerf', 3 / 25.4 if units == 'mm' else 0.125, 0, 1),
         'trim': setting('trim', 0, 0, 6),
+        'edge': setting('edge', 0, 0, 6),
         'keep': setting('keep', 300 / 25.4 if units == 'mm' else 12, 0, 240),
         'cur': str(plan.get('currency') or '$')[:3],
         'materials': [],
@@ -191,14 +192,16 @@ def build(plan):
                     warnings.append(f'{mname} / {label}: qty {qty}. Kerf plans at most {SHEET_QTY} of one sheet part — split it into two rows.')
                 grain = bool(p.get('grain', True))
                 q.update({'wid': wd, 'grain': grain})
-                # a sheet's len is the way its grain runs, as a part's is
+                # a sheet's len is the way its grain runs, as a part's is, and "edge" comes off each of its edges
+                e = 2 * project['edge']
                 fits = any(
-                    (ln <= s['len'] + 1e-9 and wd <= s['wid'] + 1e-9) or
-                    (not grain and wd <= s['len'] + 1e-9 and ln <= s['wid'] + 1e-9)
+                    (ln <= s['len'] - e + 1e-9 and wd <= s['wid'] - e + 1e-9) or
+                    (not grain and wd <= s['len'] - e + 1e-9 and ln <= s['wid'] - e + 1e-9)
                     for s in out['stock'])
                 if not fits:
                     errors.append(f'{mname} / {label} ({show(ln, units)} × {show(wd, units)}) won\'t fit on any sheet listed'
-                                  + (' with the grain along its length' if grain else ''))
+                                  + (' with the grain along its length' if grain else '')
+                                  + (' once its edges are trimmed' if e else ''))
                 if grain and ln < wd:
                     warnings.append(f'{mname} / {label}: grain-locked and shorter along the grain ({show(ln, units)}) than across '
                                     f'({show(wd, units)}). Kerf runs the grain along "len" — swap them if that\'s wrong.')
@@ -262,7 +265,7 @@ def main():
         for e in errors:
             print(' -', e)
         sys.exit(1)
-    for k in ('kerf', 'trim', 'keep'):
+    for k in ('kerf', 'trim', 'edge', 'keep'):
         project[k] = round(project[k], 5)
     for m in project['materials']:
         for s in m['stock']:

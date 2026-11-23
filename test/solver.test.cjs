@@ -293,6 +293,27 @@ console.log('sheets: cuts in the order to make them');
   console.log('  ' + n + ' sheets');
 }
 
+console.log('sheets: trimming the factory edges');
+{
+  // Trim sheet edges plans each sheet that much smaller each way, inside the trimmed edges of the full sheet. Two 96"
+  // sides no longer fit once 1/4" comes off each end, and the example's shelves, which fill a 4×8 with 1/4" to spare
+  // each way, fit with 1/8" trimmed off each edge; with 1/4" no two fit side by side either way, so each takes a 4×8.
+  const full = [{ len: 96, wid: 48, price: 58, have: 0 }], ply = [...full, { len: 48, wid: 48, price: 34, have: 0 }, { len: 48, wid: 24, price: 21, have: 0 }];
+  let r = K.solveSheets({ stock: full, parts: [{ len: 96, wid: 23.9375, qty: 2, grain: true }] }, { kerf: 0.125, edge: 0.25 });
+  check(r.errors.length === 1 && r.errors[0].pi === 0, 'two 96" sides with 1/4" off each edge: ' + JSON.stringify(r.errors));
+  const shelves = [{ len: 47.75, wid: 23.75, qty: 4, grain: true }];
+  for (const [edge, cost] of [[0, 58], [0.125, 58], [0.25, 232]]) {
+    r = K.solveSheets({ stock: ply, parts: shelves }, { kerf: 0.125, edge });
+    check(Math.abs(r.cost - cost) < 1e-6, `the example's shelves with ${edge}" off each edge: $${r.cost}, want $${cost}`);
+    r.items.forEach((sh, si) => {
+      check(sh.edge === edge && sh.L === sh.stock.len && sh.W === sh.stock.wid, `with ${edge}" off each edge, sheet ${si + 1} is ${sh.L} × ${sh.W}, edge ${sh.edge}`);
+      sh.placed.forEach(p => check(p.x >= edge - 1e-9 && p.y >= edge - 1e-9 && p.x + p.l <= sh.L - edge + 1e-9 && p.y + p.w <= sh.W - edge + 1e-9, `with ${edge}" off each edge, a part on sheet ${si + 1} runs into the trimmed edge: ${JSON.stringify(p)}`));
+      sh.steps.forEach(st => { if (st.line) check(st.line.every((v, i) => v >= edge - 1e-9 && v <= (i % 2 ? sh.W : sh.L) - edge + 1e-9), `with ${edge}" off each edge, a cut runs into the trimmed edge`); });
+      if (edge) check(sh.steps[0].on && sh.steps[0].on.trimmed, `with ${edge}" off each edge, the first cut isn't on the trimmed sheet`);
+    });
+  }
+}
+
 console.log('sheets: one on hand and more to buy');
 {
   // "Have 1" on the 4×8 keeps a 4×8 to buy as well: six 72" sides need two sheets, one yours and one bought.
@@ -541,6 +562,8 @@ console.log('plans kept between edits');
     ['a sheet size taken away', () => { ply.stock.pop(); }, ['ply']],
     ['the kerf', () => { p.kerf = 0.09375; }, ['studs', 'ply']],
     ['trimming each board end', () => { p.trim = 0.25; }, ['studs']],
+    ['trimming sheet edges', () => { p.edge = 0.125; }, ['ply']],
+    ['not trimming them', () => { p.edge = 0; }, ['ply']],
     ['millimetres, which a sheet’s steps are written in', () => { p.units = 'mm'; }, ['ply']],
     ['back to inches', () => { p.units = 'in'; }, ['ply']],
     ['a new part with no length yet', () => { studs.parts.push({ id: 'cleat', name: '', qty: 1, len: 0 }); }, []],

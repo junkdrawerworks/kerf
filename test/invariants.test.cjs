@@ -154,16 +154,17 @@ console.log('boards: random jobs');
 
 console.log('sheets: random jobs, the steps replayed at the saw');
 {
-  // Parts that tile a sheet exactly, full-length strips and the strip a rip leaves, inches or millimetres.
+  // Parts that tile a sheet exactly, full-length strips and the strip a rip leaves, inches or millimetres. Every fifth
+  // job trims the sheets' factory edges first, and its parts tile what's left.
   const R = rng(37), pick = a => a[Math.floor(R() * a.length)];
-  let n = 0, steps = 0, left = 0, strips = 0;
+  let n = 0, steps = 0, left = 0, strips = 0, edged = 0;
   for (let t = 0; t < 100; t++) {
     const metric = R() < 0.3;
     const kerf = metric ? pick([3, 2.5, 4]) / 25.4 : pick([0.125, 0.09375, 0.25, 0]);
     const stock = metric ? [{ len: 2440 / 25.4, wid: 1220 / 25.4, price: 62, have: 0 }] : [{ len: 96, wid: 48, price: 58, have: 0 }];
     if (R() < 0.4) stock.push({ len: stock[0].len / 2, wid: stock[0].wid, price: 34, have: 0 });
     if (R() < 0.3) stock.push({ len: q16(12 + R() * 40), wid: q16(10 + R() * 30), price: 0, have: 1 + Math.floor(R() * 2) });
-    const L = stock[0].len, W = stock[0].wid, parts = [];
+    const edge = t % 5 === 4 ? (metric ? 5 / 25.4 : 0.25) : 0, L = stock[0].len - 2 * edge, W = stock[0].wid - 2 * edge, parts = [];
     for (let k = 0, nT = 1 + Math.floor(R() * 6); k < nT; k++) {
       const r = R(); let len, wid;
       if (r < 0.2) { const d = 1 + Math.floor(R() * 4), e = 1 + Math.floor(R() * 3); len = (L - (d - 1) * kerf) / d; wid = (W - (e - 1) * kerf) / e; }
@@ -174,17 +175,20 @@ console.log('sheets: random jobs, the steps replayed at the saw');
     }
     if (R() < 0.3) { const w = q16(6 + R() * 30); parts.push({ len: L, wid: w, qty: 1, grain: true }, { len: L, wid: W - w - kerf, qty: 1, grain: true }); }
     K.units(metric ? 'mm' : 'in');
-    const r = K.solveSheets({ stock, parts }, { kerf });
+    const r = K.solveSheets({ stock, parts }, { kerf, edge });
     K.units('in');
     if (r.errors.some(e => e.pi === -1)) continue;
     n++;
+    if (edge) edged++;
     if (r.run && r.run.strip) strips++;
     r.items.forEach((sh, si) => {
       const id = `sheet job ${t}, sheet ${si + 1} (${metric ? 'mm' : 'in'})`;
       // Saw it as the steps say, a piece at a time: each cut runs edge to edge across one piece, at the distance it
       // gives, on the piece it names; the far side of a cut that says "what's left is" is that part, and each cut's
       // own part is what's left on the near side once its last cut is made.
-      let pieces = [{ x: 0, y: 0, w: sh.L, h: sh.W }];
+      const e = sh.edge || 0;
+      check(e === edge, 'each sheet says how much its edges are trimmed', `${id}: edge ${sh.edge}, want ${edge}`);
+      let pieces = [{ x: e, y: e, w: sh.L - 2 * e, h: sh.W - 2 * e }];
       const at = (p, g) => sh.placed.some(q => q.pi === g.it.pi && Math.abs(q.x - p.x) < E && Math.abs(q.y - p.y) < E && Math.abs(q.l - p.w) < E && Math.abs(q.w - p.h) < E && Math.abs(q.l - g.l) < E && Math.abs(q.w - g.w) < E);
       let ok = true;
       for (const [k, st] of sh.steps.entries()) {
@@ -194,8 +198,8 @@ console.log('sheets: random jobs, the steps replayed at the saw');
         const i = pieces.findIndex(p => rip ? Math.abs(p.x - x1) < E && Math.abs(p.x + p.w - x2) < E && y1 > p.y + E && y1 < p.y + p.h - E
           : Math.abs(p.y - y1) < E && Math.abs(p.y + p.h - y2) < E && x1 > p.x + E && x1 < p.x + p.w - E);
         if (i < 0) { check(false, 'every cut runs across a piece', `${id}: step ${k + 1} (${st.type} at ${st.at})`); ok = false; break; }
-        const p = pieces[i], of = st.of === 'sheet' ? [sh.L, sh.W] : (/^(?:piece|strip) ([\d.]+)×([\d.]+)$/.exec(st.of) || []).slice(1).map(Number);
-        check(Math.abs(of[0] - p.w) < 1e-3 && Math.abs(of[1] - p.h) < 1e-3 && (st.of !== 'sheet' || (p.x === 0 && p.y === 0)), 'each cut names the piece it’s made on', `${id}: step ${k + 1} says ${st.of}, the piece is ${p.w}×${p.h}`);
+        const p = pieces[i], of = st.of === 'sheet' ? [sh.L - 2 * e, sh.W - 2 * e] : (/^(?:piece|strip) ([\d.]+)×([\d.]+)$/.exec(st.of) || []).slice(1).map(Number);
+        check(Math.abs(of[0] - p.w) < 1e-3 && Math.abs(of[1] - p.h) < 1e-3 && (st.of !== 'sheet' || (p.x === e && p.y === e)), 'each cut names the piece it’s made on', `${id}: step ${k + 1} says ${st.of}, the piece is ${p.w}×${p.h}`);
         check(Math.abs((rip ? y1 - p.y : x1 - p.x) - st.at) < E, 'each cut is at the distance it gives', `${id}: step ${k + 1} says ${st.at}`);
         const near = rip ? { x: p.x, y: p.y, w: p.w, h: y1 - p.y } : { x: p.x, y: p.y, w: x1 - p.x, h: p.h };
         const far = rip ? { x: p.x, y: y1 + kerf, w: p.w, h: p.y + p.h - y1 - kerf } : { x: x1 + kerf, y: p.y, w: p.x + p.w - x1 - kerf, h: p.h };
@@ -210,12 +214,12 @@ console.log('sheets: random jobs, the steps replayed at the saw');
       const named = [].concat(...sh.steps.map(s => (s.gives ? [s.gives] : []).concat(s.also || []))).map(g => g.it.pi + '@' + g.l + '×' + g.w).sort();
       const drawn = sh.placed.map(p => p.pi + '@' + p.l + '×' + p.w).sort();
       check(JSON.stringify(named) === JSON.stringify(drawn), 'every part named by exactly one step', `${id}: the steps name ${named.join(', ')}; the sheet holds ${drawn.join(', ')}`);
-      if (sh.steps.some(s => s.type === 'none')) check(sh.steps.length === 1 && Math.abs(sh.placed[0].l - sh.L) < E && Math.abs(sh.placed[0].w - sh.W) < E, 'the whole-sheet note only for a whole sheet', id);
+      if (sh.steps.some(s => s.type === 'none')) check(sh.steps.length === 1 && Math.abs(sh.placed[0].l - sh.L + 2 * e) < E && Math.abs(sh.placed[0].w - sh.W + 2 * e) < E, 'the whole-sheet note only for a whole sheet', id);
       // Each offcut the drawing labels with its size is a piece left over after the steps, of that size.
       for (const f of sh.spare) check(pieces.some(p => Math.abs(p.x - f.x) < E && Math.abs(p.y - f.y) < E && Math.abs(p.w - f.w) < E && Math.abs(p.h - f.h) < E), 'labelled offcuts are real', `${id}: offcut ${f.w}×${f.h} at ${f.x},${f.y}`);
     });
   }
-  console.log(`  ${n} jobs (${strips} planned as strip layouts), ${steps} cuts replayed, ${left} parts named as what a cut leaves`);
+  console.log(`  ${n} jobs (${strips} planned as strip layouts, ${edged} with trimmed edges), ${steps} cuts replayed, ${left} parts named as what a cut leaves`);
 }
 
 console.log('a long run of edits: plans, tips and ticks');
@@ -265,6 +269,7 @@ console.log('a long run of edits: plans, tips and ticks');
       ['grain', () => q && sheet && (q.grain = !q.grain)],
       ['the kerf', () => (p.kerf = pick([0.125, 0.09375, 0.1875]))],
       ['trim', () => (p.trim = pick([0, 0, 0.25, 0.5]))],
+      ['sheet edges', () => (p.edge = pick([0, 0, 0.125, 0.25]))],
       ['units', () => (p.units = p.units === 'in' ? 'mm' : 'in')],
       ['a price', () => (pick(m.stock).price = Math.round(R() * 6000) / 100)],
       ['a size on hand', () => (pick(m.stock).have = pick([0, 0, 1, 2]))],

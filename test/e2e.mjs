@@ -530,7 +530,7 @@ await page.click('#lkx');
   const big = project('A long name for a kitchen: base cabinets, uppers, the pantry and the island, all of it in maple', [
     board('Maple 4/4', [{ len: 96, price: 12.5 }, { len: 120, price: 15.75, have: 2 }], parts),
     sheet('¾ maple plywood', sizes, [{ name: 'Side', qty: 4, len: 30, wid: 23.25, grain: false }, { name: 'Shelf', qty: 6, len: 22.5, wid: 11.25 }]),
-  ], { units: 'mm', kerf: 0.09375, trim: 0.5, keep: 18, cur: '€' });
+  ], { units: 'mm', kerf: 0.09375, trim: 0.5, edge: 0.25, keep: 18, cur: '€' });
   big.materials[1].note = 'A1 grade';
   await open(saved(big));
   await page.click('#projBtn');
@@ -942,11 +942,11 @@ assert.deepEqual(await page.$$eval('#mats .mat-name', is => is.map(i => i.value)
   await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(() => document.activeElement === document.body), true, 'Enter on the project name doesn’t close the keyboard');
   await page.click('#setBtn');
-  assert.deepEqual(await page.$$eval('#sKerf, #sTrim, #sKeep, #sCur', is => is.map(i => i.getAttribute('enterkeyhint'))), ['next', 'next', 'next', 'done']);
+  assert.deepEqual(await page.$$eval('#sKerf, #sTrim, #sEdge, #sKeep, #sCur', is => is.map(i => i.getAttribute('enterkeyhint'))), ['next', 'next', 'next', 'next', 'done']);
   await page.focus('#sKerf');
   const steps = [];
-  for (let i = 0; i < 4; i++) { await page.keyboard.press('Enter'); steps.push(await page.evaluate(() => document.activeElement.id || document.activeElement.className)); }
-  assert.deepEqual(steps, ['sTrim', 'sKeep', 'sCur', 'sheet'], 'Enter doesn’t go along Settings');
+  for (let i = 0; i < 5; i++) { await page.keyboard.press('Enter'); steps.push(await page.evaluate(() => document.activeElement.id || document.activeElement.className)); }
+  assert.deepEqual(steps, ['sTrim', 'sEdge', 'sKeep', 'sCur', 'sheet'], 'Enter doesn’t go along Settings');
   await page.click('#stx');
 }
 // Plywood's note and the Settings note typeset their fractions, as the plan does: '23/32 in actual' stood beside
@@ -2111,6 +2111,30 @@ for (const c of sawCases) {
     'Crosscut the 96″ × 23 3⁄4″ strip → A SideAcross the grain — measure from the end, cut on the waste side',
     'Crosscut the 65 5⁄8″ × 23 3⁄4″ piece → A SideAcross the grain — measure from the end, cut on the waste side']);
   assert.equal(shown(await page.textContent('#sawOut .cut.note')), 'Leaves a 96″ × 24 1⁄8″ piece and a 35 1⁄4″ × 23 3⁄4″ piece — worth keeping');
+
+  // Trim sheet edges, in Settings: the saw starts the sheet by trimming its factory edges, counted as a cut by the saw
+  // and the plan alike, the plan's steps and the shop PDF say so first, and the cuts are made on the trimmed sheet.
+  // A part that fits only with the edges left on says so.
+  await page.click('#setBtn');
+  await page.fill('#sEdge', '1/4');
+  await page.click('#sKeep');
+  assert.equal(await page.inputValue('#sEdge'), '1/4"', 'Trim sheet edges reads back');
+  await page.click('#stx');
+  await page.waitForTimeout(600);
+  assert.equal(parseInt(await cutsFact()), 4, 'the plan counts the trim as a cut');
+  assert.equal(shown(await page.textContent('#planOut .steps-first')), 'First trim 1⁄4″ off each factory edge, leaving 47 1⁄2″ × 95 1⁄2″. Every cut is measured from a trimmed edge.');
+  assert.match(shown(await page.textContent('#planOut ol.steps li > span')), /^Rip the trimmed sheet at 23 3⁄4″/);
+  const edged = pdfRuns(await shopPdf()).map(r => r.text);
+  assert.ok(edged.some(t => /^First trim 1\/4" off each factory edge, leaving 47 1\/2" × 95 1\/2"\./.test(t)), 'the PDF doesn’t say to trim the edges first: ' + edged.filter(t => /trim/i.test(t)));
+  assert.ok(edged.some(t => /^Saw kerf 1\/8" · sheet edges 1\/4" · /.test(t)), 'the PDF header doesn’t give the sheet edges');
+  await view('saw');
+  assert.equal(await page.textContent('.saw-bar b'), '0 of 4 cuts');
+  assert.deepEqual([shown(await page.textContent('#sawOut .cut[data-k] .meas')), shown(await page.textContent('#sawOut .cut[data-k] .what'))],
+    ['1⁄4″', 'Next Trim the factory edgesTake 1⁄4″ off each edge, leaving 47 1⁄2″ × 95 1⁄2″, and measure every cut from a trimmed edge']);
+  await view('list');
+  await page.locator('#mats .prow[data-pid] input[data-f="len"]').first().fill('96');
+  await page.waitForTimeout(600);
+  assert.match(await page.textContent('[data-err]:not([hidden])'), /^Side \(96″ × 23.3\/4″\) won’t fit on any sheet listed below once its edges are trimmed\. Add a bigger size or trim less off sheet edges in Settings\.$/);
 }
 
 // At the saw a measurement's fraction is nearly as big as its whole inches, and every row's text starts at the same

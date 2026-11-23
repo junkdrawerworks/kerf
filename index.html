@@ -82,7 +82,7 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .fr sup{vertical-align:.5em}.fr sub{vertical-align:-.05em}
 /* In a monospace measurement the fraction takes the body font, so it reads 47 ¹⁵⁄₁₆″ without a full-width slash, and
    sits closer to its whole number than a monospace space would put it. */
-.mono .fr,.cut .meas .fr,.steps .m .fr{font-family:var(--body)}
+.mono .fr,.cut .meas .fr,.steps .m .fr,.steps-first .m .fr{font-family:var(--body)}
 .cut .meas .fr,.steps .m .fr{margin-left:-.2em}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .wrap{max-width:1320px;margin:0 auto;padding-inline:var(--gl) var(--gr);padding-block:0 40px}
@@ -233,7 +233,9 @@ div.sec{margin-top:22px}
 .steps{margin:6px 0 8px;padding:0;list-style:none;font-size:13.5px;color:var(--ink2);columns:2;column-gap:22px}
 .steps li{break-inside:avoid;padding:2px 0;display:flex;gap:8px}
 .steps li>b{flex:none;width:20px;height:20px;border-radius:50%;background:var(--chalk);color:var(--surface);font:700 10.5px/20px var(--mono);text-align:center}
-.steps .m{font:600 13.5px var(--mono);color:var(--ink)}
+.steps .m,.steps-first .m{font:600 13.5px var(--mono);color:var(--ink)}
+.steps-first{margin:6px 0 0;font-size:13.5px;color:var(--ink2)}
+.steps-first .nw{white-space:nowrap}
 .empty{background:var(--surface);border:1px dashed var(--line2);border-radius:var(--r);padding:26px 18px;text-align:center;color:var(--ink2)}
 .empty .btn{display:none;margin-top:14px} /* to the cut list, shown where it's a tab of its own */
 /* at the saw */
@@ -583,7 +585,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // What Other board and Other sheet start with.
   function otherPreset(kind, units) { return kind === 'board' ? { name: 'Board', note: '', stock: units === 'mm' ? [[2400, 5]] : [[96, 5]] } : { name: 'Sheet', note: '', stock: units === 'mm' ? [[2440, 1220, 40]] : [[96, 48, 40]] }; }
   function part(name, qty, len, wid, grain) { var p = { id: uid(), name: name, qty: qty, len: len }; if (wid != null) { p.wid = wid; p.grain = grain !== false; } return p; }
-  function blankProject(units) { return { id: uid(), name: 'Untitled project', units: units, kerf: units === 'mm' ? 3 / 25.4 : 0.125, trim: 0, keep: units === 'mm' ? 300 / 25.4 : 12, cur: CUR, updated: Date.now(), materials: [], done: {} }; }
+  function blankProject(units) { return { id: uid(), name: 'Untitled project', units: units, kerf: units === 'mm' ? 3 / 25.4 : 0.125, trim: 0, edge: 0, keep: units === 'mm' ? 300 / 25.4 : 12, cur: CUR, updated: Date.now(), materials: [], done: {} }; }
   function sampleProject() {
     var p = blankProject('in');
     p.name = 'Garage shelves (example)'; p.example = true;
@@ -627,6 +629,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       fix(p, 'name', str, toStr('Untitled project'));
       fix(p, 'units', function (v) { return v === 'in' || v === 'mm'; }, function () { return 'in'; });
       fix(p, 'kerf', num, toNum(0.125)); fix(p, 'trim', num, toNum(0)); fix(p, 'keep', num, toNum(12));
+      if (p.edge !== undefined) fix(p, 'edge', num, toNum(0)); // none, in a project saved before sheet edges could be trimmed, is 0
       fix(p, 'cur', str, toStr('$')); fix(p, 'updated', num, toNum(0)); fix(p, 'done', goodDone, function () { return {}; });
       list(p, 'materials').forEach(function (m) {
         fix(m, 'kind', function (v) { return v === 'board' || v === 'sheet'; }, function () { return 'board'; });
@@ -1093,9 +1096,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   function freeArea(sh) { return sh.free.reduce(function (a, f) { return Math.max(a, f.w * f.h); }, 0); }
   function evalSheets(sheets) { var cost = 0; sheets.forEach(function (s) { cost += s.st.price; }); return cost; }
+  // With `cfg.edge`, each sheet's factory edges are trimmed off first: it's planned that much smaller each way, and the
+  // layout handed back sits inside the trimmed edges of the full sheet (`L`, `W`), its `edge` saying how far in.
   function solveSheets(mat, cfg, quick) {
-    var kerf = cfg.kerf, out = { kind: 'sheet', mat: mat, items: [], errors: [], cost: 0 };
-    var stocks = mat.stock.filter(function (s) { return s.len > 0 && s.wid > 0; }).map(function (s) { return { s: s, L: s.len, W: s.wid, price: s.have ? 0 : Math.max(0, +s.price || 0), left: s.have ? Math.max(0, s.have | 0) : Infinity }; }).filter(function (st) { return st.left > 0; });
+    var kerf = cfg.kerf, edge = cfg.edge > 0 ? cfg.edge : 0, out = { kind: 'sheet', mat: mat, items: [], errors: [], cost: 0 };
+    var stocks = mat.stock.filter(function (s) { return s.len > 2 * edge && s.wid > 2 * edge; }).map(function (s) { return { s: s, L: s.len - 2 * edge, W: s.wid - 2 * edge, price: s.have ? 0 : Math.max(0, +s.price || 0), left: s.have ? Math.max(0, s.have | 0) : Infinity }; }).filter(function (st) { return st.left > 0; });
     var items = [];
     mat.parts.forEach(function (p, pi) {
       if (!(p.len > 0) || !(p.wid > 0) || !(p.qty > 0)) return;
@@ -1176,8 +1181,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     out.cost = best.cost;
     // The winning run, to pack the same way again: the parts' order (as places in the list of parts to place) and its rules.
     out.run = Object.assign({ order: best.order.map(function (it) { return items.indexOf(it); }) }, best.how);
+    var shift = function (o) { return edge ? Object.assign({}, o, { x: o.x + edge, y: o.y + edge }) : o; };
     out.items = best.sheets.map(function (sh) {
-      return { stock: sh.st.s, price: sh.st.price, L: sh.st.L, W: sh.st.W, placed: sh.placed, root: sh.root, steps: sheetSteps(sh.root), spare: sh.free.filter(function (f) { return f.w >= 3 && f.h >= 3; }) };
+      var steps = sheetSteps(sh.root);
+      // inside trimmed edges, the steps' lines move in with the parts, and what they call the full sheet is the trimmed one
+      if (edge) steps.forEach(function (st) { if (st.line) st.line = st.line.map(function (v) { return v + edge; }); if (!st.on) st.on = { w: sh.st.L, h: sh.st.W, trimmed: true }; });
+      return { stock: sh.st.s, price: sh.st.price, L: sh.st.L + 2 * edge, W: sh.st.W + 2 * edge, edge: edge, placed: sh.placed.map(shift), root: sh.root, steps: steps, spare: sh.free.filter(function (f) { return f.w >= 3 && f.h >= 3; }).map(shift) };
     }).sort(function (a, b) { return (a.stock.have ? 1 : 0) - (b.stock.have ? 1 : 0) || b.L * b.W - a.L * a.W; });
     return out;
   }
@@ -1236,7 +1245,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     return out;
   }
   // What a sheet's cut is made on, as text (`f` is fmt) or HTML (fmtH): "the full sheet", "the 47 3/4" × 48" piece".
-  function pieceName(on, f) { return on ? 'the ' + f(on.w) + ' × ' + f(on.h) + (on.strip ? ' strip' : ' piece') : 'the full sheet'; }
+  function pieceName(on, f) { return !on ? 'the full sheet' : on.trimmed ? 'the trimmed sheet' : 'the ' + f(on.w) + ' × ' + f(on.h) + (on.strip ? ' strip' : ' piece'); }
   // The parts a sheet's cut gives, after its measurement: " → A Left side · what’s left is B Right side". `name` writes
   // a part from its place in the list, and `to` goes before the part the cut is measured for.
   function stepGives(st, name, to) {
@@ -1246,15 +1255,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
 
   // ---------- solving the whole project ----------
   var RES = null, TIPS = [], GEN = 0;
-  function cfg() { return { kerf: P.kerf, trim: P.trim }; }
+  function cfg() { return { kerf: P.kerf, trim: P.trim, edge: P.edge || 0 }; }
   function solveMat(m, quick) { return m.kind === 'sheet' ? solveSheets(m, cfg(), quick) : solveBoards(m, cfg(), quick); }
   // Everything a material's plan is worked out from: its sizes with their prices and counts on hand, its parts'
   // sizes, counts and grain (and where each is in the list), the kerf, and the end trim for boards or, for sheets,
-  // the units their steps are written in. A part with no size or count yet isn't planned, so it isn't here either.
+  // the units their steps are written in and the trim off their edges. A part with no size or count yet isn't planned,
+  // so it isn't here either.
   function planInputs(m) {
     var sheet = m.kind === 'sheet', parts = [];
     m.parts.forEach(function (p, pi) { if (p.len > 0 && p.qty > 0 && (!sheet || p.wid > 0)) parts.push(sheet ? [pi, p.len, p.wid, p.qty, !!p.grain] : [pi, p.len, p.qty]); });
-    return JSON.stringify([m.kind, P.kerf, sheet ? U : P.trim, m.stock.map(function (s) { return sheet ? [s.len, s.wid, s.price, s.have] : [s.len, s.price, s.have]; }), parts]);
+    return JSON.stringify([m.kind, P.kerf, sheet ? [U, P.edge || 0] : P.trim, m.stock.map(function (s) { return sheet ? [s.len, s.wid, s.price, s.have] : [s.len, s.price, s.have]; }), parts]);
   }
   // Each material's plan is kept with what it was worked out from, and used again until some of that changes, so
   // renaming a part, changing the currency or editing another material plans nothing again. Every search does a set
@@ -1281,7 +1291,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     mats.forEach(function (r) {
       cost += r.cost;
       if (r.kind === 'board') r.items.forEach(function (b) { boards++; stockLen += b.cap; b.pieces.forEach(function (p) { partLen += p.len; }); kerfLen += Math.max(0, b.pieces.length - 1) * P.kerf + (b.offcut > 0 ? P.kerf : 0); cuts += b.pieces.length - (lastIsLeft(b) ? 1 : 0) + (b.trim > 0 ? 1 : 0); });
-      else r.items.forEach(function (s) { sheets++; sheetArea += s.L * s.W; s.placed.forEach(function (p) { partArea += p.l * p.w; }); cuts += s.steps.filter(function (x) { return x.type !== 'none'; }).length; });
+      else r.items.forEach(function (s) { sheets++; sheetArea += s.L * s.W; s.placed.forEach(function (p) { partArea += p.l * p.w; }); cuts += s.steps.filter(function (x) { return x.type !== 'none'; }).length + (s.edge > 0 ? 1 : 0); });
     });
     RES = { mats: mats, cost: cost, boards: boards, sheets: sheets, cuts: cuts, boardYield: stockLen ? partLen / stockLen : 0, boardKerf: stockLen ? kerfLen / stockLen : 0, sheetYield: sheetArea ? partArea / sheetArea : 0 };
     return RES;
@@ -1452,8 +1462,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         if (e.max) return (e.part.name || 'A part') + ' × ' + e.part.qty + ': Kerf plans at most ' + e.max + ' of one ' + r.kind + ' part — split it into two rows.';
         var p = e.part, dims = r.kind === 'sheet' ? fmtT(p.len) + ' × ' + fmtT(p.wid) : fmtT(p.len);
         // The grain is only worth a mention when turning the part would let it fit, by the planner's own test.
-        var turn = r.kind === 'sheet' && p.grain && r.mat.stock.some(function (st) { return st.len > 0 && st.wid > 0 && fitsStock({ l: p.len, w: p.wid, rot: true }, { L: st.len, W: st.wid }); });
-        return (p.name || 'A part') + ' (' + dims + ') won’t fit on any ' + (r.kind === 'sheet' ? 'sheet' : 'board') + ' listed below' + (turn ? ' with the grain along its length' : '') + '. Add a bigger size' + (turn ? ' or let it turn' : '') + '.';
+        // Nor the trim off a sheet's edges, unless the part would fit with them left on.
+        var e = r.kind === 'sheet' ? P.edge || 0 : 0, on = function (rot, e) { return r.mat.stock.some(function (st) { return st.len > 2 * e && st.wid > 2 * e && fitsStock({ l: p.len, w: p.wid, rot: rot }, { L: st.len - 2 * e, W: st.wid - 2 * e }); }); };
+        var turn = r.kind === 'sheet' && p.grain && on(true, e), edges = e > 0 && !turn && on(!p.grain, 0);
+        return (p.name || 'A part') + ' (' + dims + ') won’t fit on any ' + (r.kind === 'sheet' ? 'sheet' : 'board') + ' listed below' + (turn ? ' with the grain along its length' : edges ? ' once its edges are trimmed' : '') + '. Add a bigger size' + (turn ? ' or let it turn' : edges ? ' or trim less off sheet edges in Settings' : '') + '.';
       });
       el.hidden = !msgs.length; el.textContent = msgs.join(' ');
     });
@@ -1691,7 +1703,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       return r.errors.some(function (e) {
         var p = e.pi >= 0 ? e.part : r.mat.parts[e.only], f = 'len';
         if (e.max) f = 'qty';
-        else if (r.kind === 'sheet' && p && r.mat.stock.some(function (st) { return p.len <= (p.grain ? st.len : Math.max(st.len, st.wid)) + 1e-9; })) f = 'wid';
+        else if (r.kind === 'sheet' && p && r.mat.stock.some(function (st) { return p.len <= (p.grain ? st.len : Math.max(st.len, st.wid)) - 2 * (P.edge || 0) + 1e-9; })) f = 'wid';
         var root = '[data-mid="' + r.mat.id + '"] ';
         el = (p && document.querySelector(root + '.prow[data-pid="' + p.id + '"] [data-f="' + f + '"]')) || document.querySelector(root + '[data-f="mname"]');
         return !!el;
@@ -1880,7 +1892,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var count = {}, order = [];
       sh.placed.forEach(function (p) { if (!count[p.pi]) { count[p.pi] = 0; order.push(p.pi); } count[p.pi]++; });
       var spare = sh.spare.filter(function (f) { return f.w >= 6 && f.h >= 6; });
-      out += '<p class="sr">Sheet ' + (si + 1) + ', ' + esc(sayLen(sh.W) + ' × ' + sayLen(sh.L)) + (sh.stock.have ? ', yours' : '') + ': ' + order.map(function (pi) {
+      out += '<p class="sr">Sheet ' + (si + 1) + ', ' + esc(sayLen(sh.W) + ' × ' + sayLen(sh.L)) + (sh.stock.have ? ', yours' : '') + ': ' + (sh.edge > 0 ? 'trim ' + esc(sayLen(sh.edge)) + ' off each edge, ' : '') + order.map(function (pi) {
         var q = m.mat.parts[pi]; return count[pi] + ' × ' + letter(pi) + (q && q.name ? ' ' + esc(q.name) : '') + ' ' + esc(sayLen(q.len) + ' × ' + sayLen(q.wid));
       }).join(', ') + (spare.length ? '; left over ' + spare.map(function (f) { return esc(sayLen(f.w) + ' × ' + sayLen(f.h)); }).join(' and ') : '') + '</p>';
       var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + (H + top + 8).toFixed(1) + '" aria-hidden="true" style="margin-top:' + (si ? 16 : 6) + 'px">';
@@ -1951,6 +1963,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       s = s.slice(0, at) + lbls + s.slice(at);
       out += s + '</svg>';
       var steps = sh.steps.filter(function (x) { return x.type !== 'none'; });
+      if (sh.edge > 0) out += '<p class="steps-first">First trim <span class="m">' + fmtH(sh.edge) + '</span> off each factory edge, leaving <span class="nw">' + sheetSize(sh.W - 2 * sh.edge, sh.L - 2 * sh.edge) + '</span>. Every cut is measured from a trimmed edge.</p>';
       if (steps.length) out += '<ol class="steps">' + steps.map(function (st, k) { return '<li><b>' + (k + 1) + '</b><span>' + stepText(st, m) + '</span></li>'; }).join('') + '</ol>';
     });
     return out + legendParts(m);
@@ -1985,10 +1998,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           // With end trim, the offcut still has its factory end: it's that much longer on the bench than once squared.
           if (it.offcut > 0) t.note = 'Leaves a ' + fmtH(it.offcut + it.trim) + ' offcut' + (it.trim > 0 ? ' (' + fmtH(it.offcut) + ' once its end is squared)' : '') + (worthKeeping(it.offcut) ? ' — worth keeping' : '');
         } else {
+          // With the factory edges to trim, that comes first, and every cut is measured from a trimmed edge.
+          if (it.edge > 0) t.cuts.push({ id: 'edges ' + it.edge.toFixed(4), meas: measH(it.edge), what: 'Trim the factory edges', sub: 'Take ' + fmtH(it.edge) + ' off each edge, leaving ' + sheetSize(it.W - 2 * it.edge, it.L - 2 * it.edge) + ', and measure every cut from a trimmed edge' });
           it.steps.forEach(function (st) {
             var g = st.gives, tag = function (g) { return g.it.pi + ' ' + g.l.toFixed(4) + '×' + g.w.toFixed(4) + (g.rot ? ' turned' : ''); };
             var gives = (g ? ' → ' + tag(g) : '') + (st.also ? ' · left ' + st.also.map(tag).join(' + ') : '');
-            if (st.type === 'none') { t.cuts.push({ id: 'whole' + gives, noCut: true, note: 'The whole sheet is ' + name(g.it.pi) + ' — no cut needed' }); return; }
+            if (st.type === 'none') { t.cuts.push({ id: 'whole' + gives, noCut: true, note: it.edge > 0 ? 'The trimmed sheet is ' + name(g.it.pi) + ' — no other cut needed' : 'The whole sheet is ' + name(g.it.pi) + ' — no cut needed' }); return; }
             t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: measH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + pieceName(st.on, fmtH) + stepGives(st, name, ' → '), sub: st.type === 'rip' ? 'Along the grain — set the fence at ' + fmtH(st.at) + ', or mark it and cut on the waste side' : 'Across the grain — measure from the end, cut on the waste side' });
           });
           // What's left that's worth keeping, at least the smallest offcut worth keeping each way.
@@ -2177,21 +2192,21 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function settingsSheet() {
     openSheet('<div class="hd"><h2>Settings for this project</h2><button class="btn sm sec" type="button" id="stx">Done</button></div><div class="bd">' +
       '<div class="fld"><span>Units</span><div class="seg" id="uSeg"><button type="button" data-v="in">Inches</button><button type="button" data-v="mm">Millimeters</button></div></div>' +
-      '<div class="fld-row"><label class="fld"><span>Saw kerf</span><input id="sKerf" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Trim each board end</span><input id="sTrim" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Keep offcuts over</span><input id="sKeep" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Currency</span><input id="sCur" maxlength="3" autocomplete="off" enterkeyhint="done"></label></div>' +
-      '<p class="note">Kerf is the wood the blade turns to sawdust — about ' + frac(1, 8) + '″ (3&nbsp;mm) for a full-kerf table saw blade, ' + frac(3, 32) + '″ for thin-kerf ones, and about ' + frac(1, 16) + '″ for most 7&nbsp;' + frac(1, 4) + '″ circular saw blades. Trimming the ends squares up factory ends that aren’t quite square; many people skip it for studs.</p></div>');
+      '<div class="fld-row"><label class="fld"><span>Saw kerf</span><input id="sKerf" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Trim each board end</span><input id="sTrim" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Trim sheet edges</span><input id="sEdge" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Keep offcuts over</span><input id="sKeep" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Currency</span><input id="sCur" maxlength="3" autocomplete="off" enterkeyhint="done"></label></div>' +
+      '<p class="note">Kerf is the wood the blade turns to sawdust — about ' + frac(1, 8) + '″ (3&nbsp;mm) for a full-kerf table saw blade, ' + frac(3, 32) + '″ for thin-kerf ones, and about ' + frac(1, 16) + '″ for most 7&nbsp;' + frac(1, 4) + '″ circular saw blades. Trimming the ends squares up factory ends that aren’t quite square; many people skip it for studs. Trimming sheet edges takes that much off each edge of a sheet, often dinged at the store, before any other cut, so each sheet is planned that much smaller all round.</p></div>');
     function draw() {
       document.querySelectorAll('#uSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === U); b.setAttribute('aria-pressed', b.dataset.v === U); });
-      ['sKerf', 'sTrim', 'sKeep'].forEach(function (id) { $(id).inputMode = U === 'mm' ? 'decimal' : 'text'; });
-      $('sKerf').value = fmt(P.kerf, { fine: true }); $('sTrim').value = fmt(P.trim || 0, { fine: true }); $('sKeep').value = fmt(P.keep, { fine: true }); $('sCur').value = CUR;
+      ['sKerf', 'sTrim', 'sEdge', 'sKeep'].forEach(function (id) { $(id).inputMode = U === 'mm' ? 'decimal' : 'text'; });
+      $('sKerf').value = fmt(P.kerf, { fine: true }); $('sTrim').value = fmt(P.trim || 0, { fine: true }); $('sEdge').value = fmt(P.edge || 0, { fine: true }); $('sKeep').value = fmt(P.keep, { fine: true }); $('sCur').value = CUR;
     }
     document.querySelectorAll('#uSeg button').forEach(function (b) { b.addEventListener('click', function () { P.units = U = b.dataset.v; touch(); draw(); renderHead(); renderList(); resolve(); }); });
-    [['sKerf', 'kerf', 0, 1], ['sTrim', 'trim', 0, 6], ['sKeep', 'keep', 0, 240]].forEach(function (a) {
+    [['sKerf', 'kerf', 0, 1], ['sTrim', 'trim', 0, 6], ['sEdge', 'edge', 0, 6], ['sKeep', 'keep', 0, 240]].forEach(function (a) {
       $(a[0]).addEventListener('input', function () { var v = parseLen(this.value); var ok = v >= a[2] && v <= a[3] || (this.value.trim() === '0'); this.classList.toggle('bad', !ok); if (ok) { P[a[1]] = this.value.trim() === '0' ? 0 : v; touch(); resolve(true); } });
       $(a[0]).addEventListener('blur', function () { resolveNow(); this.value = fmt(P[a[1]] || 0, { fine: true }); this.classList.remove('bad'); });
     });
     $('sCur').addEventListener('input', function () { P.cur = CUR = this.value.trim() || '$'; touch(); renderList(); resolve(true); });
     // Enter goes on to the next field, and from the currency closes the keyboard, leaving focus in the dialog.
-    ['sKerf', 'sTrim', 'sKeep', 'sCur'].forEach(function (id, i, all) {
+    ['sKerf', 'sTrim', 'sEdge', 'sKeep', 'sCur'].forEach(function (id, i, all) {
       $(id).addEventListener('keydown', function (e) { if (e.key !== 'Enter' || e.isComposing) return; e.preventDefault(); if (all[i + 1]) $(all[i + 1]).focus(); else this.closest('.sheet').focus(); });
     });
     $('stx').addEventListener('click', closeSheet); draw();
@@ -2294,6 +2309,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     q.name = str(p.name, LIMITS.name) || 'Imported project';
     if (+p.kerf >= 0 && +p.kerf <= 1) q.kerf = +p.kerf;
     if (+p.trim >= 0 && +p.trim <= 6) q.trim = +p.trim;
+    if (+p.edge >= 0 && +p.edge <= 6) q.edge = +p.edge;
     if (+p.keep >= 0 && +p.keep <= 240) q.keep = +p.keep;
     if (p.cur) q.cur = String(p.cur).slice(0, 3);
     q.materials = first(p.materials, LIMITS.materials, 'materials').map(function (m) {
@@ -2485,7 +2501,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var tot = money(RES.cost), totW = textW('HB', 22, tot);
     rect(M, y, 58, 22, '#F2C200'); text('HB', 15, M + 8, y + 16, 'KERF');
     text('HB', 16, M + 70, y + 16, fitText('HB', 16, P.name, PW - M - totW - 16 - (M + 70))); // stops short of the total
-    text('H', 9, M + 70, y + 29, 'Saw kerf ' + fmt(P.kerf, { fine: true }) + (P.trim ? ' · trim ' + fmt(P.trim, { fine: true }) + ' per end' : '') + ' · ' + new Date().toLocaleDateString());
+    text('H', 9, M + 70, y + 29, 'Saw kerf ' + fmt(P.kerf, { fine: true }) + (P.trim ? ' · trim ' + fmt(P.trim, { fine: true }) + ' per end' : '') + (P.edge ? ' · sheet edges ' + fmt(P.edge, { fine: true }) : '') + ' · ' + new Date().toLocaleDateString());
     text('HB', 22, PW - M - totW, y + 18, tot); text('H', 8, PW - M - textW('H', 8, 'TO BUY'), y + 29, 'TO BUY', '#686D73');
     y += 46;
     text('HB', 10, M, y, 'SHOPPING LIST', '#686D73'); y += 8;
@@ -2504,6 +2520,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // A sheet's steps, line by line: each step's first line 12 points below the last, a line it wraps onto 11.
       var stepLines = function (sh) {
         var lines = [];
+        if (sh.edge > 0) pdfLines('H', 9, ('First trim ' + fmt(sh.edge) + ' off each factory edge, leaving ' + fmt(sh.W - 2 * sh.edge) + ' × ' + fmt(sh.L - 2 * sh.edge) + '. Every cut is measured from a trimmed edge.').split(' '), ' ', width).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: M, text: l }); });
         sh.steps.filter(function (s) { return s.type !== 'none'; }).forEach(function (st, k) {
           var no = (k + 1) + '.  ', ind = textW('H', 9, no), name = function (pi) { var part = m.mat.parts[pi]; return letter(pi) + (part && part.name ? ' ' + part.name : ''); };
           var s = (st.type === 'rip' ? 'Rip ' : 'Crosscut ') + pieceName(st.on, fmt) + ' at ' + fmt(st.at) + stepGives(st, name, '  »  ');
