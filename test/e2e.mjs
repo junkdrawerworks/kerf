@@ -601,6 +601,25 @@ const source = page.locator('.srow[data-sid] select').nth(1);
 assert.equal(await source.inputValue(), '7', 'seven on hand shows as Buy');
 assert.deepEqual(await source.locator('option').evaluateAll(os => os.map(o => o.value)), ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
 
+// A price is kept to the cent, so the shopping list's lines add up to its total: 3 × $4.285 and 3 × $5.485 used to
+// show as $12.86 and $16.46 over a total of $29.31.
+{
+  await open(saved(project('Cents', [board('2×4', [{ len: 96, price: 4 }], [{ name: 'Leg', qty: 3, len: 90 }]), board('1×4 board', [{ len: 96, price: 5 }], [{ name: 'Slat', qty: 3, len: 90 }])])));
+  await view('list');
+  for (const [i, typed] of [[0, '4.285'], [1, '5.485']]) {
+    await page.click(`details.stock >> nth=${i}`);
+    await page.fill(`details.stock >> nth=${i} >> input[data-f="price"]`, typed);
+  }
+  await view('plan');
+  await page.waitForFunction(() => document.querySelector('.total').textContent !== '$27.00');
+  const cents = t => Math.round(parseFloat(t.replace(/[^\d.]/g, '')) * 100);
+  const lines = await page.$$eval('.shop tbody tr:not(.grp) td:last-child', tds => tds.map(td => td.textContent));
+  const total = await page.textContent('.shop tfoot td:last-child');
+  assert.equal(lines.length, 2);
+  assert.equal(lines.reduce((a, t) => a + cents(t), 0), cents(total), `the shopping list ${lines.join(' + ')} doesn’t add up to ${total}`);
+  assert.equal(await page.textContent('.total'), total);
+}
+
 // Secondary buttons line up with their headings and neighbours; only the plan's sections are spaced apart.
 await page.click('#projBtn');
 assert.deepEqual(await page.$$eval('#sheet .btn', bs => [...new Set(bs.map(b => getComputedStyle(b).marginTop))]), ['0px'], 'buttons in Projects');

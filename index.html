@@ -1137,7 +1137,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         var t = el.value.trim(); if (/,\d{1,2}(?!\d)/.test(t) && t.lastIndexOf(',') > t.lastIndexOf('.')) t = t.replace(/\./g, '').replace(/,(\d{1,2})(?!\d)/, '.$1');
         // what's left must be one number: "3439.98.00", a new price typed after an old one, is marked and not used
         var n = t.replace(/[^\d.]/g, ''), bad = !!t && (n.split('.').length > 2 || !(parseFloat(n) >= 0));
-        v = parseFloat(n); el.classList.toggle('bad', bad); if (!bad) s.price = v >= 0 ? v : 0;
+        v = parseFloat(n); el.classList.toggle('bad', bad); if (!bad) s.price = v >= 0 ? Math.round(v * 100) / 100 : 0; // to the cent, so the shopping list adds up to its total
       }
       else if (f === 'have') { s.have = +el.value || 0; renderList(); }
       if (f !== 'have') refreshChips(m);
@@ -1662,7 +1662,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     q.materials = p.materials.slice(0, 40).map(function (m) {
       var sheet = m && m.kind === 'sheet';
       return { id: uid(), kind: sheet ? 'sheet' : 'board', name: str(m && m.name, 60) || (sheet ? 'Sheet' : 'Board'), note: str(m && m.note, 80),
-        stock: (Array.isArray(m && m.stock) ? m.stock : []).slice(0, 20).map(function (s) { var o = { id: uid(), len: num(s && s.len, 0, 1200), price: num(s && s.price, -1, 1e5), have: Math.min(10, Math.max(0, (s && s.have) | 0)) }; if (sheet) o.wid = num(s && s.wid, 0, 1200); return o; }).filter(function (s) { return s.len > 0 && (!sheet || s.wid > 0); }),
+        stock: (Array.isArray(m && m.stock) ? m.stock : []).slice(0, 20).map(function (s) { var o = { id: uid(), len: num(s && s.len, 0, 1200), price: Math.round(num(s && s.price, -1, 1e5) * 100) / 100, have: Math.min(10, Math.max(0, (s && s.have) | 0)) }; if (sheet) o.wid = num(s && s.wid, 0, 1200); return o; }).filter(function (s) { return s.len > 0 && (!sheet || s.wid > 0); }),
         parts: (Array.isArray(m && m.parts) ? m.parts : []).slice(0, 200).map(function (r) { return part(str(r && r.name, 60), Math.min(500, Math.max(0, (r && r.qty) | 0)), num(r && r.len, 0, 1200), sheet ? num(r && r.wid, 0, 1200) : null, sheet ? !!(r && r.grain) : null); }) };
     }).filter(function (m) { return m.stock.length; });
     return q;
