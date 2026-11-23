@@ -995,7 +995,7 @@ assert.deepEqual(await source.locator('option').evaluateAll(os => os.map(o => o.
   await view('list');
   await page.click('.srow[data-sid] >> nth=1 >> [data-a="delstock"]');
   await page.waitForFunction(() => !document.querySelector('.perr').hidden, null, { timeout: 5000 });
-  assert.equal(await page.textContent('.perr'), 'The sheets you have can’t hold every part, and Side (72" × 11 1/4") fits only those. Add a size to buy that fits it.');
+  assert.equal(await page.textContent('.perr'), 'The sheets you have can’t hold every part, and Side (72″ × 11\u00a01/4″) fits only those. Add a size to buy that fits it.');
 }
 
 // A price is kept to the cent, so the shopping list's lines add up to its total: 3 × $4.285 and 3 × $5.485 used to
@@ -1473,7 +1473,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
     [{ name: 'Leg', qty: 4, len: 72 }, { name: 'Front & back rail', qty: 8, len: 48 }, { name: 'Side rail', qty: 8, len: 21 }]);
   await open(saved(project('Tips', [cabinet, studs])));
   await page.waitForSelector('[data-tip]', { timeout: 30000 });
-  assert.equal(await page.textContent('[data-tip]'), 'Use 47 15/16"');
+  assert.equal(await page.textContent('[data-tip]'), 'Use 47\u00a015/16″', 'the tip’s button doesn’t read as a tape does, on one line');
   await page.evaluate(() => { window.redrawn = new Promise(done => new MutationObserver((m, o) => { o.disconnect(); done(); }).observe(document.getElementById('planOut'), { childList: true })); });
   await page.fill('.prow[data-pid] input[data-f="pname"] >> nth=0', 'Side panel');
   await page.evaluate(() => window.redrawn);
@@ -1532,7 +1532,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
     assert.deepEqual(await edit('len', 0, '70 1/2'), ['2×4'], 'a leg’s length planned more than the 2×4s');
     assert.deepEqual(await edit('pname', 0, 'Long leg'), [], 'renaming a part planned again');
     assert.deepEqual(await edit('pname', 3, 'Bench top'), [], 'renaming a part too big for any sheet planned again');
-    assert.match(await cp.textContent('.sheetmat .perr'), /^Bench top \(100" × 30"\) won’t fit/, 'the cut list has the old name');
+    assert.match(await cp.textContent('.sheetmat .perr'), /^Bench top \(100″ × 30″\) won’t fit/, 'the cut list has the old name');
     // Both seen on the Plan tab, where the plan is drawn once it shows.
     const plan = () => cp.evaluate(() => [...document.getElementById('planOut').children].filter(c => c.id !== 'tips').map(c => c.outerHTML).join('') + document.getElementById('sawOut').innerHTML);
     await cp.click('#tabs button[data-t="plan"]');
@@ -1797,7 +1797,7 @@ for (const [units, len, short] of [['in', 47 + 15 / 16, 9.5], ['mm', 1213.5 / 25
 // Boards on hand that run short say so in the cut list, instead of stopping the page.
 await open(saved(project('Short of legs', [board('Other board', [{ len: 96, have: 2 }], [{ name: 'Leg', qty: 3, len: 72 }])])));
 await view('list');
-assert.equal(await page.textContent('.perr'), 'The boards you have can’t hold every part, and Leg (72") fits only those. Add a size to buy that fits it.');
+assert.equal(await page.textContent('.perr'), 'The boards you have can’t hold every part, and Leg (72″) fits only those. Add a size to buy that fits it.');
 
 assert.deepEqual(problems, [], 'no errors, and nothing loaded from anywhere else');
 

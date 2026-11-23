@@ -1289,10 +1289,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         if (e.pi < 0) {
           // only the stock on hand can hold some part, and it has run out
           var q = r.mat.parts[e.only], have = r.kind === 'sheet' ? 'sheets' : 'boards';
-          return 'The ' + have + ' you have can’t hold every part' + (q ? ', and ' + (q.name || 'part ' + letter(e.only)) + ' (' + (r.kind === 'sheet' ? fmt(q.len) + ' × ' + fmt(q.wid) : fmt(q.len)) + ') fits only those. Add a size to buy that fits it.' : '. Add a size to buy.');
+          return 'The ' + have + ' you have can’t hold every part' + (q ? ', and ' + (q.name || 'part ' + letter(e.only)) + ' (' + (r.kind === 'sheet' ? fmtT(q.len) + ' × ' + fmtT(q.wid) : fmtT(q.len)) + ') fits only those. Add a size to buy that fits it.' : '. Add a size to buy.');
         }
         if (e.max) return (e.part.name || 'A part') + ' × ' + e.part.qty + ': Kerf plans at most ' + e.max + ' of one sheet part — split it into two rows.';
-        var p = e.part, dims = r.kind === 'sheet' ? fmt(p.len) + ' × ' + fmt(p.wid) : fmt(p.len);
+        var p = e.part, dims = r.kind === 'sheet' ? fmtT(p.len) + ' × ' + fmtT(p.wid) : fmtT(p.len);
         return (p.name || 'A part') + ' (' + dims + ') won’t fit on any ' + (r.kind === 'sheet' ? 'sheet' : 'board') + ' listed below' + (r.kind === 'sheet' && p.grain ? ' with the grain along its length' : '') + '. Add a bigger size' + (r.kind === 'sheet' && p.grain ? ' or let it turn' : '') + '.';
       });
       el.hidden = !msgs.length; el.textContent = msgs.join(' ');
@@ -1333,8 +1333,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             var copy = { id: uid(), len: s.len, price: s.price, have: 0 }; if (sheet) copy.wid = s.wid; m.stock.splice(m.stock.indexOf(s) + 1, 0, copy);
             renderList(); focusAfter(['.srow[data-sid="' + s.id + '"] [data-f="have"]'], true);
           }
-          var size = function (x) { return fmt(x, { ft: true }).replace(/'/g, '′').replace(/"/g, '″'); };
-          toast('Kerf will use your ' + s.have + ' and buy more ' + (sheet ? size(s.wid) + ' × ' + size(s.len) : size(s.len)) + ' if it needs them');
+          toast('Kerf will use your ' + s.have + ' and buy more ' + (sheet ? fmtT(s.wid, { ft: true }) + ' × ' + fmtT(s.len, { ft: true }) : fmtT(s.len, { ft: true })) + ' if it needs them');
         }
       }
       refreshChips(m);
@@ -1543,14 +1542,14 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var shown = TIPS.filter(tipFor).slice(0, 3);
     el.innerHTML = shown.map(function (t, i) {
       var at = tipFor(t);
-      return '<div class="tip"><span class="tag">TIP</span><span id="tip' + i + '">Make <b>' + esc(at.p.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and the ' + esc(at.m.name) + ' costs <b>' + esc(money(t.save)) + ' less</b>.</span><button class="btn sm sec" type="button" data-tip="' + i + '" aria-describedby="tip' + i + '">Use ' + esc(fmt(t.to)) + '</button></div>';
+      return '<div class="tip"><span class="tag">TIP</span><span id="tip' + i + '">Make <b>' + esc(at.p.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and the ' + esc(at.m.name) + ' costs <b>' + esc(money(t.save)) + ' less</b>.</span><button class="btn sm sec" type="button" data-tip="' + i + '" aria-describedby="tip' + i + '">Use ' + esc(fmtT(t.to)) + '</button></div>';
     }).join('');
     el.querySelectorAll('[data-tip]').forEach(function (b) {
       var t = shown[+b.dataset.tip]; // the tip this button shows, whatever the next check finds
       b.addEventListener('click', function (e) {
         var at = tipFor(t), p = at && at.p, i = +b.dataset.tip;
         if (!p) return; // that part has changed since (and the tip should have gone with it)
-        p[t.dim] = t.to; touch(); renderList(); resolve(); toast((p.name || 'Part') + ' is now ' + fmt(t.to) + (t.dim === 'wid' ? ' wide' : ''));
+        p[t.dim] = t.to; touch(); renderList(); resolve(); toast((p.name || 'Part') + ' is now ' + fmtT(t.to) + (t.dim === 'wid' ? ' wide' : ''));
         // Focus goes to the field just changed, where the cut list shows beside the plan, or else to the next tip.
         focusAfter(['.prow[data-pid="' + p.id + '"] [data-f="' + t.dim + '"]', '#tips [data-tip="' + i + '"]', '#tips [data-tip="' + (i - 1) + '"]', '#tips'], e.detail === 0);
       });
