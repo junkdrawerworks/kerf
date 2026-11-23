@@ -1572,33 +1572,62 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // side, or ''.
   function fitLabel(texts, room, cw) { return texts.filter(function (t) { return t.length * cw + 8 <= room; })[0] || ''; }
   // Where each cut's number goes: on its cut line (`lines`, [x1, y1, x2, y2]), as near the middle as it can be while
-  // clear of the labels (`boxes`, [x, y, w, h]) and of the numbers placed before it, and inside `bound` ([x1, y1, x2,
-  // y2]). Each number is `r` from its centre either way (a circle's radius, or half a box), or `small` where no place
-  // on the line has room for `r`; where none has room even then, it goes where it covers fewest numbers, then labels.
-  // Returns [x, y, r] for each line.
-  function placeNums(lines, boxes, bound, r, small) {
-    var placed = [], clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
-    return lines.map(function (l) {
-      var x1 = l[0], y1 = l[1], x2 = l[2], y2 = l[3], len = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1)), pad = r + 1;
+  // clear of the labels (`boxes`, [x, y, w, h]) and of the other numbers, and inside `bound` ([x1, y1, x2, y2]). Each
+  // number is a circle of radius `r` (a box `r` from its centre either way, if `square`), or `small` where no place on
+  // the line has room for `r`. Where the line is too short for either, it sits just beside the line, touching it, or
+  // just past one of its ends. The shortest lines choose first, since a long one has room to move along; a number with
+  // nowhere clear to go may then move one number in its way, if that one has somewhere else clear to go. Failing that,
+  // it goes where it covers fewest numbers, then labels. Returns [x, y, r] for each line.
+  function placeNums(lines, boxes, bound, r, small, square) {
+    var out = [], clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
+    var length = function (l) { return Math.sqrt((l[2] - l[0]) * (l[2] - l[0]) + (l[3] - l[1]) * (l[3] - l[1])); };
+    // The places for line `li`'s number, with their scores and the numbers in `out` each would cover, best first: on
+    // the line first, then (if there's no room there, or for `every`) off it.
+    var spots = function (li, every) {
+      var l = lines[li], x1 = l[0], y1 = l[1], x2 = l[2], y2 = l[3], len = length(l), pad = 2 * r + 2, all = [];
+      var ux = len ? (x2 - x1) / len : 1, uy = len ? (y2 - y1) / len : 0, mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
       var lx = Math.min(x1, x2) - pad, hx = Math.max(x1, x2) + pad, ly = Math.min(y1, y2) - pad, hy = Math.max(y1, y2) + pad;
       // only what's near this line can be in the way
       var bs = boxes.filter(function (b) { return b[0] < hx && b[0] + b[2] > lx && b[1] < hy && b[1] + b[3] > ly; });
-      var ns = placed.filter(function (q) { return q[0] + q[2] + pad > lx && q[0] - q[2] - pad < hx && q[1] + q[2] + pad > ly && q[1] - q[2] - pad < hy; });
-      var step = Math.max(2, len / 40), ds = [0], best = null;
+      var ns = []; out.forEach(function (q, i) { if (q && i !== li && q[0] + q[2] + pad > lx && q[0] - q[2] - pad < hx && q[1] + q[2] + pad > ly && q[1] - q[2] - pad < hy) ns.push(i); });
+      var step = Math.max(1, len / 40), ds = [0];
       for (var d = step; d <= len / 2 + 1e-9; d += step) ds.push(d, -d);
+      // `d` along the line from its middle and `o` across it; a place off the line scores a little worse than any on it
+      var at = function (rr, ri, d, o) {
+        var cx = clamp(mx + ux * d - uy * o, bound[0] + rr, bound[2] - rr), cy = clamp(my + uy * d + ux * o, bound[1] + rr, bound[3] - rr);
+        var hits = ns.filter(function (i) { var q = out[i], dx = Math.abs(q[0] - cx), dy = Math.abs(q[1] - cy), k = q[2] + rr + 1; return square ? dx < k && dy < k : dx * dx + dy * dy < k * k; });
+        var lbls = bs.filter(function (b) {
+          var dx = Math.max(b[0] - cx, 0, cx - b[0] - b[2]), dy = Math.max(b[1] - cy, 0, cy - b[1] - b[3]);
+          return square ? dx < rr && dy < rr : dx * dx + dy * dy < rr * rr;
+        }).length;
+        var off = Math.abs(o) / (rr + 1), far = off > 1.5 ? off * 10 - 8 : off || Math.abs(d) > len / 2 ? 2 : 0;
+        all.push({ x: cx, y: cy, r: rr, hits: hits, score: hits.length * 100 + lbls * 10 + ri + far, n: all.length });
+      };
+      var clear = function (worse) { return !every && all.some(function (s) { return s.score < worse; }); };
+      [r, small].forEach(function (rr, ri) { if (!clear(1)) ds.forEach(function (d) { at(rr, ri, d, 0); }); });
       [r, small].forEach(function (rr, ri) {
-        if (best && !best.score) return;
-        ds.forEach(function (d) {
-          var t = len ? 0.5 + d / len : 0.5, cx = clamp(x1 + (x2 - x1) * t, bound[0] + rr, bound[2] - rr), cy = clamp(y1 + (y2 - y1) * t, bound[1] + rr, bound[3] - rr);
-          var nums = ns.filter(function (q) { return Math.abs(q[0] - cx) < q[2] + rr + 1 && Math.abs(q[1] - cy) < q[2] + rr + 1; }).length;
-          var lbls = bs.filter(function (b) { return Math.abs(cx - b[0] - b[2] / 2) < rr + b[2] / 2 && Math.abs(cy - b[1] - b[3] / 2) < rr + b[3] / 2; }).length;
-          var score = nums * 100 + lbls * 10 + ri;
-          if (!best || score < best.score) best = { x: cx, y: cy, r: rr, score: score };
-        });
+        if (clear(2)) return;
+        ds.forEach(function (d) { for (var k = -3; k <= 3; k++) if (k) at(rr, ri, d, k * (rr + 1)); });
+        at(rr, ri, len / 2 + rr, 0); at(rr, ri, -len / 2 - rr, 0);
       });
-      placed.push([best.x, best.y, best.r]);
-      return placed[placed.length - 1];
+      return all.sort(function (a, b) { return a.score - b.score || a.n - b.n; });
+    };
+    var put = function (li, s) { out[li] = [s.x, s.y, s.r]; };
+    lines.map(function (l, i) { return i; }).sort(function (a, b) { return length(lines[a]) - length(lines[b]) || a - b; }).forEach(function (li) {
+      var all = spots(li);
+      put(li, all[0]);
+      if (all[0].score < 100) return;
+      all = spots(li, true);
+      // Nowhere clear: try each place that covers just one number, and that number's best place with this one there.
+      all.filter(function (s) { return s.hits.length === 1; }).slice(0, 60).some(function (s) {
+        var j = s.hits[0], was = out[j];
+        put(li, s); out[j] = null;
+        var o = spots(j)[0];
+        if (o.score < 100) { put(j, o); return true; }
+        out[j] = was; put(li, all[0]); return false;
+      });
     });
+    return out;
   }
   function boardDiagram(m) {
     // The left column is as wide as its widest length (12px mono is 7.2px a character), with 4px to spare: "600 mm"
@@ -1666,7 +1695,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       s += '<rect class="dg-scrap" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
       // Each label is noted as a box ([x, y, w, h]) for the cut numbers to keep off, and drawn once they're placed.
       // `lo` and `hi` say how far along its part a label may move, should a number land on it anyway.
-      var boxes = [], labels = [], label = function (cls, x, y, t, cw, lo, hi) { var b = [x - t.length * cw / 2 - 1, y - 7, t.length * cw + 2, 14]; boxes.push(b); labels.push({ cls: cls, x: x, y: y, t: t, b: b, lo: lo, hi: hi }); return labels[labels.length - 1]; };
+      var boxes = [], labels = [], boxOf = function (x, y, t, cw) { return [x - t.length * cw / 2 - 1, y - 8, t.length * cw + 2, 16]; };
+      var label = function (cls, x, y, t, cw, lo, hi) { var l = { cls: cls, x: x, y: y, t: t, cw: cw, b: boxOf(x, y, t, cw), lo: lo, hi: hi }; boxes.push(l.b); labels.push(l); return l; };
       sh.placed.forEach(function (p, k) {
         var x = ox + p.x * px, y = oy + p.y * px, w = p.l * px, h = p.w * px, part = m.mat.parts[p.pi], L = letter(p.pi);
         s += '<rect class="dg-ply" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"/><path class="dg-grain" d="' + grainPaths(x, y, w, h, 7 + k * 13 + si * 101) + '"/>';
@@ -1675,7 +1705,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           // under the letter, the size as wide as fits: with inch marks, without, or the length alone
           var dims = h > 34 ? fitLabel([fmt(p.l) + ' × ' + fmt(p.w), fmt(p.l, { bare: true }) + ' × ' + fmt(p.w, { bare: true }), fmt(p.l)], w, 7.2) : '';
           var a = label('dg-lblb', x + w / 2, y + h / 2 - (dims ? 8 : 0), L, 7.2, x + 2, x + w - 2);
-          if (dims) a.with = label('dg-lbl', x + w / 2, y + h / 2 + 9, dims, 7.2, x + 2, x + w - 2);
+          a.cy = y + h / 2;
+          if (dims) { a.with = label('dg-lbl', x + w / 2, y + h / 2 + 9, dims, 7.2, x + 2, x + w - 2); a.with.sub = true; a.alt = fitLabel([fmt(p.l)], w, 7.2); }
         }
       });
       sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * px, t = fitLabel([fmt(f.w) + ' × ' + fmt(f.h)], w, 6.6); if (t && h > 18) label('dg-scrapt', ox + f.x * px + w / 2, oy + f.y * px + h / 2, t, 6.6, ox + f.x * px + 2, ox + (f.x + f.w) * px - 2); });
@@ -1693,13 +1724,28 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         s += '<circle class="dg-num" cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="' + c[2] + '"/><text class="dg-numt' + (c[2] < 8 ? ' sm' : '') + '" x="' + c[0].toFixed(1) + '" y="' + c[1].toFixed(1) + '">' + (k + 1) + '</text>';
       });
       // A label a number still covers moves along its part (with the size under it) to where none does, if there's room.
+      // Where there's none, the size steps down to the length alone, then goes, leaving the letter in the middle of its
+      // part (the steps and the legend still give the size).
       var covered = function (b, dx) { return nums.some(function (c) { return Math.abs(c[0] - b[0] - dx - b[2] / 2) < c[2] + b[2] / 2 && Math.abs(c[1] - b[1] - b[3] / 2) < c[2] + b[3] / 2; }); };
+      var clear = function (group) { // how far the group moves to be clear of every number, or null
+        var hit = function (dx) { return group.some(function (g) { return covered(g.b, dx) || g.b[0] + dx < g.lo || g.b[0] + g.b[2] + dx > g.hi; }); };
+        if (!hit(0)) return 0;
+        for (var d = 2; d < 200; d += 2) { if (!hit(d)) return d; if (!hit(-d)) return -d; if (group[0].x + d > group[0].hi && group[0].x - d < group[0].lo) break; }
+        return null;
+      };
+      var relabel = function (g, t, y) { return { cls: g.cls, x: g.x, y: y, t: t, b: boxOf(g.x, y, t, g.cw), lo: g.lo, hi: g.hi }; };
       var lbls = '';
       labels.forEach(function (l) {
-        if (l.moved != null) return;
-        var group = l.with ? [l, l.with] : [l], hit = function (dx) { return group.some(function (g) { return covered(g.b, dx) || g.b[0] + dx < g.lo || g.b[0] + g.b[2] + dx > g.hi; }); }, dx = 0;
-        if (group.some(function (g) { return covered(g.b, 0); })) for (var d = 2; d < 200; d += 2) { if (!hit(d)) { dx = d; break; } if (!hit(-d)) { dx = -d; break; } if (l.x + d > l.hi && l.x - d < l.lo) break; }
-        group.forEach(function (g) { g.moved = dx; lbls += '<text class="' + g.cls + '" x="' + (g.x + dx).toFixed(1) + '" y="' + g.y.toFixed(1) + '" text-anchor="middle">' + esc(g.t) + '</text>'; });
+        if (l.sub) return;
+        var tries = [l.with ? [l, l.with] : [l]], dx = null, pick;
+        if (l.with) {
+          if (l.alt && l.alt !== l.with.t) tries.push([l, relabel(l.with, l.alt, l.with.y)]);
+          tries.push([relabel(l, l.t, l.cy)], [l]);
+        }
+        tries.some(function (g) { dx = clear(g); pick = g; return dx != null; });
+        // nowhere clear, even for the letter alone: the longest size no number covers stays, under its letter
+        if (dx == null) { dx = 0; pick = tries.filter(function (g) { return !g[1] || !covered(g[1].b, 0); })[0]; }
+        pick.forEach(function (g) { lbls += '<text class="' + g.cls + '" x="' + (g.x + dx).toFixed(1) + '" y="' + g.y.toFixed(1) + '" text-anchor="middle">' + esc(g.t) + '</text>'; });
       });
       s = s.slice(0, at) + lbls + s.slice(at);
       out += s + '</svg>';
@@ -2299,7 +2345,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             var l = st.line; line(M + l[0] * px, y + l[1] * px, M + l[2] * px, y + l[3] * px, '#2361CC', 1, true);
             cuts.push([M + l[0] * px, y + l[1] * px, M + l[2] * px, y + l[3] * px]);
           });
-          placeNums(cuts, boxes, [M, y, M + sh.L * px, y + H], 6, 4.5).forEach(function (c, k) {
+          placeNums(cuts, boxes, [M, y, M + sh.L * px, y + H], 6, 4.5, true).forEach(function (c, k) {
             var t = String(k + 1), fs = c[2] < 6 ? 6 : 7.5;
             rect(c[0] - c[2], c[1] - c[2], 2 * c[2], 2 * c[2], '#2361CC'); text('HB', fs, c[0] - textW('HB', fs, t) / 2, c[1] + fs * 0.36, t, '#FFFFFF');
           });

@@ -1132,6 +1132,42 @@ assert.equal(await page.$eval('#planOut div.sec', d => getComputedStyle(d).margi
   await page.setViewportSize({ width: 390, height: 844 });
 }
 
+// On a small phone a cabinet's and a 50-piece job's sheets are crowded with short cuts: number 15 sat right under 16, and
+// numbers covered sizes such as 14" × 5 1/2". Every number shows whole, clear of the others and of every letter and size.
+{
+  const ply = [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }, { len: 48, wid: 24, price: 21 }];
+  const parts = list => list.map(([name, qty, len, wid, grain]) => ({ name, qty, len, wid, grain: grain !== false }));
+  const jobs = [
+    project('Base cabinet', [sheet('¾ plywood', ply, parts([['Side', 2, 34.5, 23.25], ['Bottom', 1, 34.5, 23.25], ['Top stretcher front', 1, 34.5, 4, false], ['Top stretcher back', 1, 34.5, 4, false],
+      ['Back', 1, 34.5, 30.5], ['Shelf', 2, 33.75, 22], ['Toe kick', 1, 34.5, 4, false], ['Door', 2, 17.875, 30.25], ['Drawer front', 1, 35.75, 6],
+      ['Drawer side', 2, 21, 5], ['Drawer front/back', 2, 31.5, 5, false], ['Nailer', 2, 34.5, 3, false]]))]),
+    project('50 piece sheet job', [sheet('¾ plywood', ply, parts([['Tall side', 6, 72, 15.75], ['Shelf', 14, 30.25, 15], ['Top', 3, 31.75, 16], ['Back strip', 9, 30.25, 4, false],
+      ['Door', 6, 15.5, 36], ['Kick', 3, 30.25, 3.5, false], ['Divider', 9, 15, 11.5]]))]),
+    project('Mudroom cubbies', [sheet('¾ plywood', ply, parts([['Cubby side panel, left and right', 2, 34.5, 15.25], ['Cubby bottom', 1, 46.5, 15.25], ['Cubby top', 1, 46.5, 15.25],
+      ['Back', 1, 46.5, 34.5, false], ['Shelf', 3, 45.75, 14]])), sheet('½ plywood', [{ len: 96, wid: 48, price: 44 }, { len: 48, wid: 48, price: 26 }], parts([['Drawer side', 4, 14, 5.5], ['Drawer bottom', 2, 21.5, 13.5]]))]),
+  ];
+  for (const job of jobs) for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await open(saved(job));
+    const bad = await page.evaluate(() => {
+      const out = [];
+      for (const svg of document.querySelectorAll('#planOut svg.diag')) {
+        const nums = [...svg.querySelectorAll('circle.dg-num')].map(c => ({ x: +c.getAttribute('cx'), y: +c.getAttribute('cy'), r: +c.getAttribute('r'), n: c.nextElementSibling.textContent }));
+        const labels = [...svg.querySelectorAll('.dg-lbl, .dg-lblb')].map(t => ({ b: t.getBBox(), t: t.textContent }));
+        nums.forEach((a, i) => {
+          nums.slice(i + 1).forEach(b => { if (Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r) out.push(`numbers ${a.n} and ${b.n} overlap`); });
+          // a number is a circle: it covers a label where the label's box comes nearer its centre than its radius
+          const covers = labels.filter(({ b }) => Math.hypot(Math.max(b.x - a.x, 0, a.x - b.x - b.width), Math.max(b.y - a.y, 0, a.y - b.y - b.height)) < a.r);
+          if (covers.length) out.push(`number ${a.n} covers ${covers.map(l => l.t).join(', ')}`);
+        });
+      }
+      return out;
+    });
+    assert.deepEqual(bad, [], `${job.name} at ${width} wide`);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 // A board you already have is labelled "yours" inside its drawing, not cut off past the edge.
 await open(saved(project('Yours', [board('2×4', [{ len: 96, price: 4.28 }, { len: 96, have: 1 }], [{ name: 'Leg', qty: 3, len: 72 }])])));
 assert.ok(await page.evaluate(() => {
