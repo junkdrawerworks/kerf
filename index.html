@@ -317,18 +317,30 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   /* Every field keeps the 16px text set above: iOS zooms the page into a field with smaller text, and stays zoomed. */
   textarea{font-size:16px}
 }
+/* On a touch screen (a phone, or a tablet at any width) every control is at least 44 px tall, from padding rather than
+   bigger type: WCAG 2.2's Target Size (Enhanced), 2.5.5, asks 44 × 44 CSS px. The grain lock and the ✕ beside it are
+   44 px square and 8 px apart, and a part or size on one line makes room for them. */
+@media (pointer:coarse){
+  input,select,.tbtn,.addpart,.lbtn,.btn,.pbtn,.tabs button,.seg button,.stock>summary,.pitem{min-height:44px}
+  .icon,.grain{width:44px;height:44px}
+  .prow{grid-template-columns:22px minmax(0,1fr) 52px 104px 44px}
+  .sheetmat .prow{grid-template-columns:22px minmax(0,1fr) 46px 92px 92px 46px 44px}
+  .sheetmat .prow .grain{justify-self:start}
+  .srow{grid-template-columns:minmax(0,1fr) 88px 110px 44px}
+  .sheetmat .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 80px 110px 44px}
+}
 @media (max-width:560px){
   .tbtn .t{display:none}.tbtn{padding:7px 9px;min-width:44px;justify-content:center}
   .tabs{padding-top:8px}
-  /* Every control is at least 44 px tall, from padding rather than bigger type: WCAG 2.2's Target Size (Enhanced),
-     2.5.5, asks 44 × 44 CSS px. The grain lock and the ✕ beside it are 44 px square and 8 px apart. */
-  input,select,.tbtn,.addpart,.lbtn,.btn,.pbtn,.tabs button,.seg button,.stock>summary,.pitem{min-height:44px}
-  .icon,.grain{width:44px;height:44px}
   .brand{font-size:22px;padding:4px 8px 3px 10px}
   .pname{font-size:16px}
   .total{font-size:46px}
   .summary{grid-template-columns:minmax(0,1fr);padding:12px 14px}
   .steps{columns:1}
+}
+/* Two lines for a part or a size to buy where one line has no room for its name: a phone, and a touch screen where
+   the cut list is a narrow column beside the plan (a tablet on its side), whose 44 px buttons would leave none. */
+@media (max-width:560px),(pointer:coarse) and (min-width:961px) and (max-width:1279.98px){
   .mat-hd{flex-wrap:wrap;row-gap:0}
   .mat-note{order:1;flex-basis:100%;white-space:normal;padding:0 0 0 44px}
   /* A part takes two lines: its letter and name across the top, with its ✕ (and a sheet part's grain lock), then its
@@ -351,8 +363,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .sheetmat .srow>:nth-child(2){grid-area:1/2}
   .sheetmat .srow>:nth-child(3){grid-area:2/1}.sheetmat .srow>:nth-child(4){grid-area:2/2}.sheetmat .srow>:nth-child(5){grid-area:2/3}
   .srow[data-sid]{padding:8px 0}.srow[data-sid]+.srow[data-sid]{border-top:1px solid var(--line)}
-  .cut .meas{font-size:24px}
 }
+@media (max-width:560px){.cut .meas{font-size:24px}}
 /* On the smallest phones the project's name gets a line of its own under the brand and buttons, where it had room for
    four letters; a tip's button goes under its words. */
 @media (max-width:359.98px){

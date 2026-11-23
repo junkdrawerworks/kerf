@@ -809,6 +809,19 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   await page.click('#setBtn');
   assert.deepEqual(await short('#sheet button, #sheet input'), [], 'Settings controls under 44px tall');
   await page.click('#stx');
+  // A touch tablet gets them too, upright or on its side: it had 30px ✕ and grain locks, with every 44px rule kept for
+  // phone widths. On its side the cut list is a column beside the plan, so its parts take two lines there, as on a phone,
+  // leaving the name room.
+  for (const [width, height] of [[768, 1024], [1024, 768]]) {
+    await page.setViewportSize({ width, height });
+    await open(saved(long));
+    if (width < 960) await view('list');
+    assert.deepEqual(await short('#mats .prow .grain, #mats .icon, #mats input, #mats select, #mats .addpart, #mats .lbtn, #mats .pbtn, #tabs button, .top .tbtn'), [], `cut list controls under 44px tall on a ${width} wide tablet`);
+    assert.ok(await page.$eval('.sheetmat .prow[data-pid]', r => r.querySelector('[data-a="delpart"]').getBoundingClientRect().left - r.querySelector('.grain').getBoundingClientRect().right >= 8), `the grain lock is less than 8px from the ✕ at ${width} wide`);
+    assert.ok(await page.$$eval('#mats .prow[data-pid] [data-f="pname"]', is => is.every(i => i.getBoundingClientRect().width >= 150)), `a part’s name has no room at ${width} wide`);
+    await fitsPhone(`cut list on a ${width} wide tablet`);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await open(null);
   await page.waitForSelector('[data-tip]', { timeout: 30000 });
   assert.deepEqual(await short('#planOut button'), [], 'plan buttons under 44px tall');
