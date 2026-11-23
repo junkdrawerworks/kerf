@@ -473,6 +473,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (p.f) s += (s ? ' ' : '') + '<span class="fr"><span class="sr">' + p.f + '/' + p.d + '</span><span aria-hidden="true"><sup>' + p.f + '</sup>⁄<sub>' + p.d + '</sub></span></span>';
     return (s || '0') + (o.bare ? '' : '″');
   }
+  // Plain text as a tape reads, with ′ and ″ for the marks: 47 3/4″, 8′ 6″. fmtT also keeps a length on one line (35 3/4
+  // or 908 mm never breaks at its space), for a sentence; fmtD is for the drawings, where text doesn't wrap.
+  function marks(s) { return s.replace(/'/g, '′').replace(/"/g, '″'); }
+  function fmtD(x, o) { return marks(fmt(x, o)); }
+  function fmtT(x, o) { return fmtD(x, o).replace(/ /g, '\u00a0'); }
   // A length for a name a screen reader says: 8 ft, 8 ft 6 in, 47 3/4 in, 2.4 m.
   function sayLen(x, o) { return fmt(x, o).replace(/'/g, ' ft').replace(/"$/, ' in'); }
   var VULGAR = { '½': ' 1/2', '¼': ' 1/4', '¾': ' 3/4', '⅛': ' 1/8', '⅜': ' 3/8', '⅝': ' 5/8', '⅞': ' 7/8' };
@@ -1637,7 +1642,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     // The left column is as wide as its widest length (12px mono is 7.2px a character), with 4px to spare: "600 mm"
     // needs more than "2.4 m" or "10'".
     var width = W.plan, maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; }));
-    var labelW = Math.max(40, Math.ceil(Math.max.apply(null, m.items.map(function (b) { return fmt(b.stock.len, { ft: true }).length; })) * 7.2 + 4));
+    var labelW = Math.max(40, Math.ceil(Math.max.apply(null, m.items.map(function (b) { return fmtD(b.stock.len, { ft: true }).length; })) * 7.2 + 4));
     var drawW = width - labelW, px = drawW / maxLen, rowH = 34, gap = 22, top = 24, H = top + m.items.length * (rowH + gap) - gap + 6;
     // A screen reader gets the drawing as a list, a board to an item: "Board 1, 10 ft: B 48 in, B 48 in, C 21 in, leaves a
     // 2 5/8 in offcut". The drawing itself is left out for it.
@@ -1650,15 +1655,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var y = top + bi * (rowH + gap), bw = b.stock.len * px, x = labelW;
       // a board you have says so under its length, and its edge is dashed green, like its size in the cut list
       var mine = !!b.stock.have, ly = mine ? [-12, 1, 14] : [-7, 8];
-      s += '<text class="dg-metab" x="0" y="' + (y + rowH / 2 + ly[0]) + '">' + (bi + 1) + '</text><text class="dg-meta" x="0" y="' + (y + rowH / 2 + ly[1]) + '">' + esc(fmt(b.stock.len, { ft: true })) + '</text>';
+      s += '<text class="dg-metab" x="0" y="' + (y + rowH / 2 + ly[0]) + '">' + (bi + 1) + '</text><text class="dg-meta" x="0" y="' + (y + rowH / 2 + ly[1]) + '">' + esc(fmtD(b.stock.len, { ft: true })) + '</text>';
       if (mine) s += '<text class="dg-yours" x="0" y="' + (y + rowH / 2 + ly[2]) + '">yours</text>';
       s += '<rect class="dg-wood" x="' + x + '" y="' + y + '" width="' + bw.toFixed(1) + '" height="' + rowH + '" rx="2"/><path class="dg-grain" d="' + grainPaths(x, y, bw, rowH, 17 + bi * 31) + '"/>';
       var cx = x + b.trim * px;
       // both trimmed ends first, so the cut that squares up the far end draws over its hatching
       if (b.trim > 0) s += '<rect class="dg-scrap" x="' + x + '" y="' + y + '" width="' + (b.trim * px).toFixed(1) + '" height="' + rowH + '"/><rect class="dg-scrap" x="' + (x + bw - b.trim * px).toFixed(1) + '" y="' + y + '" width="' + (b.trim * px).toFixed(1) + '" height="' + rowH + '"/>';
       b.pieces.forEach(function (p, k) {
-        var w = p.len * px, part = m.mat.parts[p.pi], L = letter(p.pi), lbl = fitLabel([L + ' ' + fmt(p.len), fmt(p.len), fmt(p.len, { bare: true }), L], w, 7.2);
-        s += '<rect class="dg-part" x="' + cx.toFixed(1) + '" y="' + (y + 0.5) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmt(p.len)) + '</title></rect>';
+        var w = p.len * px, part = m.mat.parts[p.pi], L = letter(p.pi), lbl = fitLabel([L + ' ' + fmtD(p.len), fmtD(p.len), fmtD(p.len, { bare: true }), L], w, 7.2);
+        s += '<rect class="dg-part" x="' + cx.toFixed(1) + '" y="' + (y + 0.5) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmtD(p.len)) + '</title></rect>';
         if (lbl) s += '<text class="dg-lbl" x="' + (cx + w / 2).toFixed(1) + '" y="' + (y + rowH / 2) + '" text-anchor="middle">' + esc(lbl) + '</text>';
         cx += w;
         if (k < b.pieces.length - 1 || !lastIsLeft(b)) { var kx = (cx + P.kerf * px / 2).toFixed(1), ends = '" y1="' + (y - 3) + '" x2="' + kx + '" y2="' + (y + rowH + 3) + '"/>'; s += '<line class="dg-under" x1="' + kx + ends + '<line class="dg-kerf" x1="' + kx + ends; cx += P.kerf * px; }
@@ -1667,8 +1672,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (restW > 0.5) {
         s += '<rect class="dg-scrap" x="' + cx.toFixed(1) + '" y="' + y + '" width="' + restW.toFixed(1) + '" height="' + rowH + '"/>';
         // a label only where it fits (about 6.6px a character): the length alone if "keep" makes it too wide
-        var keep = worthKeeping(b.offcut), t = (keep ? 'keep ' : '') + fmt(b.offcut), fits = function (t) { return t.length * 6.6 + 8 <= restW; };
-        if (!fits(t)) t = fmt(b.offcut);
+        var keep = worthKeeping(b.offcut), t = (keep ? 'keep ' : '') + fmtD(b.offcut), fits = function (t) { return t.length * 6.6 + 8 <= restW; };
+        if (!fits(t)) t = fmtD(b.offcut);
         if (fits(t)) s += '<text class="dg-scrapt" x="' + (cx + restW / 2).toFixed(1) + '" y="' + (y + rowH / 2) + '" text-anchor="middle">' + esc(t) + '</text>';
       }
       s += '<rect class="dg-edge' + (mine ? ' have' : '') + '" x="' + x + '" y="' + y + '" width="' + bw.toFixed(1) + '" height="' + rowH + '" rx="2"/>';
@@ -1694,7 +1699,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         var q = m.mat.parts[pi]; return count[pi] + ' × ' + letter(pi) + (q && q.name ? ' ' + esc(q.name) : '') + ' ' + esc(sayLen(q.len) + ' × ' + sayLen(q.wid));
       }).join(', ') + (spare.length ? '; left over ' + spare.map(function (f) { return esc(sayLen(f.w) + ' × ' + sayLen(f.h)); }).join(' and ') : '') + '</p>';
       var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + (H + top + 8).toFixed(1) + '" aria-hidden="true" style="margin-top:' + (si ? 16 : 6) + 'px">';
-      s += '<text class="dg-metab" x="0" y="8">Sheet ' + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + esc(fmt(sh.W) + ' × ' + fmt(sh.L)) + (sh.stock.have ? '<tspan class="dg-yours"> · yours</tspan>' : '') + '</text>';
+      s += '<text class="dg-metab" x="0" y="8">Sheet ' + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + esc(fmtD(sh.W) + ' × ' + fmtD(sh.L)) + (sh.stock.have ? '<tspan class="dg-yours"> · yours</tspan>' : '') + '</text>';
       var ox = 1, oy = top;
       s += '<rect class="dg-ply" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
       s += '<rect class="dg-scrap" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
@@ -1702,19 +1707,25 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // `lo` and `hi` say how far along its part a label may move, should a number land on it anyway.
       var boxes = [], labels = [], boxOf = function (x, y, t, cw) { return [x - t.length * cw / 2 - 1, y - 8, t.length * cw + 2, 16]; };
       var label = function (cls, x, y, t, cw, lo, hi) { var l = { cls: cls, x: x, y: y, t: t, cw: cw, b: boxOf(x, y, t, cw), lo: lo, hi: hi }; boxes.push(l.b); labels.push(l); return l; };
+      // One size form for the whole sheet, so neighbours don't flip between 34 1/2 × 15 1/4 and 45 3/4″ × 14″: with
+      // marks if every part that has room for a size fits it with them, else without. A part too narrow for that form
+      // takes the length alone.
+      var forms = function (p) { return [fmtD(p.l) + ' × ' + fmtD(p.w), fmtD(p.l, { bare: true }) + ' × ' + fmtD(p.w, { bare: true }), fmtD(p.l)]; };
+      var sized = sh.placed.filter(function (p) { return p.l * px > 30 && p.w * px > 34 && fitLabel(forms(p).slice(1, 2), p.l * px, 7.2); });
+      var form = sized.every(function (p) { return fitLabel(forms(p).slice(0, 1), p.l * px, 7.2); }) ? 0 : 1;
       sh.placed.forEach(function (p, k) {
         var x = ox + p.x * px, y = oy + p.y * px, w = p.l * px, h = p.w * px, part = m.mat.parts[p.pi], L = letter(p.pi);
         s += '<rect class="dg-ply" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"/><path class="dg-grain" d="' + grainPaths(x, y, w, h, 7 + k * 13 + si * 101) + '"/>';
-        s += '<rect class="dg-part" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmt(p.l) + ' × ' + fmt(p.w)) + '</title></rect>';
+        s += '<rect class="dg-part" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmtD(p.l) + ' × ' + fmtD(p.w)) + '</title></rect>';
         if (w > 30 && h > 16) {
-          // under the letter, the size as wide as fits: with inch marks, without, or the length alone
-          var dims = h > 34 ? fitLabel([fmt(p.l) + ' × ' + fmt(p.w), fmt(p.l, { bare: true }) + ' × ' + fmt(p.w, { bare: true }), fmt(p.l)], w, 7.2) : '';
+          // under the letter, the size in the sheet's form, or the length alone
+          var dims = h > 34 ? fitLabel(forms(p).slice(form), w, 7.2) : '';
           var a = label('dg-lblb', x + w / 2, y + h / 2 - (dims ? 8 : 0), L, 7.2, x + 2, x + w - 2);
           a.cy = y + h / 2;
-          if (dims) { a.with = label('dg-lbl', x + w / 2, y + h / 2 + 9, dims, 7.2, x + 2, x + w - 2); a.with.sub = true; a.alt = fitLabel([fmt(p.l)], w, 7.2); }
+          if (dims) { a.with = label('dg-lbl', x + w / 2, y + h / 2 + 9, dims, 7.2, x + 2, x + w - 2); a.with.sub = true; a.alt = fitLabel([fmtD(p.l)], w, 7.2); }
         }
       });
-      sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * px, t = fitLabel([fmt(f.w) + ' × ' + fmt(f.h)], w, 6.6); if (t && h > 18) label('dg-scrapt', ox + f.x * px + w / 2, oy + f.y * px + h / 2, t, 6.6, ox + f.x * px + 2, ox + (f.x + f.w) * px - 2); });
+      sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * px, t = fitLabel([fmtD(f.w) + ' × ' + fmtD(f.h)], w, 6.6); if (t && h > 18) label('dg-scrapt', ox + f.x * px + w / 2, oy + f.y * px + h / 2, t, 6.6, ox + f.x * px + 2, ox + (f.x + f.w) * px - 2); });
       var at = s.length; // the labels go here, under the outline, the cuts and their numbers
       s += '<rect class="dg-pedge" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>'; // under the cuts and their numbers
       sh.steps.forEach(function (st, k) {

@@ -1164,6 +1164,12 @@ assert.equal(await page.$eval('#planOut div.sec', d => getComputedStyle(d).margi
       return out;
     });
     assert.deepEqual(bad, [], `${job.name} at ${width} wide`);
+    // Lengths read as a tape does, ′ and ″, and one sheet's sizes all have their marks or all go without: the mudroom's
+    // second sheet read 'A 34 1/2 × 15 1/4' beside 'E 45 3/4" × 14"'.
+    const texts = await page.$$eval('#planOut svg.diag', svgs => svgs.map(svg => ({ all: [...svg.querySelectorAll('text')].map(t => t.textContent), sizes: [...svg.querySelectorAll('.dg-lbl')].map(t => t.textContent).filter(t => / × /.test(t)) })));
+    const ascii = texts.flatMap(t => t.all).filter(t => /["']/.test(t));
+    assert.deepEqual(ascii, [], `${job.name} at ${width} wide: a drawing uses " or '`);
+    for (const { sizes } of texts) assert.ok(sizes.every(t => /″/.test(t)) || sizes.every(t => !/″/.test(t)), `${job.name} at ${width} wide: one sheet mixes sizes with and without marks: ${sizes.join(', ')}`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
 }
@@ -1633,7 +1639,7 @@ await open(saved(project('Metric offcuts', [board('45×90', [{ len: 2400 / 25.4,
 
 // An offcut's label fits inside the offcut: on a phone "keep 23 7/8\"" is too wide for it, so it shows the length alone.
 await open(saved(project('Offcut', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 1, len: 72 }])])));
-assert.deepEqual(await page.$$eval('#planOut .dg-scrapt', ts => ts.map(t => [t.textContent, t.getBBox().width <= t.previousElementSibling.width.baseVal.value - 2])), [['23 7/8"', true]], 'the offcut label');
+assert.deepEqual(await page.$$eval('#planOut .dg-scrapt', ts => ts.map(t => [t.textContent, t.getBBox().width <= t.previousElementSibling.width.baseVal.value - 2])), [['23 7/8″', true]], 'the offcut label');
 
 // Muted labels read at 4.5:1 or better on the page, the cards and the grey strips, and offcut labels on their
 // hatching, in light and dark.
