@@ -1376,7 +1376,7 @@ const sawCases = [
   { trim: 0.25, parts: [{ name: 'Rail', qty: 2, len: 47 + 11 / 16 }], steps: [TRIM('1⁄4″'), SQUARED, FRESH + ' — this cut squares up the far end too'], cuts: 3, lines: 2 },
   { trim: 0.25, parts: [{ name: 'Top', qty: 1, len: 95.5 }], steps: [TRIM('1⁄4″'), SQUARED + ' — this cut squares up the far end too'], cuts: 2, lines: 1 },
   { trim: 0, parts: [{ name: 'Top', qty: 1, len: 96 }], steps: [], note: 'The whole board is A Top — no cut needed', cuts: 0, lines: 0 },
-  { trim: 0, parts: [{ name: 'Leg', qty: 1, len: 72 }], steps: [RAIL], note: 'Leaves a 23 7⁄8″ offcut — worth keeping', cuts: 1, lines: 1 },
+  { trim: 0, parts: [{ name: 'Leg', qty: 1, len: 72 }], steps: [RAIL], note: 'Leaves a 23 7⁄8″ offcut — worth keeping', cuts: 1, lines: 1, pdf: 'keep 23 7/8"' },
   { trim: 0.5, parts: [{ name: 'Leg', qty: 1, len: 72 }, { name: 'Brace', qty: 1, len: 20 }], steps: [TRIM('1⁄2″'), SQUARED, FRESH], note: 'Leaves a 3 1⁄4″ offcut (2 3⁄4″ once its end is squared)', cuts: 3, lines: 2 },
   { trim: 0.5, parts: [{ name: 'Slat', qty: 1, len: 47.5 }], steps: [TRIM('1⁄2″'), SQUARED], note: 'Leaves a 47 7⁄8″ offcut (47 3⁄8″ once its end is squared) — worth keeping', cuts: 2, lines: 1 },
 ];
@@ -1385,7 +1385,9 @@ for (const c of sawCases) {
   const what = `${c.parts[0].qty} × ${c.parts[0].len} on 8', trim ${c.trim}`;
   assert.equal(await cutsFact(), c.cuts + (c.cuts === 1 ? 'cut' : 'cuts'), what + ': cuts in the plan');
   assert.equal(await page.locator('#planOut .dg-kerf').count(), c.lines, what + ': saw cuts drawn');
-  assert.equal(pdfKerfLines(await shopPdf()), c.lines, what + ': saw cuts in the PDF');
+  const pdf = await shopPdf();
+  assert.equal(pdfKerfLines(pdf), c.lines, what + ': saw cuts in the PDF');
+  if (c.pdf) assert.ok(pdfRuns(pdf).some(r => r.text === c.pdf), what + ': the offcut in the PDF');
   await view('saw');
   assert.deepEqual(await sawSteps(), c.steps, what + ': steps at the saw');
   assert.equal(await page.textContent('.saw-bar b'), `0 of ${c.cuts} ${c.cuts === 1 ? 'cut' : 'cuts'}`, what + ': cuts at the saw');
@@ -1400,8 +1402,12 @@ for (const c of sawCases) {
 {
   await open(saved(project('Sides', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])])));
   assert.deepEqual(await page.$$eval('#planOut ol.steps li > span', ls => ls.map(l => l.textContent)), ['Crosscut the full sheet at 30 1⁄4″', 'Rip the 30 1⁄4″ × 48″ piece at 23 3⁄4″ → A Side', 'Rip the 30 1⁄4″ × 24 1⁄8″ piece at 23 3⁄4″ → A Side']);
-  const pdf = pdfRuns(await shopPdf()).map(r => r.text);
+  const raw = await shopPdf(), pdf = pdfRuns(raw).map(r => r.text);
   assert.ok(pdf.includes('2.  Rip the 30 1/4" × 48" piece at 23 3/4"  »  A Side'), 'the PDF\'s sheet steps: ' + pdf.filter(t => /^\d\./.test(t)));
+  // Printed in black and white, parts are white and waste is hatched, not three tans and greys that print alike; the
+  // piece left over is labelled with its size, as on screen.
+  assert.ok(pdf.includes('65 5/8" × 48"'), 'no size on the piece left over in the PDF');
+  assert.ok(!/0\.92 0\.83 0\.65 rg|0\.91 0\.84 0\.7 rg|0\.8 0\.82 0\.79 rg/.test(raw) && / re W n /.test(raw), 'the PDF fills parts and waste in colours that print as the same grey');
   await view('saw');
   assert.deepEqual(await page.$$eval('#sawOut .cut[data-k] .what', ws => ws.map(w => w.textContent.replace(/^Next /, ''))), [
     'Crosscut the full sheetAcross the grain — measure from the end, cut on the waste side',
