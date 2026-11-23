@@ -44,7 +44,7 @@ Settings per project: saw kerf (⅛″ by default), trimming each board end squa
 
 The layout's cut tree becomes the numbered rip and crosscut steps. Sheet packing is a heuristic, not a proof: it is good, not guaranteed optimal.
 
-Every search stops after a set number of steps, not after a set time, so a project gets the same plan on a fast laptop and a slow phone, and the ticks at the saw stay put. Sheets take the longest: a ¾ plywood job of up to 50 pieces takes about a tenth of a second on a laptop, and about a third of a second (at most three quarters) on a phone five times slower.
+Every search stops after a set number of steps, not after a set time, so a project gets the same plan on a fast laptop and a slow phone, and the ticks at the saw stay put. Sheets take the longest: a ¾ plywood job of up to 50 pieces takes about a tenth of a second on a laptop, and about half a second (at most three quarters) on a phone five times slower.
 
 Each material's plan is kept until something it was worked out from changes: its sizes, prices and offcuts on hand, its parts' sizes, counts and grain, the kerf, and the end trim for boards or the units a sheet's steps are written in. So renaming a part, changing the currency or editing another material doesn't plan it again, and the plan redraws at once.
 
