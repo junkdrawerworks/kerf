@@ -288,6 +288,7 @@ div.sec{margin-top:22px}
 .pitem.on{background:var(--tape-soft)}
 .pitem b{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pitem span{color:var(--ink3);font-size:13px;white-space:nowrap}
+.pitem strong{color:var(--ink);font-weight:600}
 textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surface);color:var(--ink);border:1px solid var(--line2);border-radius:7px;padding:8px}
 .note{color:var(--ink2);font-size:13.5px;margin:0}
 .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(16px);background:var(--ink);color:var(--ground);padding:8px 14px;border-radius:9px;font:600 13.5px var(--body);opacity:0;visibility:hidden;transition:.2s;pointer-events:none;z-index:80;max-width:90vw;text-align:center}
@@ -1400,7 +1401,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       focusAfter([after ? inMat + '.srow[data-sid="' + after.id + '"] [data-a="delstock"]' : null, 'details' + inMat + '[data-a="addstock"]'], kb);
     }
     else if (a === 'delmat') {
-      if (m.parts.some(function (p) { return p.len > 0; }) && armed !== b) { armed = b; armedAt = Date.now(); b.textContent = 'Remove?'; b.style.width = 'auto'; b.style.padding = '0 8px'; b.style.color = 'var(--bad)'; setTimeout(function () { if (armed === b) { armed = null; if (b.isConnected) { b.textContent = '✕'; b.removeAttribute('style'); } } }, 3000); return; }
+      // Armed, it asks in words a screen reader says too, and goes back to ✕ after three seconds.
+      if (m.parts.some(function (p) { return p.len > 0; }) && armed !== b) {
+        var was = b.getAttribute('aria-label');
+        armed = b; armedAt = Date.now(); b.textContent = 'Remove?'; b.setAttribute('aria-label', 'Remove ' + m.name + ' and its parts? Press again to remove'); b.style.width = 'auto'; b.style.padding = '0 8px'; b.style.color = 'var(--bad)';
+        setTimeout(function () { if (armed === b) { armed = null; if (b.isConnected) { b.textContent = '✕'; b.setAttribute('aria-label', was); b.removeAttribute('style'); } } }, 3000);
+        return;
+      }
       if (armed === b && Date.now() - armedAt < 500) return;
       // Focus goes on to the next material's name, or to the buttons that add one.
       var nm = P.materials[P.materials.indexOf(m) + 1];
@@ -1781,8 +1788,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (keep) SCROLL[from] = scrollY;
     DB.tab = t; if (t !== 'list') DB.rtab = t; if (!quiet) save(false, true);
     $('app').dataset.tab = t;
-    document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
-    document.querySelectorAll('#rseg button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === DB.rtab); });
+    // which one is on is said as well as shown: the tab is the page you're on, the switch beside the plan pressed
+    document.querySelectorAll('#tabs button').forEach(function (b) { var on = b.dataset.t === t; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    document.querySelectorAll('#rseg button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === DB.rtab); b.setAttribute('aria-pressed', b.dataset.t === DB.rtab); });
     $('planOut').hidden = DB.rtab !== 'plan'; $('sawOut').hidden = DB.rtab !== 'saw';
     reveal();
     if (keep) scrollTo(0, SCROLL[t] || 0);
@@ -1868,7 +1876,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       '<div class="fld-row"><label class="fld"><span>Saw kerf</span><input id="sKerf" class="mono" autocomplete="off"></label><label class="fld"><span>Trim each board end</span><input id="sTrim" class="mono" autocomplete="off"></label><label class="fld"><span>Keep offcuts over</span><input id="sKeep" class="mono" autocomplete="off"></label><label class="fld"><span>Currency</span><input id="sCur" maxlength="3" autocomplete="off"></label></div>' +
       '<p class="note">Kerf is the wood the blade turns to sawdust — about ⅛″ (3 mm) for most circular and table saw blades, 3/32″ for thin-kerf ones. Trimming the ends squares up factory ends that aren’t quite square; many people skip it for studs.</p></div>');
     function draw() {
-      document.querySelectorAll('#uSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === U); });
+      document.querySelectorAll('#uSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === U); b.setAttribute('aria-pressed', b.dataset.v === U); });
       ['sKerf', 'sTrim', 'sKeep'].forEach(function (id) { $(id).inputMode = U === 'mm' ? 'decimal' : 'text'; });
       $('sKerf').value = fmt(P.kerf); $('sTrim').value = fmt(P.trim || 0); $('sKeep').value = fmt(P.keep); $('sCur').value = CUR;
     }
@@ -1918,7 +1926,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     // delete, two taps
     var del = document.createElement('button'), delAt = 0; del.className = 'btn sec danger sm'; del.type = 'button'; del.textContent = 'Delete this project';
     del.addEventListener('click', function () {
-      if (del.dataset.armed !== '1') { del.dataset.armed = '1'; delAt = Date.now(); del.textContent = 'Tap again to delete “' + P.name + '”'; return; }
+      if (del.dataset.armed !== '1') { del.dataset.armed = '1'; delAt = Date.now(); del.textContent = 'Press again to delete “' + P.name + '”'; return; }
       if (Date.now() - delAt < 500) return; // a double tap only asks
       DB.deleted[P.id] = Math.max(Date.now(), (P.updated || 0) + 1); // so another open window doesn't bring it back
       delete DB.projects[P.id]; DB.order = DB.order.filter(function (id) { return id !== P.id && DB.projects[id]; });
@@ -1935,7 +1943,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var p = DB.projects[id]; if (!p) return '';
       var n = p.materials.reduce(function (a, m) { return a + m.parts.length; }, 0);
       var d = new Date(p.updated), today = d.toDateString() === new Date().toDateString(); // today, the time tells copies apart
-      return '<button class="pitem' + (id === P.id ? ' on' : '') + '" type="button" data-id="' + id + '"><b>' + esc(p.name) + '</b><span>' + plural(n, 'part') + ' · ' + (today ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString()) + '</span></button>';
+      var on = id === P.id; // the open one is marked in words as well as by its colour
+      return '<button class="pitem' + (on ? ' on' : '') + '" type="button" data-id="' + id + '"' + (on ? ' aria-current="true"' : '') + '><b>' + esc(p.name) + '</b><span>' + plural(n, 'part') + ' · ' + (today ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString()) + (on ? ' · <strong>open</strong>' : '') + '</span></button>';
     }).join('');
     host.querySelectorAll('.pitem').forEach(function (b) { b.addEventListener('click', function () { DB.current = b.dataset.id; P = DB.projects[DB.current]; save(true); closeSheet(); applyProject(); }); });
   }

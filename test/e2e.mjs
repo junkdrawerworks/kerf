@@ -1119,6 +1119,36 @@ for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page
   assert.ok(/Leaves a 2 5\/8 ?″ offcut/.test(saw) && !/superscript|subscript|⁄/.test(saw), 'a fraction at the saw reads as its parts:\n' + saw.slice(0, 600));
 }
 
+// Which tab, view and units are on is said, not only shown: the tab you're on is the current page and the switches are
+// pressed. A material's ✕ armed for a second press says so, and says ✕ again once it disarms. In Projects the open
+// project is marked in words, and Delete asks for a press, not a tap.
+{
+  await open(null);
+  const state = () => page.evaluate(() => ({
+    tab: [...document.querySelectorAll('#tabs button[aria-current="page"]')].map(b => b.dataset.t),
+    seg: [...document.querySelectorAll('#rseg button')].map(b => b.dataset.t + ' ' + b.getAttribute('aria-pressed')) }));
+  assert.deepEqual(await state(), { tab: ['plan'], seg: ['plan true', 'saw false'] });
+  await view('saw');
+  assert.deepEqual(await state(), { tab: ['saw'], seg: ['plan false', 'saw true'] });
+  await view('list');
+  assert.deepEqual((await state()).tab, ['list']);
+  await page.click('[data-a="delmat"]');
+  assert.equal(await page.getAttribute('[data-a="delmat"]', 'aria-label'), 'Remove 2×4 and its parts? Press again to remove');
+  await page.waitForFunction(() => document.querySelector('[data-a="delmat"]').textContent === '✕', null, { timeout: 5000 });
+  assert.equal(await page.getAttribute('[data-a="delmat"]', 'aria-label'), 'Remove 2×4', 'a disarmed ✕ still asks');
+  await page.click('#setBtn');
+  const units = () => page.$$eval('#uSeg button', bs => bs.map(b => b.textContent + ' ' + b.getAttribute('aria-pressed')));
+  assert.deepEqual(await units(), ['Inches true', 'Millimeters false']);
+  await page.click('#uSeg button[data-v="mm"]');
+  assert.deepEqual(await units(), ['Inches false', 'Millimeters true']);
+  await page.click('#stx');
+  await page.click('#projBtn');
+  assert.deepEqual(await page.$$eval('#pjList .pitem[aria-current="true"]', bs => bs.map(b => / · open$/.test(b.querySelector('span').textContent))), [true], 'the open project isn’t marked in words');
+  await page.click('#sheet .danger');
+  assert.equal(await page.textContent('#sheet .danger'), 'Press again to delete “Garage shelves (example)”');
+  await page.click('#pjx');
+}
+
 // Ticking a cut from the keyboard keeps focus on that cut, and Start over moves it to the first one.
 await view('saw');
 await page.locator('#sawOut .cut[data-k]').nth(1).focus();
