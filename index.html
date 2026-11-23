@@ -151,6 +151,8 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .stock .chips{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
 .chip{display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--line2);border-radius:999px;padding:2px 8px;font:500 12.5px var(--mono);color:var(--ink2);white-space:nowrap}
 .chip.have{border-style:dashed;color:var(--good)}
+.stock .eg{flex-basis:100%;color:var(--chalk);font-size:12.5px;font-weight:600}
+.stock[open] .eg{display:none}
 .stock-bd{padding:0 12px 12px}
 .srow{display:grid;grid-template-columns:minmax(0,1fr) 88px 110px 30px;gap:6px;align-items:center;padding:3px 0}
 .sheetmat .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 80px 110px 30px}
@@ -621,6 +623,28 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   // What Other board and Other sheet start with.
   function otherPreset(kind, units) { return kind === 'board' ? { name: 'Board', note: '', stock: units === 'mm' ? [[2400, 5]] : [[96, 5]] } : { name: 'Sheet', note: '', stock: units === 'mm' ? [[2440, 1220, 40]] : [[96, 48, 40]] }; }
+  // Your prices: the last ones you set for each kind on the Add material list (a 2×4, ¾ plywood), kept in this browser
+  // apart from the projects, under kerf.prices, as { 'in board 2×4': { '96': 3.98, '120': 5.97 }, 'in sheet ¾ plywood':
+  // { '96x48': 52 } }. A new material of that kind starts at them; one that starts at the examples instead says so
+  // (`examplePrices`) until a price is changed. A material is that kind by its name, as the planner writes it too.
+  var PRICES = 'kerf.prices';
+  function presetOf(m, units) { var n = String(m.name || '').trim().toLowerCase(); return PRESETS[units][m.kind].filter(function (pr) { return pr.name.toLowerCase() === n; })[0] || null; }
+  function sizeKey(m, s) { var k = function (v) { return String(Math.round(v * 1000) / 1000); }; return m.kind === 'sheet' ? k(s.len) + 'x' + k(s.wid) : k(s.len); }
+  function yourPrices() { try { var o = JSON.parse(localStorage.getItem(PRICES)); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } }
+  function rememberPrices(m, units) {
+    var pr = presetOf(m, units); if (!pr) return;
+    var all = yourPrices(), key = units + ' ' + m.kind + ' ' + pr.name, mine = all[key] && typeof all[key] === 'object' ? all[key] : {};
+    m.stock.forEach(function (s) { if (!s.have) mine[sizeKey(m, s)] = +s.price || 0; });
+    all[key] = mine;
+    try { localStorage.setItem(PRICES, JSON.stringify(all)); } catch (e) { } // not kept, a new one starts at the examples
+  }
+  // A new material, from the Add material list: at your prices for its sizes where you've set them, else the examples.
+  function newMaterial(kind, preset, units) {
+    var m = materialFrom(kind, preset, units), pr = presetOf(m, units), mine = pr && yourPrices()[units + ' ' + kind + ' ' + pr.name], got = false;
+    if (mine && typeof mine === 'object') m.stock.forEach(function (s) { var v = mine[sizeKey(m, s)]; if (typeof v === 'number' && v >= 0 && isFinite(v)) { s.price = Math.round(v * 100) / 100; got = true; } });
+    if (!got) m.examplePrices = true;
+    return m;
+  }
   // A sheet part has a width and a grain; a board part may have a width (0 or none being the board's).
   function part(name, qty, len, wid, grain) { var p = { id: uid(), name: name, qty: qty, len: len }; if (wid != null) p.wid = wid; if (grain != null) p.grain = grain !== false; return p; }
   function blankProject(units) { return { id: uid(), name: 'Untitled project', units: units, kerf: units === 'mm' ? 3 / 25.4 : 0.125, trim: 0, edge: 0, keep: units === 'mm' ? 300 / 25.4 : 12, cur: CUR, updated: Date.now(), materials: [], done: {} }; }
@@ -631,6 +655,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     studs.parts = [part('Leg', 4, 72), part('Front & back rail', 8, 48), part('Side rail', 8, 21)];
     var ply = materialFrom('sheet', PRESETS.in.sheet[0], 'in');
     ply.parts = [part('Shelf', 4, 47.75, 23.75, true)];
+    studs.examplePrices = ply.examplePrices = true;
     p.materials = [studs, ply];
     return p;
   }
@@ -674,6 +699,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         fix(m, 'kind', function (v) { return v === 'board' || v === 'sheet'; }, function () { return 'board'; });
         fix(m, 'name', str, toStr('')); fix(m, 'note', str, toStr(''));
         if (m.kind === 'board' && m.wid != null) fix(m, 'wid', num, toNum(0));
+        if (m.examplePrices !== undefined && m.examplePrices !== true) { delete m.examplePrices; lost = true; }
         list(m, 'stock').forEach(function (s) { ['len', 'price', 'have'].concat(m.kind === 'sheet' ? ['wid'] : []).forEach(function (k) { fix(s, k, num, toNum(0)); }); });
         list(m, 'parts').forEach(function (q) {
           fix(q, 'name', str, toStr('')); ['qty', 'len'].concat(m.kind === 'sheet' ? ['wid'] : []).forEach(function (k) { fix(q, k, num, toNum(0)); });
@@ -1564,12 +1590,14 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     for (var s = ''; i >= 0; i = Math.floor(i / 26) - 1) s = String.fromCharCode(65 + i % 26) + s;
     return s;
   }
+  // The sizes and prices under a material, and while its prices are still Kerf's examples, a line saying so (a tap opens
+  // the drawer, and then it hides).
   function stockSummary(m) {
     return m.stock.map(function (s) {
       // in mm a sheet is in mm (1219 × 2438 mm), not 1.219 m×2.438 m or 609.5 mm×1.219 m; a board is as the plan has it
       var dims = m.kind !== 'sheet' ? fmtH(s.len, { ft: true }) : U === 'mm' ? sheetSize(s.wid, s.len) : fmtH(s.wid, { ft: true }) + '×' + fmtH(s.len, { ft: true });
       return '<span class="chip' + (s.have ? ' have' : '') + '">' + dims + ' · ' + (s.have ? s.have + ' on hand' : esc(money(+s.price || 0))) + '</span>';
-    }).join('');
+    }).join('') + (m.examplePrices ? '<span class="eg">Example prices — tap to set yours</span>' : '');
   }
   // A length in a field: in mm the bare number, so the field stays short (the cut list says it's in mm) and a phone can
   // offer its number pad; in inches as a tape reads, with the letter keyboard for the ' and " marks. Either way finely
@@ -1618,7 +1646,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           '<button class="icon" type="button" data-a="delstock" aria-label="Remove the ' + nm + ' size">✕</button></div>';
       });
       h += '<div class="addrow"><button class="lbtn" type="button" data-a="addstock">+ Size to buy</button><button class="lbtn" type="button" data-a="addhave">+ Offcut I already have</button></div>' +
-        '<p class="hint">Prices start as examples — set them to what your store charges. Offcuts you have are free, and used whenever they save buying.</p></div></details></article>';
+        '<p class="hint">Prices start as examples — set them to what your store charges. For each kind under Add material, Kerf remembers your prices in this browser, and the next one you add starts at them. Offcuts you have are free, and used whenever they save buying.</p></div></details></article>';
     });
     // the columns' names, for the fields' names
     h += '<span id="c-qty" hidden>Quantity</span><span id="c-len" hidden>Length</span><span id="c-wid" hidden>Width</span><span id="c-grain" hidden>Keep grain along the length</span>';
@@ -1683,6 +1711,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         // what's left must be one number: "3439.98.00", a new price typed after an old one, is marked and not used
         var n = t.replace(/[^\d.]/g, ''), bad = !!t && (n.split('.').length > 2 || !(parseFloat(n) >= 0));
         v = parseFloat(n); el.classList.toggle('bad', bad); if (!bad) s.price = v >= 0 ? Math.round(v * 100) / 100 : 0; // to the cent, so the shopping list adds up to its total
+        if (!bad) { delete m.examplePrices; rememberPrices(m, U); }
       }
       else if (f === 'have') {
         // "Have 1" on a size you buy means you own one of them, not that it's all there is: the size stays on the list to
@@ -1780,7 +1809,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var b = e.target.closest('button'); if (!b) return;
     if (b.dataset.add) {
       var k = b.dataset.add.split(':'), kind = k[0], pre = k[1] === 'x' ? otherPreset(kind, U) : PRESETS[U][kind][+k[1]];
-      var m = materialFrom(kind, pre, U); P.materials.push(m); touch(); renderList(); resolve(); addPart(m, 'pname');
+      var m = newMaterial(kind, pre, U); P.materials.push(m); touch(); renderList(); resolve(); addPart(m, 'pname');
       // A board or sheet not on the list gets its name first, typed over the plain 'Board' or 'Sheet'.
       if (k[1] === 'x') { var nm = document.querySelector('.mat[data-mid="' + m.id + '"] .mat-name'); nm.focus(); nm.select(); }
       return;
@@ -2627,6 +2656,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           return part(pname, qty, num(r.len, 0, 1200), sheet ? num(r.wid, 0, 1200) : num(r.wid, 0, 1200) || null, sheet ? r.grain !== false : null);
         }) };
       if (!sheet && num(m.wid, 0, 1200)) c.wid = num(m.wid, 0, 1200); // a board's width, for parts ripped narrower
+      if (m.examplePrices === true) c.examplePrices = true; // its prices are still Kerf's examples
       if (!c.stock.length && c.parts.length) { c.stock = materialFrom(c.kind, otherPreset(c.kind, units), units).stock; notes.push(name + ' came with no size to buy, so it has Kerf’s usual ' + (sheet ? 'sheet' : 'board') + '. Check the sizes.'); }
       return c;
     }).filter(function (m) { return m.stock.length; }); // with no size and no parts, there's nothing in it

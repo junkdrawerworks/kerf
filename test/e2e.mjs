@@ -548,6 +548,7 @@ await page.click('#lkx');
     sheet('¾ maple plywood', sizes, [{ name: 'Side', qty: 4, len: 30, wid: 23.25, grain: false }, { name: 'Shelf', qty: 6, len: 22.5, wid: 11.25 }]),
   ], { units: 'mm', kerf: 0.09375, trim: 0.5, edge: 0.25, keep: 18, cur: '€' });
   big.materials[1].note = 'A1 grade';
+  big.materials[1].examplePrices = true;
   big.notes = 'Hinges: 4 × 35 mm cup\n\nEdge band the shelf fronts';
   await open(saved(big));
   await page.click('#projBtn');
@@ -955,6 +956,50 @@ await open(null);
 await view('list');
 assert.ok(await page.isVisible('#unitNote'), 'a phone isn’t told how to type lengths');
 assert.equal(await page.textContent('#unitNote'), 'Lengths in inches — 35 3/4, 2\' 11 3/4", 910mm all work');
+
+// Kerf remembers, in this browser, the last prices you set for each kind on the Add material list, and a new one starts
+// at them. One that starts at the examples says so under its sizes until a price is changed, as the example project's
+// do; the line hides while the drawer is open.
+{
+  await open(saved(project('Bookcase', [])));
+  await view('list');
+  const eg = i => page.$$eval('#mats .mat', (ms, i) => { const e = ms[i].querySelector('details.stock .eg'); return e && e.getClientRects().length ? e.textContent : null; }, i);
+  const prices = i => page.$$eval('#mats .mat', (ms, i) => [...ms[i].querySelectorAll('.srow[data-sid] [data-f="price"]')].map(f => f.value), i);
+  await page.click('.pbtn:text-is("2×4")');
+  assert.equal(await eg(0), 'Example prices — tap to set yours', 'a new 2×4 doesn’t say its prices are examples');
+  assert.deepEqual(await prices(0), ['4.28', '6.38', '7.68', '10.98']);
+  await page.click('#mats .mat >> nth=0 >> details.stock summary');
+  assert.equal(await eg(0), null, 'the line about example prices shows in the open drawer');
+  await page.fill('#mats .mat >> nth=0 >> .srow[data-sid] [data-f="price"] >> nth=0', '3.98');
+  await page.fill('#mats .mat >> nth=0 >> .srow[data-sid] [data-f="price"] >> nth=1', '5,97');
+  await page.click('#mats .mat >> nth=0 >> details.stock summary');
+  assert.equal(await eg(0), null, 'a 2×4 with its prices set still says they’re examples');
+  await page.waitForFunction(() => !(localStorage.getItem('kerf.v1') || '').includes('examplePrices'), null, { timeout: 5000 });
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kerf.prices'))), { 'in board 2×4': { 96: 3.98, 120: 5.97, 144: 7.68, 192: 10.98 } });
+  // The next 2×4 starts at them, in this project and a new one; a 2×6 still starts at the examples.
+  await page.click('.pbtn:text-is("2×4")');
+  assert.deepEqual(await prices(1), ['3.98', '5.97', '7.68', '10.98'], 'a new 2×4 doesn’t start at the prices set last');
+  assert.equal(await eg(1), null, 'a 2×4 at your prices says they’re examples');
+  await page.click('.pbtn:text-is("2×6")');
+  assert.equal(await eg(2), 'Example prices — tap to set yours');
+  await page.click('#projBtn');
+  await page.click('#pjNew');
+  await view('list');
+  await page.click('.pbtn:text-is("2×4")');
+  assert.deepEqual(await prices(0), ['3.98', '5.97', '7.68', '10.98'], 'a 2×4 in a new project doesn’t start at the prices set last');
+  // A sheet is remembered by its size, both ways round.
+  await page.click('.pbtn:text-is("¾ plywood")');
+  await page.click('#mats .mat >> nth=1 >> details.stock summary');
+  await page.fill('#mats .mat >> nth=1 >> .srow[data-sid] [data-f="price"] >> nth=0', '52');
+  await page.click('.pbtn:text-is("¾ plywood")');
+  assert.deepEqual(await prices(2), ['52.00', '34.00', '21.00']);
+  // Other board starts at made-up prices and says so; the example project's materials say so too.
+  await page.click('.pbtn >> text=Other board');
+  assert.equal(await eg(3), 'Example prices — tap to set yours');
+  await open(null);
+  await view('list');
+  assert.deepEqual([await eg(0), await eg(1)], ['Example prices — tap to set yours', 'Example prices — tap to set yours'], 'the example project’s prices aren’t said to be examples');
+}
 
 // Face-frame stock is a preset, and a material not on the list ('Other board') is named first: its name is selected.
 await open(saved(project('Bookcase', [])));
