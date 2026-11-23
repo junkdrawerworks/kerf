@@ -74,6 +74,10 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .fr{font-size:.72em;letter-spacing:0;white-space:nowrap}
 .fr sup,.fr sub{font-size:1em;line-height:0}
 .fr sup{vertical-align:.5em}.fr sub{vertical-align:-.05em}
+/* In a monospace measurement the fraction takes the body font, so it reads 47 ¹⁵⁄₁₆″ without a full-width slash, and
+   sits closer to its whole number than a monospace space would put it. */
+.mono .fr,.cut .meas .fr,.steps .m .fr{font-family:var(--body)}
+.cut .meas .fr,.steps .m .fr{margin-left:-.2em}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .wrap{max-width:1320px;margin:0 auto;padding-inline:16px;padding-block:0 40px}
 /* top bar */
