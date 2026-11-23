@@ -786,6 +786,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (!stocks.some(function (st) { return st.cap + 1e-9 >= p.len; })) { out.errors.push({ pi: pi, part: p }); return; }
       var k = p.len.toFixed(4); if (!byLen[k]) { byLen[k] = { len: p.len, q: [] }; lens.push(byLen[k]); }
       for (var i = 0; i < Math.min(p.qty, 500); i++) byLen[k].q.push(pi);
+      if (p.qty > 500) out.errors.push({ pi: pi, part: p, max: 500 }); // the rest are left out, and the cut list says so
     });
     if (!lens.length) return out;
     lens.sort(function (a, b) { return b.len - a.len; });
@@ -1340,7 +1341,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           var q = r.mat.parts[e.only], have = r.kind === 'sheet' ? 'sheets' : 'boards';
           return 'The ' + have + ' you have can’t hold every part' + (q ? ', and ' + (q.name || 'part ' + letter(e.only)) + ' (' + (r.kind === 'sheet' ? fmtT(q.len) + ' × ' + fmtT(q.wid) : fmtT(q.len)) + ') fits only those. Add a size to buy that fits it.' : '. Add a size to buy.');
         }
-        if (e.max) return (e.part.name || 'A part') + ' × ' + e.part.qty + ': Kerf plans at most ' + e.max + ' of one sheet part — split it into two rows.';
+        if (e.max) return (e.part.name || 'A part') + ' × ' + e.part.qty + ': Kerf plans at most ' + e.max + ' of one ' + r.kind + ' part — split it into two rows.';
         var p = e.part, dims = r.kind === 'sheet' ? fmtT(p.len) + ' × ' + fmtT(p.wid) : fmtT(p.len);
         return (p.name || 'A part') + ' (' + dims + ') won’t fit on any ' + (r.kind === 'sheet' ? 'sheet' : 'board') + ' listed below' + (r.kind === 'sheet' && p.grain ? ' with the grain along its length' : '') + '. Add a bigger size' + (r.kind === 'sheet' && p.grain ? ' or let it turn' : '') + '.';
       });
@@ -1357,7 +1358,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var p = findPart(m, el), s = findStock(m, el), v;
     if (p) {
       if (f === 'pname') p.name = el.value;
-      else if (f === 'qty') { v = parseInt(el.value, 10); el.classList.toggle('bad', !!el.value.trim() && !(v > 0 && v <= 500)); p.qty = v > 0 ? Math.min(v, 500) : 0; }
+      else if (f === 'qty') { v = parseInt(el.value, 10); el.classList.toggle('bad', !!el.value.trim() && !(v > 0 && v <= MAXQTY)); p.qty = v > 0 ? Math.min(v, MAXQTY) : 0; } // past what Kerf plans, the cut list says so
       else if (f === 'len' || f === 'wid') { v = parseLen(el.value); el.classList.toggle('bad', !!el.value.trim() && !(v > 0)); p[f] = v > 0 ? v : 0; }
     } else if (s) {
       if (f === 'slen' || f === 'swid') { v = parseLen(el.value); el.classList.toggle('bad', !(v > 0)); if (v > 0) s[f === 'slen' ? 'len' : 'wid'] = v; }
@@ -1396,7 +1397,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var p = findPart(m, el), s = findStock(m, el);
     if (f === 'len' || f === 'wid' || f === 'slen' || f === 'swid') resolveNow();
     if (p && (f === 'len' || f === 'wid') && p[f] > 0) el.value = fieldLen(p[f]);
-    if (p && f === 'qty' && p.qty > 0 && el.value.trim() !== String(p.qty)) { el.value = p.qty; el.classList.remove('bad'); } // 600 becomes the 500 planned
+    if (p && f === 'qty' && p.qty > 0 && el.value.trim() !== String(p.qty)) { el.value = p.qty; el.classList.remove('bad'); } // 12000 becomes the 9999 kept
     if (s && (f === 'slen' || f === 'swid')) { el.value = fieldLen(f === 'slen' ? s.len : s.wid, { ft: f === 'slen' && m.kind === 'board' }); nameSize(m, s, el.closest('.srow')); }
     if (s && f === 'price' && !s.have) { el.value = (+s.price || 0).toFixed(2); el.classList.remove('bad'); }
   }
@@ -2151,6 +2152,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // sheet starts with rather than losing its parts. A part with no count is one, and a sheet part is grain-locked
   // unless it says otherwise, as in the cut list. Kerf's own files always carry both.
   var LIMITS = { materials: 100, sizes: 50, parts: 1000, name: 200 };
+  // The most of one part a count holds. Kerf plans at most 500 of one board part and 300 of one sheet part, and says
+  // so for a count past that, which keeps what was typed (or what a link or file asked for) rather than quietly less.
+  var MAXQTY = 9999;
   function cleanProject(o, notes) {
     var p = o && (o.project || o);
     if (!p || !Array.isArray(p.materials)) throw new Error('not a project');
@@ -2171,8 +2175,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         stock: first(m.stock, LIMITS.sizes, 'sizes', name).map(function (s) { var o = { id: uid(), len: num(s && s.len, 0, 1200), price: Math.round(num(s && s.price, -1, 1e5) * 100) / 100, have: Math.min(10, Math.max(0, (s && s.have) | 0)) }; if (sheet) o.wid = num(s && s.wid, 0, 1200); return o; }).filter(function (s) { return s.len > 0 && (!sheet || s.wid > 0); }),
         parts: first(m.parts, LIMITS.parts, 'parts', name).map(function (r) {
           r = r || {};
-          var qty = r.qty == null || r.qty === '' ? 1 : Math.min(500, Math.max(0, r.qty | 0));
-          return part(str(r.name, LIMITS.name), qty, num(r.len, 0, 1200), sheet ? num(r.wid, 0, 1200) : null, sheet ? r.grain !== false : null);
+          var qty = r.qty == null || r.qty === '' ? 1 : Math.min(MAXQTY, Math.max(0, r.qty | 0)), most = sheet ? 300 : 500, pname = str(r.name, LIMITS.name);
+          if (qty > most) notes.push((pname || 'A part') + ' × ' + qty + ': Kerf plans at most ' + most + ' of one ' + (sheet ? 'sheet' : 'board') + ' part — split it into two rows.');
+          return part(pname, qty, num(r.len, 0, 1200), sheet ? num(r.wid, 0, 1200) : null, sheet ? r.grain !== false : null);
         }) };
       if (!c.stock.length && c.parts.length) { c.stock = materialFrom(c.kind, otherPreset(c.kind, units), units).stock; notes.push(name + ' came with no size to buy, so it has Kerf’s usual ' + (sheet ? 'sheet' : 'board') + '. Check the sizes.'); }
       return c;

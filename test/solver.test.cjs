@@ -234,6 +234,16 @@ console.log('sheets: more than 300 of one part');
   check(r.errors.length === 1 && r.errors[0].pi === 0 && r.errors[0].max === 300, '400 pegs: the plan doesn’t say it’s short: ' + JSON.stringify(r.errors.map(e => ({ pi: e.pi, max: e.max }))));
 }
 
+console.log('boards: more than 500 of one part');
+{
+  // Kerf plans at most 500 of a board part. A count of 600 used to be cut to 500 in the cut list without a word, so
+  // the shopping list came up short; now the count stays as typed and the plan says it's short.
+  const r = K.solveBoards({ stock: [{ len: 96, price: 2.98, have: 0 }], parts: [{ len: 3, qty: 600 }] }, { kerf: 0.125, trim: 0 });
+  const n = r.items.reduce((a, b) => a + b.pieces.length, 0);
+  check(n === 500, '600 pegs: planned ' + n + ', want 500');
+  check(r.errors.length === 1 && r.errors[0].pi === 0 && r.errors[0].max === 500, '600 pegs: the plan doesn’t say it’s short: ' + JSON.stringify(r.errors.map(e => ({ pi: e.pi, max: e.max }))));
+}
+
 console.log('sheets: shuffling long enough to find the cheaper plan');
 {
   // Two random ¾ plywood jobs, with full, half and quarter sheets for sale as the ¾ plywood preset has, that cost more

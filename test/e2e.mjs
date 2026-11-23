@@ -1972,15 +1972,38 @@ for (const scheme of ['light', 'dark']) {
 }
 await page.emulateMedia({ colorScheme: null, forcedColors: null });
 
-// Kerf plans up to 500 of a part: a bigger quantity is marked, and becomes 500 when you leave the field.
+// Kerf plans up to 500 of a board part. A count of 600 stays 600, and the cut list and the plan say 100 are left out
+// (it used to become 500 when you left the field, without a word, and the plan bought for 500). A count past what a
+// field holds is marked, and becomes 9999 when you leave it. A link or file asking for more says so where it opens.
 await open(saved(project('Pegs', [board('1×2', [{ len: 96, price: 2.98 }], [{ name: 'Peg', qty: 2, len: 3 }])])));
 await view('list');
 {
   const qty = page.locator('.prow[data-pid] input[data-f="qty"]');
   await qty.fill('600');
-  assert.ok(await qty.evaluate(e => e.classList.contains('bad')), '600 isn\'t marked');
+  assert.equal(await qty.evaluate(e => e.classList.contains('bad')), false, '600 is marked as a mistake');
   await qty.blur();
-  assert.deepEqual([await qty.inputValue(), await qty.evaluate(e => e.classList.contains('bad'))], ['500', false]);
+  assert.equal(await qty.inputValue(), '600', 'the count typed was changed');
+  await page.waitForFunction(() => !document.querySelector('.mat .perr').hidden);
+  assert.equal(await page.textContent('.mat .perr'), 'Peg × 600: Kerf plans at most 500 of one board part — split it into two rows.');
+  await view('plan');
+  assert.match(await page.textContent('#planOut .warn'), /1×2 has 1 part with more than 500 pieces — see the cut list/);
+  await view('list');
+  await qty.fill('12000');
+  assert.ok(await qty.evaluate(e => e.classList.contains('bad')), '12000 isn\'t marked');
+  await qty.blur();
+  assert.deepEqual([await qty.inputValue(), await qty.evaluate(e => e.classList.contains('bad'))], ['9999', false]);
+  const many = { kerf: 1, project: { ...MUDROOM.project, name: 'Fence', materials: [
+    { ...MUDROOM.project.materials[0], parts: [{ name: 'Picket', qty: 600, len: 30 }] },
+    { ...MUDROOM.project.materials[1], parts: [{ name: 'Tile', qty: 400, len: 4, wid: 4, grain: false }] }] } };
+  await page.goto('about:blank');
+  await page.goto(base + linkTo(many));
+  await page.waitForSelector('#lkAdd');
+  assert.deepEqual(await page.$$eval('#sheet .note', ns => ns.map(n => n.textContent).slice(0, 2)), [
+    'Picket × 600: Kerf plans at most 500 of one board part — split it into two rows.',
+    'Tile × 400: Kerf plans at most 300 of one sheet part — split it into two rows.'], 'a link asking for more than Kerf plans doesn’t say so');
+  await page.click('#lkAdd');
+  await view('list');
+  assert.deepEqual(await page.$$eval('.prow[data-pid] input[data-f="qty"]', is => is.map(i => i.value)), ['600', '400'], 'the counts from the link were changed');
 }
 
 // The units switch in Settings is as wide as its two buttons, not the whole dialog.
