@@ -79,6 +79,8 @@ const view = (page, t) => page.click(`#tabs button[data-t="${t}"]`).then(() => p
     <div class="og-r">${diagram}</div>${hatch}
   </body></html>`);
   await page.evaluate(() => document.fonts.ready);
+  // the diagram's middle level with the middle of the words beside it, however many rows it has
+  await page.evaluate(() => { const r = document.querySelector('.og-r'), l = document.querySelector('.og-l').getBoundingClientRect(); r.style.top = Math.max(40, Math.round((l.top + l.bottom) / 2 - r.getBoundingClientRect().height / 2)) + 'px'; });
   await page.screenshot({ path: join(root, 'og.png') });
   await page.context().close();
 }
