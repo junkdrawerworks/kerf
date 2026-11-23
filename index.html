@@ -1412,7 +1412,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var j = jobs[i], m = j && P.materials[j.mi], p = m && m.parts[j.pi];
       if (cand) {
         var full = solveMat(cand.clone);
-        if (!full.errors.length && full.cost < j.base - 0.005 && !replays(m, full) && planInputs(m) === j.key) found.push({ mid: m.id, pid: p.id, dim: j.dim, from: p[j.dim], to: cand.to, save: j.base - full.cost, key: j.key });
+        // The boards the shaved part sits on with less than a sixteenth to spare, by length, for the tip to say so.
+        var tight = full.kind === 'board' ? full.items.filter(function (b) { return b.cap - b.need < 1 / 16 && b.pieces.some(function (q) { return q.pi === j.pi; }); }) : [];
+        if (!full.errors.length && full.cost < j.base - 0.005 && !replays(m, full) && planInputs(m) === j.key) found.push({ mid: m.id, pid: p.id, dim: j.dim, from: p[j.dim], to: cand.to, save: j.base - full.cost, key: j.key, tight: tight.length, lens: tight.map(function (b) { return b.stock.len; }).filter(function (l, k, a) { return a.indexOf(l) === k; }).sort(function (a, b) { return a - b; }) });
         cand = null; d = deltas.length;
       } else {
         var v = p ? p[j.dim] - deltas[d] : 0;
@@ -1832,7 +1834,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var shown = TIPS.filter(tipFor).slice(0, 3);
     el.innerHTML = shown.map(function (t, i) {
       var at = tipFor(t);
-      return '<div class="tip"><span class="tag">TIP</span><span id="tip' + i + '">Make <b>' + esc(at.p.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and you spend <b>' + esc(money(t.save)) + ' less</b> on ' + esc(at.m.name) + '.</span><button class="btn sm sec" type="button" data-tip="' + i + '" aria-describedby="tip' + i + '">Use ' + esc(fmtT(t.to)) + '</button></div>';
+      return '<div class="tip"><span class="tag">TIP</span><span id="tip' + i + '">Make <b>' + esc(at.p.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and you spend <b>' + esc(money(t.save)) + ' less</b> on ' + esc(at.m.name) + (t.tight ? ', and it leaves no spare length on the ' + t.lens.map(function (l) { return fmtH(l, { ft: true }); }).join(' and ') + (t.tight > 1 ? ' boards' : ' board') : '') + '.</span><button class="btn sm sec" type="button" data-tip="' + i + '" aria-describedby="tip' + i + '">Use ' + esc(fmtT(t.to)) + '</button></div>';
     }).join('');
     el.querySelectorAll('[data-tip]').forEach(function (b) {
       var t = shown[+b.dataset.tip]; // the tip this button shows, whatever the next check finds

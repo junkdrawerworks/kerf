@@ -527,6 +527,11 @@ console.log('tips that are worth taking');
   // The example's 2×4s: a rail at 47 15/16" fills an 8' board two at a time, $4.12 less.
   let p = proj('board', LUMBER, [['Leg', 4, 72], ['Front & back rail', 8, 48], ['Side rail', 8, 21]]), got = tipper()(p);
   check(got.tips.length === 1 && got.tips[0].pid === 'p1' && got.tips[0].to === 47.9375 && Math.abs(got.tips[0].save - 4.12) < 0.005, 'the example’s tip: ' + JSON.stringify(got.tips));
+  // Two of those rails and the kerf between them are exactly 96", so the tip says it leaves no spare length on the 8'
+  // boards. Three 31 7/8" slats leave 1/8" on theirs, so their tip doesn't.
+  check(got.tips[0] && got.tips[0].tight === 4 && JSON.stringify(got.tips[0].lens) === '[96]', 'the example’s tip doesn’t note the 8\' boards it leaves no spare length on: ' + JSON.stringify(got.tips[0]));
+  got = tipper()(proj('board', [[96, 4.28]], [['Slat', 3, 32]]));
+  check(got.tips.length === 1 && got.tips[0].to === 31.875 && got.tips[0].tight === 0, 'three slats: ' + JSON.stringify(got.tips));
   // The workbench: 40 pieces in 11 lengths, too many for the exact search. Kerf's plan is $67.52, and the parts as they
   // are fit 14 8' boards and one 10' for $66.30, so shaving one never needed to promise $66.72.
   p = proj('board', LUMBER, [['Leg', 4, 33.25], ['Long apron', 2, 72], ['Short apron', 2, 24.25], ['Top frame long', 2, 72], ['Top frame short', 2, 27.25], ['Top joist', 8, 24.25],

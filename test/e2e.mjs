@@ -1629,7 +1629,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   };
   await open(null);
   await page.waitForSelector('[data-tip]', { timeout: 30000 });
-  assert.ok(shown(await page.textContent('#tips')).includes(RAIL_TIP + ' and you spend $4.12 less on 2×4.'), 'the tip’s words: ' + shown(await page.textContent('#tips')));
+  assert.ok(shown(await page.textContent('#tips')).includes(RAIL_TIP + ' and you spend $4.12 less on 2×4, and it leaves no spare length on the 8′ boards.'), 'the tip’s words: ' + shown(await page.textContent('#tips')));
   const applied = await tipsAfterTap(() => page.click('[data-tip]'));
   assert.equal(await page.inputValue('.prow[data-pid] >> nth=1 >> [data-f="len"]'), '47 15/16"');
   // The toast says what the tip saved, as the tip did, with the length kept on one line.
