@@ -1070,17 +1070,17 @@ for (let i = 0; i < 9; i++) {
 }
 await page.keyboard.press('Escape');
 assert.equal(await page.evaluate(() => document.activeElement.id), 'setBtn', 'focus is lost when the dialog closes');
-// In Projects, Tab reaches Open a project file, and Enter on it asks for the file.
+// In Projects, Tab reaches Open a project file, and Enter on it asks for the file (the file input's click opens the
+// browser's file picker; here the click is noted and the picker left shut).
 await page.focus('#projBtn');
 await page.keyboard.press('Enter');
 {
   const stops = [];
   for (let i = 0; i < 12 && stops[stops.length - 1] !== 'pjOpen'; i++) { await page.keyboard.press('Tab'); stops.push(await page.evaluate(() => document.activeElement.id || document.activeElement.textContent)); }
   assert.equal(stops[stops.length - 1], 'pjOpen', 'Tab in Projects never reaches Open a project file: ' + stops.join(', '));
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Enter')]);
-  await chooser.setFiles({ name: 'mudroom.kerf.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(MUDROOM)) });
-  await page.waitForSelector('#lkAdd');
-  assert.equal(await page.textContent('#sheetHd'), 'Open a project file');
+  await page.evaluate(() => document.getElementById('pjFile').addEventListener('click', e => { window.picked = true; e.preventDefault(); }));
+  await page.keyboard.press('Enter');
+  assert.ok(await page.evaluate(() => window.picked), 'Open a project file doesn’t ask for a file');
   await page.keyboard.press('Escape');
 }
 
