@@ -114,6 +114,8 @@ await open(null);
 await page.evaluate(() => document.fonts.ready);
 assert.equal(await page.textContent('.total'), '$100.64');
 assert.match(await page.textContent('.facts'), /8\s*boards\s*1\s*sheet\s*26\s*cuts/);
+// The 2×4s' plan is proved the cheapest (the exact search finished), and the total says so for them; the plywood's isn't.
+assert.equal(await page.textContent('.proved'), '2×4: cheapest possible');
 await fitsPhone('plan');
 await view('list');
 await fitsPhone('cut list');
@@ -1092,6 +1094,7 @@ assert.deepEqual(await source.locator('option').evaluateAll(os => os.map(o => o.
 {
   await open(saved(project('On hand', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }, { len: 48, wid: 24, price: 21 }], [{ name: 'Side', qty: 6, len: 72, wid: 11.25 }])])));
   assert.equal(await page.textContent('.total'), '$116.00');
+  assert.equal(await page.locator('.proved').count(), 0, 'a sheet plan says it’s the cheapest possible');
   await view('list');
   await page.click('details.stock summary');
   await page.selectOption('.srow[data-sid] select >> nth=0', '1');
@@ -1126,6 +1129,7 @@ assert.deepEqual(await source.locator('option').evaluateAll(os => os.map(o => o.
 // show as $12.86 and $16.46 over a total of $29.31.
 {
   await open(saved(project('Cents', [board('2×4', [{ len: 96, price: 4 }], [{ name: 'Leg', qty: 3, len: 90 }]), board('1×4 board', [{ len: 96, price: 5 }], [{ name: 'Slat', qty: 3, len: 90 }])])));
+  assert.equal(await page.textContent('.proved'), 'Cheapest possible', 'two board materials, both proved');
   await view('list');
   for (const [i, typed] of [[0, '4.285'], [1, '5.485']]) {
     await page.click(`details.stock >> nth=${i}`);

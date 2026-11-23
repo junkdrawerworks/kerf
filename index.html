@@ -167,6 +167,7 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .total{font:800 56px/.9 var(--disp);letter-spacing:.01em;font-variant-numeric:tabular-nums}
 .total .cur{font-size:.55em;vertical-align:.55em;margin-right:2px;color:var(--ink2)}
 .total-lbl{font:700 11px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin-top:6px}
+.proved{font:500 12px var(--body);color:var(--ink3);margin-top:4px;max-width:16em}
 .facts{display:flex;flex-wrap:wrap;gap:6px 18px;align-self:center}
 .fact b{display:block;font:600 19px var(--mono);font-variant-numeric:tabular-nums}
 .fact span{font:600 11px var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
@@ -1745,7 +1746,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       return;
     }
     W.plan = planWidth();
-    var h = '<h2 class="sr">Plan</h2><div class="summary"><div><div class="total"><span class="cur">' + esc(CUR) + '</span>' + (Math.round(r.cost * 100) / 100).toFixed(2) + '</div><div class="total-lbl">to buy</div></div><div class="facts">';
+    // Board materials whose plan the exact search proved the cheapest, with nothing left out. Sheets are never proved,
+    // and say nothing, so nothing reads as a warning.
+    var planned = r.mats.filter(function (m) { return m.items.length; }), proved = planned.filter(function (m) { return m.kind === 'board' && m.exact && !m.errors.length; });
+    var best = !proved.length ? '' : proved.length === planned.length ? 'Cheapest possible' : esc(andList(proved.map(function (m) { return m.mat.name; }))) + ': cheapest possible';
+    var h = '<h2 class="sr">Plan</h2><div class="summary"><div><div class="total"><span class="cur">' + esc(CUR) + '</span>' + (Math.round(r.cost * 100) / 100).toFixed(2) + '</div><div class="total-lbl">to buy</div>' + (best ? '<div class="proved">' + best + '</div>' : '') + '</div><div class="facts">';
     if (r.boards) h += '<div class="fact"><b>' + r.boards + '</b><span>' + (r.boards === 1 ? 'board' : 'boards') + '</span></div>';
     if (r.sheets) h += '<div class="fact"><b>' + r.sheets + '</b><span>' + (r.sheets === 1 ? 'sheet' : 'sheets') + '</span></div>';
     h += '<div class="fact"><b>' + r.cuts + '</b><span>' + (r.cuts === 1 ? 'cut' : 'cuts') + '</span></div>';
