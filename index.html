@@ -41,6 +41,8 @@
   --gl:max(16px,env(safe-area-inset-left,0px));--gr:max(16px,env(safe-area-inset-right,0px));
   --shadow:0 1px 0 rgba(28,31,34,.04),0 6px 18px -12px rgba(28,31,34,.28);
 }
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .dg-under{stroke:var(--ground)}}
+:root[data-theme="dark"] .dg-under{stroke:var(--ground)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   color-scheme:dark;
   --ground:#121416;--grid:#1B1E21;--surface:#1A1D20;--surface2:#212529;--sunk:#16181B;
@@ -204,6 +206,8 @@ div.sec{margin-top:22px}
 .dg-scrap{fill:url(#hatch)}
 .dg-hatch{stroke:var(--scrap2);stroke-width:1.2}
 .dg-hbg{fill:var(--scrap)}
+/* In dark mode the chalk lines get a dark edge, since the pale blue is about as light as the wood under it. */
+.dg-under{stroke:none;stroke-width:3.5}.dg-under.cu{stroke-dasharray:5 3}
 .dg-kerf{stroke:var(--chalk);stroke-width:2}
 .dg-cut{stroke:var(--chalk);stroke-width:1.6;stroke-dasharray:5 3}
 .dg-num{fill:var(--chalk)}
@@ -229,15 +233,15 @@ div.sec{margin-top:22px}
 .saw-bar .prog i{display:block;height:100%;background:var(--good);transition:width .25s}
 .saw-bar b{font:600 15px var(--mono)}.saw-bar b small{font:500 14px var(--body);color:var(--ink2)}
 .stk{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px;overflow:hidden}
-.stk.done{opacity:.62}
 .stk-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface2)}
 .stk-hd b{font:700 16px var(--body)}
 .stk-hd span{color:var(--ink2);font-size:13.5px}
 .stk-hd .n{margin-left:auto;font:600 13px var(--mono);color:var(--ink3)}
+.stk.done .stk-hd .n{color:var(--good);font-weight:700}
 .cut{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 14px;min-height:56px}
 .cut:last-child{border-bottom:0}
-.cut .box{flex:none;width:28px;height:28px;border-radius:7px;border:2px solid var(--line2);display:flex;align-items:center;justify-content:center;color:transparent;font-weight:800}
-.cut[aria-checked="true"] .box{background:var(--good);border-color:var(--good);color:#fff}
+.cut .box{flex:none;width:28px;height:28px;border-radius:7px;border:2px solid var(--ink3);display:flex;align-items:center;justify-content:center;color:transparent;font-weight:800}
+.cut[aria-checked="true"] .box{background:var(--good);border-color:var(--good);color:var(--surface)}
 .cut[aria-checked="true"] .what{text-decoration:line-through;text-decoration-color:var(--ink3);color:var(--ink3)}
 .cut .meas{flex:none;min-width:92px;font:600 22px var(--mono);font-variant-numeric:tabular-nums;color:var(--ink)}
 .cut .what{flex:1;min-width:0;font-size:14.5px;color:var(--ink2)}
@@ -1484,7 +1488,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         s += '<rect class="dg-part" x="' + cx.toFixed(1) + '" y="' + (y + 0.5) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmt(p.len)) + '</title></rect>';
         if (lbl) s += '<text class="dg-lbl" x="' + (cx + w / 2).toFixed(1) + '" y="' + (y + rowH / 2) + '" text-anchor="middle">' + esc(lbl) + '</text>';
         cx += w;
-        if (k < b.pieces.length - 1 || !lastIsLeft(b)) { s += '<line class="dg-kerf" x1="' + (cx + P.kerf * px / 2).toFixed(1) + '" y1="' + (y - 3) + '" x2="' + (cx + P.kerf * px / 2).toFixed(1) + '" y2="' + (y + rowH + 3) + '"/>'; cx += P.kerf * px; }
+        if (k < b.pieces.length - 1 || !lastIsLeft(b)) { var kx = (cx + P.kerf * px / 2).toFixed(1), ends = '" y1="' + (y - 3) + '" x2="' + kx + '" y2="' + (y + rowH + 3) + '"/>'; s += '<line class="dg-under" x1="' + kx + ends + '<line class="dg-kerf" x1="' + kx + ends; cx += P.kerf * px; }
       });
       var restW = x + bw - cx - b.trim * px;
       if (restW > 0.5) {
@@ -1534,7 +1538,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       sh.steps.forEach(function (st, k) {
         if (st.type === 'none') return;
         var l = st.line, x1 = ox + l[0] * px, y1 = oy + l[1] * px, x2 = ox + l[2] * px, y2 = oy + l[3] * px;
-        s += '<line class="dg-cut" x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>';
+        var xy = '" x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>';
+        s += '<line class="dg-under cu' + xy + '<line class="dg-cut' + xy;
       });
       var cuts = sh.steps.filter(function (st) { return st.type !== 'none'; }).map(function (st) { var l = st.line; return [ox + l[0] * px, oy + l[1] * px, ox + l[2] * px, oy + l[3] * px]; });
       var nums = placeNums(cuts, boxes, [ox, oy, ox + sh.L * px, oy + H], 8, 6);
@@ -1640,7 +1645,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var n = 0, d = 0;
       t.cuts.forEach(function (c, ci) { if (!c.noCut) { n++; if (ticked(t, ci)) d++; } });
       total += n; done += d;
-      h += '<div class="stk' + (n && d === n ? ' done' : '') + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span>' + (n ? '<span class="n">' + d + '/' + n + '</span>' : '') + '</div>';
+      h += '<div class="stk' + (n && d === n ? ' done' : '') + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span>' + (n ? '<span class="n">' + d + '/' + n + (d === n ? ' ✓' : '') + '</span>' : '') + '</div>';
       t.cuts.forEach(function (c, ci) {
         if (c.noCut) { h += '<div class="cut note"><span>' + c.note + '</span></div>'; return; }
         var on = ticked(t, ci), k = t.mid + '/' + t.ii + '.' + ci, nx = !on && !next;

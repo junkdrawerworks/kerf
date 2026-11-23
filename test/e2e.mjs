@@ -1294,6 +1294,31 @@ for (const scheme of ['light', 'dark']) {
 }
 await page.emulateMedia({ colorScheme: null });
 
+// At the saw, in light and dark: an empty tick box's edge stands out 3:1 from its card (WCAG 2.2, 1.4.11 Non-text
+// Contrast) and a tick 4.5:1 from its green; a finished board isn't faded, its struck-through cuts still read 4.5:1;
+// and in dark mode the pale blue saw cuts in the drawings get a dark edge against the wood.
+await open(null);
+await view('saw');
+for (let i = 0; i < 3; i++) await cuts.nth(i).click();
+for (const scheme of ['light', 'dark']) {
+  await page.emulateMedia({ colorScheme: scheme });
+  const c = await page.evaluate(() => {
+    const rgb = s => s.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
+    const lum = s => { const c = rgb(s).map(x => x / 255).map(x => x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const cs = s => getComputedStyle(document.querySelector(s)), card = cs('.stk').backgroundColor;
+    const on = cs('.cut[aria-checked="true"] .box');
+    return { box: ratio(cs('.cut[aria-checked="false"] .box').borderTopColor, card), tick: ratio(on.color, on.backgroundColor), fade: cs('.stk.done').opacity,
+      struck: ratio(cs('.stk.done .cut .what').color, card), under: cs('.dg-under').stroke };
+  });
+  assert.ok(c.box >= 3, `an empty tick box's edge is ${c.box.toFixed(2)}:1 in ${scheme}`);
+  assert.ok(c.tick >= 4.5, `a tick is ${c.tick.toFixed(2)}:1 on its green in ${scheme}`);
+  assert.equal(c.fade, '1', `a finished board is faded in ${scheme}`);
+  assert.ok(c.struck >= 4.5, `a finished cut reads ${c.struck.toFixed(2)}:1 in ${scheme}`);
+  assert.equal(c.under === 'none', scheme === 'light', `the dark edge under the saw cuts in ${scheme}: ${c.under}`);
+}
+await page.emulateMedia({ colorScheme: null });
+
 // Kerf plans up to 500 of a part: a bigger quantity is marked, and becomes 500 when you leave the field.
 await open(saved(project('Pegs', [board('1×2', [{ len: 96, price: 2.98 }], [{ name: 'Peg', qty: 2, len: 3 }])])));
 await view('list');
