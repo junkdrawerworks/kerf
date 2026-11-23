@@ -1319,6 +1319,23 @@ for (const scheme of ['light', 'dark']) {
 }
 await page.emulateMedia({ colorScheme: null });
 
+// Forced colours (Windows High Contrast) drop backgrounds and recolour text: an empty tick box still shows no tick, and
+// a ticked box, the tab that's on and a locked grain stand out from the page in the system's highlight colour.
+await open(saved(project('Forced colours', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Shelf', qty: 2, len: 30, wid: 20 }, { name: 'Back', qty: 1, len: 30, wid: 20, grain: false }])])));
+await view('saw');
+await cuts.nth(0).click();
+for (const scheme of ['light', 'dark']) {
+  await page.emulateMedia({ colorScheme: scheme, forcedColors: 'active' });
+  const f = await page.evaluate(() => {
+    const rgb = s => s.match(/\d+(\.\d+)?/g).slice(0, 3).join(','), cs = s => getComputedStyle(document.querySelector(s)), page = rgb(cs('body').backgroundColor);
+    const off = cs('.cut[aria-checked="false"] .box'), on = cs('.cut[aria-checked="true"] .box');
+    return { hidden: rgb(off.color) === rgb(cs('.stk').backgroundColor), edge: rgb(off.borderTopColor) !== rgb(cs('.stk').backgroundColor), ticked: rgb(on.backgroundColor) !== page,
+      tab: rgb(cs('#tabs button.on').backgroundColor) !== page, grain: rgb(cs('.grain[aria-pressed="true"]').backgroundColor) !== rgb(cs('.grain[aria-pressed="false"]').backgroundColor) };
+  });
+  assert.deepEqual(f, { hidden: true, edge: true, ticked: true, tab: true, grain: true }, `under forced colours in ${scheme}`);
+}
+await page.emulateMedia({ colorScheme: null, forcedColors: null });
+
 // Kerf plans up to 500 of a part: a bigger quantity is marked, and becomes 500 when you leave the field.
 await open(saved(project('Pegs', [board('1×2', [{ len: 96, price: 2.98 }], [{ name: 'Peg', qty: 2, len: 3 }])])));
 await view('list');

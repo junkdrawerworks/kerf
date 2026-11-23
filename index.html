@@ -342,6 +342,17 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
 .jd-foot a:hover{color:var(--ink)}
 .noscript{margin:18px 0 0}
 @media print{.jd-foot{display:none}}
+/* Forced colours (Windows High Contrast) drop backgrounds and recolour text, so a tick, the grain lock and the tab
+   that's on would all look like the rest: they show their state in the system's highlight colours instead. */
+@media (forced-colors:active){
+  .cut[aria-checked="false"] .box{color:Canvas;border-color:CanvasText}
+  .cut[aria-checked="true"] .box{forced-color-adjust:none;background:Highlight;color:HighlightText;border-color:Highlight}
+  .grain[aria-pressed="true"],.seg button.on,.tabs button.on{forced-color-adjust:none;background:Highlight;color:HighlightText;border-color:Highlight}
+  .cut.next{border-left:5px solid Highlight;padding-left:9px}
+  .cut .nx{border:1px solid CanvasText}
+  .saw-bar .prog{border:1px solid CanvasText}
+  .saw-bar .prog i{forced-color-adjust:none;background:Highlight}
+}
 </style>
 </head>
 <body>
