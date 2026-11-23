@@ -126,6 +126,11 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .parts{padding:0 10px 4px}
 .prow{display:grid;grid-template-columns:22px minmax(0,1fr) 52px 104px 30px;gap:6px;align-items:center;padding:3px 0}
 .sheetmat .prow{grid-template-columns:22px minmax(0,1fr) 46px 92px 92px 30px 30px}
+.bwmat .prow{grid-template-columns:22px minmax(0,1fr) 52px 104px 92px 30px}
+.mat:not(.bwmat) .pw{display:none}
+.bw{display:flex;align-items:center;gap:10px;padding:8px 0 0;font:600 11px var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.bw input{width:104px;padding:5px 7px;font-size:16px;letter-spacing:0;text-transform:none}
+.bw+.hint{margin:4px 0 8px}
 .prow.head{font:600 11px var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);padding:2px 0 4px}
 .prow input{width:100%;padding:6px 7px}
 .prow .pq{text-align:center}
@@ -331,6 +336,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .icon,.grain{width:44px;height:44px}
   .prow{grid-template-columns:22px minmax(0,1fr) 52px 104px 44px}
   .sheetmat .prow{grid-template-columns:22px minmax(0,1fr) 46px 92px 92px 46px 44px}
+  .bwmat .prow{grid-template-columns:22px minmax(0,1fr) 52px 104px 92px 44px}
   .sheetmat .prow .grain{justify-self:start}
   .srow{grid-template-columns:minmax(0,1fr) 88px 110px 44px}
   .sheetmat .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 80px 110px 44px}
@@ -352,8 +358,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   /* A part takes two lines: its letter and name across the top, with its ✕ (and a sheet part's grain lock), then its
      quantity under the letter, and its length (and width). */
   .plet{width:20px}
-  .prow,.sheetmat .prow{grid-template-columns:20px 26px minmax(0,1fr) minmax(0,1fr);gap:6px 4px;padding:6px 0}
-  .prow.head,.sheetmat .prow.head{padding:2px 0 0;gap:2px 4px}
+  .prow,.sheetmat .prow,.bwmat .prow{grid-template-columns:20px 26px minmax(0,1fr) minmax(0,1fr);gap:6px 4px;padding:6px 0}
+  .prow.head,.sheetmat .prow.head,.bwmat .prow.head{padding:2px 0 0;gap:2px 4px}
   .prow>:nth-child(2){grid-area:1/2/2/-1;justify-self:start;width:calc(100% - 48px)}
   .prow>:nth-child(3){grid-area:2/1/3/3}
   .prow>:nth-child(4){grid-area:2/3/3/-1}
@@ -362,6 +368,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .sheetmat .prow>:nth-child(4){grid-area:2/3}
   .sheetmat .prow>:nth-child(5){grid-area:2/4}
   .sheetmat .prow>:nth-child(6){grid-area:1/4;justify-self:end;margin-right:52px}
+  .bwmat .prow>:nth-child(4){grid-area:2/3}
+  .bwmat .prow>:nth-child(5){grid-area:2/4}
   /* A size to buy takes two lines too: its length (and width), then its price, where it comes from and its ✕. */
   .srow,.sheetmat .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px;gap:6px}
   .srow>:nth-child(1){grid-area:1/1}
@@ -540,19 +548,20 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function money(v) { return CUR + (Math.round(v * 100) / 100).toFixed(2); }
 
   // ---------- presets ----------
-  // Stock: boards [length, price]; sheets [length along the grain, width, price]. Prices are examples.
+  // Stock: boards [length, price], with the board's width (`wid`, its actual width); sheets [length along the grain, width,
+  // price]. Prices are examples.
   var PRESETS = {
     in: {
       board: [
-        { name: '2×4', note: '1½ × 3½ in', stock: [[96, 4.28], [120, 6.38], [144, 7.68], [192, 10.98]] },
-        { name: '2×6', note: '1½ × 5½ in', stock: [[96, 7.18], [120, 8.98], [144, 10.78], [192, 14.98]] },
-        { name: '2×8', note: '1½ × 7¼ in', stock: [[96, 9.48], [120, 11.98], [144, 14.28], [192, 19.48]] },
-        { name: '4×4', note: '3½ × 3½ in', stock: [[96, 11.98], [120, 15.48]] },
-        { name: '1×2 board', note: '¾ × 1½ in', stock: [[72, 2.38], [96, 2.98]] },
-        { name: '1×3 board', note: '¾ × 2½ in', stock: [[72, 3.18], [96, 4.18]] },
-        { name: '1×4 board', note: '¾ × 3½ in', stock: [[72, 4.18], [96, 5.48]] },
-        { name: '1×6 board', note: '¾ × 5½ in', stock: [[72, 6.28], [96, 8.28]] },
-        { name: '1×12 board', note: '¾ × 11¼ in', stock: [[72, 17.98], [96, 23.98]] }
+        { name: '2×4', note: '1½ × 3½ in', wid: 3.5, stock: [[96, 4.28], [120, 6.38], [144, 7.68], [192, 10.98]] },
+        { name: '2×6', note: '1½ × 5½ in', wid: 5.5, stock: [[96, 7.18], [120, 8.98], [144, 10.78], [192, 14.98]] },
+        { name: '2×8', note: '1½ × 7¼ in', wid: 7.25, stock: [[96, 9.48], [120, 11.98], [144, 14.28], [192, 19.48]] },
+        { name: '4×4', note: '3½ × 3½ in', wid: 3.5, stock: [[96, 11.98], [120, 15.48]] },
+        { name: '1×2 board', note: '¾ × 1½ in', wid: 1.5, stock: [[72, 2.38], [96, 2.98]] },
+        { name: '1×3 board', note: '¾ × 2½ in', wid: 2.5, stock: [[72, 3.18], [96, 4.18]] },
+        { name: '1×4 board', note: '¾ × 3½ in', wid: 3.5, stock: [[72, 4.18], [96, 5.48]] },
+        { name: '1×6 board', note: '¾ × 5½ in', wid: 5.5, stock: [[72, 6.28], [96, 8.28]] },
+        { name: '1×12 board', note: '¾ × 11¼ in', wid: 11.25, stock: [[72, 17.98], [96, 23.98]] }
       ],
       sheet: [
         { name: '¾ plywood', note: '23/32 in actual', stock: [[96, 48, 58.00], [48, 48, 34.00], [48, 24, 21.00]] },
@@ -563,10 +572,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     },
     mm: {
       board: [
-        { name: '45×90', note: 'framing', stock: [[2400, 6.50], [3000, 8.10], [3600, 9.70], [4800, 13.00]] },
-        { name: '45×140', note: 'framing', stock: [[2400, 10.40], [3600, 15.60], [4800, 20.80]] },
-        { name: '19×90', note: 'dressed', stock: [[1800, 5.20], [2400, 6.90]] },
-        { name: '19×140', note: 'dressed', stock: [[1800, 8.10], [2400, 10.80]] }
+        { name: '45×90', note: 'framing', wid: 90, stock: [[2400, 6.50], [3000, 8.10], [3600, 9.70], [4800, 13.00]] },
+        { name: '45×140', note: 'framing', wid: 140, stock: [[2400, 10.40], [3600, 15.60], [4800, 20.80]] },
+        { name: '19×90', note: 'dressed', wid: 90, stock: [[1800, 5.20], [2400, 6.90]] },
+        { name: '19×140', note: 'dressed', wid: 140, stock: [[1800, 8.10], [2400, 10.80]] }
       ],
       sheet: [
         { name: '18 mm plywood', note: '', stock: [[2440, 1220, 62.00], [1220, 1220, 36.00], [1220, 610, 22.00]] },
@@ -578,14 +587,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function toIn(v, units) { return units === 'mm' ? v / 25.4 : v; }
   function materialFrom(kind, preset, units) {
     return {
-      id: uid(), kind: kind, name: preset.name, note: preset.note || '',
+      id: uid(), kind: kind, name: preset.name, note: preset.note || '', wid: kind === 'board' ? toIn(preset.wid || 0, units) : undefined,
       stock: preset.stock.map(function (s) { return kind === 'board' ? { id: uid(), len: toIn(s[0], units), price: s[1], have: 0 } : { id: uid(), len: toIn(s[0], units), wid: toIn(s[1], units), price: s[2], have: 0 }; }),
       parts: []
     };
   }
   // What Other board and Other sheet start with.
   function otherPreset(kind, units) { return kind === 'board' ? { name: 'Board', note: '', stock: units === 'mm' ? [[2400, 5]] : [[96, 5]] } : { name: 'Sheet', note: '', stock: units === 'mm' ? [[2440, 1220, 40]] : [[96, 48, 40]] }; }
-  function part(name, qty, len, wid, grain) { var p = { id: uid(), name: name, qty: qty, len: len }; if (wid != null) { p.wid = wid; p.grain = grain !== false; } return p; }
+  // A sheet part has a width and a grain; a board part may have a width (0 or none being the board's).
+  function part(name, qty, len, wid, grain) { var p = { id: uid(), name: name, qty: qty, len: len }; if (wid != null) p.wid = wid; if (grain != null) p.grain = grain !== false; return p; }
   function blankProject(units) { return { id: uid(), name: 'Untitled project', units: units, kerf: units === 'mm' ? 3 / 25.4 : 0.125, trim: 0, edge: 0, keep: units === 'mm' ? 300 / 25.4 : 12, cur: CUR, updated: Date.now(), materials: [], done: {} }; }
   function sampleProject() {
     var p = blankProject('in');
@@ -635,10 +645,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       list(p, 'materials').forEach(function (m) {
         fix(m, 'kind', function (v) { return v === 'board' || v === 'sheet'; }, function () { return 'board'; });
         fix(m, 'name', str, toStr('')); fix(m, 'note', str, toStr(''));
+        if (m.kind === 'board' && m.wid != null) fix(m, 'wid', num, toNum(0));
         list(m, 'stock').forEach(function (s) { ['len', 'price', 'have'].concat(m.kind === 'sheet' ? ['wid'] : []).forEach(function (k) { fix(s, k, num, toNum(0)); }); });
         list(m, 'parts').forEach(function (q) {
           fix(q, 'name', str, toStr('')); ['qty', 'len'].concat(m.kind === 'sheet' ? ['wid'] : []).forEach(function (k) { fix(q, k, num, toNum(0)); });
           if (m.kind === 'sheet') fix(q, 'grain', function (v) { return typeof v === 'boolean'; }, function (v) { return !!v; });
+          else if (q.wid != null) fix(q, 'wid', num, toNum(0));
         });
         ids(m.stock); ids(m.parts);
       });
@@ -1155,10 +1167,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function freeArea(sh) { return sh.free.reduce(function (a, f) { return Math.max(a, f.w * f.h); }, 0); }
   function evalSheets(sheets) { var cost = 0; sheets.forEach(function (s) { cost += s.st.price; }); return cost; }
   // With `cfg.edge`, each sheet's factory edges are trimmed off first: it's planned that much smaller each way, and the
-  // layout handed back sits inside the trimmed edges of the full sheet (`L`, `W`), its `edge` saying how far in.
+  // layout handed back sits inside the trimmed edges of the full sheet (`L`, `W`), its `edge` saying how far in. With
+  // `cfg.ends` (a board ripped into parts, planned this way), only its two ends are trimmed, that much each (`ends`).
   function solveSheets(mat, cfg, quick) {
-    var kerf = cfg.kerf, edge = cfg.edge > 0 ? cfg.edge : 0, out = { kind: 'sheet', mat: mat, items: [], errors: [], cost: 0 };
-    var stocks = mat.stock.filter(function (s) { return s.len > 2 * edge && s.wid > 2 * edge; }).map(function (s) { return { s: s, L: s.len - 2 * edge, W: s.wid - 2 * edge, price: s.have ? 0 : Math.max(0, +s.price || 0), left: s.have ? Math.max(0, s.have | 0) : Infinity }; }).filter(function (st) { return st.left > 0; });
+    var kerf = cfg.kerf, edge = cfg.edge > 0 ? cfg.edge : 0, ends = cfg.ends > 0 ? cfg.ends : 0, ex = edge + ends, out = { kind: 'sheet', mat: mat, items: [], errors: [], cost: 0 };
+    var stocks = mat.stock.filter(function (s) { return s.len > 2 * ex && s.wid > 2 * edge; }).map(function (s) { return { s: s, L: s.len - 2 * ex, W: s.wid - 2 * edge, price: s.have ? 0 : Math.max(0, +s.price || 0), left: s.have ? Math.max(0, s.have | 0) : Infinity }; }).filter(function (st) { return st.left > 0; });
     var items = [];
     mat.parts.forEach(function (p, pi) {
       if (!(p.len > 0) || !(p.wid > 0) || !(p.qty > 0)) return;
@@ -1264,12 +1277,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     out.cost = best.cost;
     // The winning run, to pack the same way again: the parts' order (as places in the list of parts to place) and its rules.
     out.run = Object.assign({ order: best.order.map(function (it) { return items.indexOf(it); }) }, best.how);
-    var shift = function (o) { return edge ? Object.assign({}, o, { x: o.x + edge, y: o.y + edge }) : o; };
+    var shift = function (o) { return ex ? Object.assign({}, o, { x: o.x + ex, y: o.y + edge }) : o; };
     out.items = best.sheets.map(function (sh) {
       var steps = sheetSteps(sh.root);
       // inside trimmed edges, the steps' lines move in with the parts, and what they call the full sheet is the trimmed one
-      if (edge) steps.forEach(function (st) { if (st.line) st.line = st.line.map(function (v) { return v + edge; }); if (!st.on) st.on = { w: sh.st.L, h: sh.st.W, trimmed: true }; });
-      return { stock: sh.st.s, price: sh.st.price, L: sh.st.L + 2 * edge, W: sh.st.W + 2 * edge, edge: edge, placed: sh.placed.map(shift), root: sh.root, steps: steps, spare: sh.free.filter(function (f) { return f.w >= 3 && f.h >= 3; }).map(shift) };
+      if (ex) steps.forEach(function (st) { if (st.line) st.line = st.line.map(function (v, k) { return v + (k % 2 ? edge : ex); }); if (!st.on) st.on = { w: sh.st.L, h: sh.st.W, trimmed: true }; });
+      return { stock: sh.st.s, price: sh.st.price, L: sh.st.L + 2 * ex, W: sh.st.W + 2 * edge, edge: edge, ends: ends, placed: sh.placed.map(shift), root: sh.root, steps: steps, spare: sh.free.filter(function (f) { return f.w >= 3 && f.h >= 3; }).map(shift) };
     }).sort(function (a, b) { return (a.stock.have ? 1 : 0) - (b.stock.have ? 1 : 0) || b.L * b.W - a.L * a.W; });
     return out;
   }
@@ -1328,7 +1341,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     return out;
   }
   // What a sheet's cut is made on, as text (`f` is fmt) or HTML (fmtH): "the full sheet", "the 47 3/4" × 48" piece".
-  function pieceName(on, f) { return !on ? 'the full sheet' : on.trimmed ? 'the trimmed sheet' : 'the ' + f(on.w) + ' × ' + f(on.h) + (on.strip ? ' strip' : ' piece'); }
+  // On a board ripped into parts (`board`), the whole is "the board", or "the squared board" once its ends are trimmed.
+  function pieceName(on, f, board) { return !on ? (board ? 'the board' : 'the full sheet') : on.trimmed ? (board ? 'the squared board' : 'the trimmed sheet') : 'the ' + f(on.w) + ' × ' + f(on.h) + (on.strip ? ' strip' : ' piece'); }
+  // A part's size as plan `r` cuts it: a sheet part's length × width, a board part's length, and its width too when the
+  // board is ripped to it.
+  function partDims(r, p, f) { return r.kind === 'sheet' || (r.rip && p.wid > 0 && Math.abs(p.wid - r.mat.wid) > 1e-9) ? f(p.len) + ' × ' + f(p.wid) : f(p.len); }
   // The parts a sheet's cut gives, after its measurement: " → A Left side · what’s left is B Right side". `name` writes
   // a part from its place in the list, and `to` goes before the part the cut is measured for.
   function stepGives(st, name, to) {
@@ -1339,15 +1356,29 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // ---------- solving the whole project ----------
   var RES = null, TIPS = [], GEN = 0;
   function cfg() { return { kerf: P.kerf, trim: P.trim, edge: P.edge || 0 }; }
-  function solveMat(m, quick) { return m.kind === 'sheet' ? solveSheets(m, cfg(), quick) : solveBoards(m, cfg(), quick); }
+  function solveMat(m, quick) { return m.kind === 'sheet' ? solveSheets(m, cfg(), quick) : ripped(m) ? solveRip(m, cfg(), quick) : solveBoards(m, cfg(), quick); }
+  // A board material with a width, and a part to plan that's narrower (or wider) than that, is ripped: some boards are
+  // cut along their length as well. It's planned as sheets as wide as the board, its parts grain-locked and a part with
+  // no width as wide as the board, its ends trimmed as a board's are. The plan is a board plan (`rip`) laid out like a
+  // sheet's, its items pointing at the material's own sizes and parts.
+  function ripped(m) { return m.kind === 'board' && m.wid > 0 && m.parts.some(function (p) { return p.len > 0 && p.qty > 0 && p.wid > 0 && Math.abs(p.wid - m.wid) > 1e-9; }); }
+  function solveRip(m, c, quick) {
+    var as = m.stock.map(function (s) { return { id: s.id, len: s.len, wid: m.wid, price: s.price, have: s.have, of: s }; });
+    var r = solveSheets({ id: m.id, kind: 'sheet', name: m.name, stock: as, parts: m.parts.map(function (p) { return Object.assign({}, p, { wid: p.wid > 0 ? p.wid : m.wid, grain: true }); }) }, { kerf: c.kerf, ends: c.trim || 0 }, quick);
+    r.kind = 'board'; r.rip = true; r.mat = m;
+    r.items.forEach(function (it) { it.stock = it.stock.of; });
+    r.errors.forEach(function (e) { if (e.pi >= 0) e.part = m.parts[e.pi]; });
+    return r;
+  }
   // Everything a material's plan is worked out from: its sizes with their prices and counts on hand, its parts'
   // sizes, counts and grain (and where each is in the list), the kerf, and the end trim for boards or, for sheets,
-  // the units their steps are written in and the trim off their edges. A part with no size or count yet isn't planned,
+  // the units their steps are written in and the trim off their edges. A board ripped into parts adds the board's
+  // width, its parts' widths and the units. A part with no size or count yet isn't planned,
   // so it isn't here either.
   function planInputs(m) {
-    var sheet = m.kind === 'sheet', parts = [];
-    m.parts.forEach(function (p, pi) { if (p.len > 0 && p.qty > 0 && (!sheet || p.wid > 0)) parts.push(sheet ? [pi, p.len, p.wid, p.qty, !!p.grain] : [pi, p.len, p.qty]); });
-    return JSON.stringify([m.kind, P.kerf, sheet ? [U, P.edge || 0] : P.trim, m.stock.map(function (s) { return sheet ? [s.len, s.wid, s.price, s.have] : [s.len, s.price, s.have]; }), parts]);
+    var sheet = m.kind === 'sheet', rip = ripped(m), parts = [];
+    m.parts.forEach(function (p, pi) { if (p.len > 0 && p.qty > 0 && (!sheet || p.wid > 0)) parts.push(sheet ? [pi, p.len, p.wid, p.qty, !!p.grain] : rip ? [pi, p.len, p.qty, p.wid || 0] : [pi, p.len, p.qty]); });
+    return JSON.stringify([m.kind, P.kerf, sheet ? [U, P.edge || 0] : rip ? [P.trim, U, m.wid] : P.trim, m.stock.map(function (s) { return sheet ? [s.len, s.wid, s.price, s.have] : [s.len, s.price, s.have]; }), parts]);
   }
   // Each material's plan is kept with what it was worked out from, and used again until some of that changes, so
   // renaming a part, changing the currency or editing another material plans nothing again. Every search does a set
@@ -1373,7 +1404,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var cost = 0, partLen = 0, kerfLen = 0, stockLen = 0, boards = 0, sheets = 0, partArea = 0, sheetArea = 0, cuts = 0;
     mats.forEach(function (r) {
       cost += r.cost;
-      if (r.kind === 'board') r.items.forEach(function (b) { boards++; stockLen += b.cap; b.pieces.forEach(function (p) { partLen += p.len; }); kerfLen += Math.max(0, b.pieces.length - 1) * P.kerf + (b.offcut > 0 ? P.kerf : 0); cuts += b.pieces.length - (lastIsLeft(b) ? 1 : 0) + (b.trim > 0 ? 1 : 0); });
+      // a ripped board counts its parts and sawdust by area, as so much of the board's length
+      if (r.rip) r.items.forEach(function (b) {
+        var w = r.mat.wid; boards++; stockLen += b.L; cuts += b.steps.filter(function (x) { return x.type !== 'none'; }).length + (b.ends > 0 ? 1 : 0);
+        b.placed.forEach(function (p) { partLen += p.l * p.w / w; });
+        b.steps.forEach(function (x) { if (x.line) kerfLen += (Math.abs(x.line[2] - x.line[0]) + Math.abs(x.line[3] - x.line[1])) * P.kerf / w; });
+      });
+      else if (r.kind === 'board') r.items.forEach(function (b) { boards++; stockLen += b.cap; b.pieces.forEach(function (p) { partLen += p.len; }); kerfLen += Math.max(0, b.pieces.length - 1) * P.kerf + (b.offcut > 0 ? P.kerf : 0); cuts += b.pieces.length - (lastIsLeft(b) ? 1 : 0) + (b.trim > 0 ? 1 : 0); });
       else r.items.forEach(function (s) { sheets++; sheetArea += s.L * s.W; s.placed.forEach(function (p) { partArea += p.l * p.w; }); cuts += s.steps.filter(function (x) { return x.type !== 'none'; }).length + (s.edge > 0 ? 1 : 0); });
     });
     RES = { mats: mats, cost: cost, boards: boards, sheets: sheets, cuts: cuts, boardYield: stockLen ? partLen / stockLen : 0, boardKerf: stockLen ? kerfLen / stockLen : 0, sheetYield: sheetArea ? partArea / sheetArea : 0 };
@@ -1414,7 +1451,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (cand) {
         var full = solveMat(cand.clone);
         // The boards the shaved part sits on with less than a sixteenth to spare, by length, for the tip to say so.
-        var tight = full.kind === 'board' ? full.items.filter(function (b) { return b.cap - b.need < 1 / 16 && b.pieces.some(function (q) { return q.pi === j.pi; }); }) : [];
+        var tight = full.kind === 'board' && !full.rip ? full.items.filter(function (b) { return b.cap - b.need < 1 / 16 && b.pieces.some(function (q) { return q.pi === j.pi; }); }) : [];
         if (!full.errors.length && full.cost < j.base - 0.005 && !replays(m, full) && planInputs(m) === j.key) found.push({ mid: m.id, pid: p.id, dim: j.dim, from: p[j.dim], to: cand.to, save: j.base - full.cost, key: j.key, tight: tight.length, lens: tight.map(function (b) { return b.stock.len; }).filter(function (l, k, a) { return a.indexOf(l) === k; }).sort(function (a, b) { return a - b; }) });
         cand = null; d = deltas.length;
       } else {
@@ -1500,9 +1537,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var h = '';
     P.materials.forEach(function (m) {
       var sheet = m.kind === 'sheet';
-      h += '<article class="mat' + (sheet ? ' sheetmat' : '') + '" data-mid="' + m.id + '">' +
+      // A board with a width shows its parts' widths too (`bwmat`), for parts ripped narrower; blank is the board's.
+      h += '<article class="mat' + (sheet ? ' sheetmat' : m.wid > 0 ? ' bwmat' : '') + '" data-mid="' + m.id + '">' +
         '<header class="mat-hd"><span class="mat-ic" aria-hidden="true">' + ICON[m.kind] + '</span><input class="mat-name" data-f="mname" value="' + esc(m.name) + '" aria-label="Material name" autocomplete="off" enterkeyhint="next"><span class="mat-note">' + noteH(m.note) + '</span><button class="icon" type="button" data-a="delmat" title="Remove this material" aria-label="Remove ' + esc(m.name) + '">✕</button></header>' +
-        '<div class="parts"><div class="prow head"><span></span><span>Part</span><span style="text-align:center">Qty</span><span>Length</span>' + (sheet ? '<span>Width</span><span title="Keep the grain running along the part’s length">Grain</span>' : '') + '<span></span></div>';
+        '<div class="parts"><div class="prow head"><span></span><span>Part</span><span style="text-align:center">Qty</span><span>Length</span>' + (sheet ? '<span>Width</span><span title="Keep the grain running along the part’s length">Grain</span>' : '<span class="pw">Width</span>') + '<span></span></div>';
       // Each field is named by its part's letter, its name as typed and its column: "B Front & back rail Length".
       m.parts.forEach(function (p, i) {
         var by = function (col) { return ' aria-labelledby="L-' + p.id + ' n-' + p.id + ' ' + col + '"'; };
@@ -1510,11 +1548,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           '<input data-f="pname" id="n-' + p.id + '" value="' + esc(p.name) + '" aria-label="Part ' + letter(i) + ' name" autocomplete="off" enterkeyhint="next" placeholder="Part">' +
           '<input class="pq mono" data-f="qty" value="' + (p.qty || '') + '" inputmode="numeric" enterkeyhint="next"' + by('c-qty') + ' autocomplete="off">' +
           '<input class="mono" data-f="len" value="' + (p.len > 0 ? esc(fieldLen(p.len)) : '') + '"' + lenMode() + ' enterkeyhint="next"' + by('c-len') + ' autocomplete="off" placeholder="' + (U === 'mm' ? '900' : '35 3/4') + '">' +
-          (sheet ? '<input class="mono" data-f="wid" value="' + (p.wid > 0 ? esc(fieldLen(p.wid)) : '') + '"' + lenMode() + ' enterkeyhint="next"' + by('c-wid') + ' autocomplete="off" placeholder="' + (U === 'mm' ? '400' : '16') + '"><button class="grain" type="button" data-a="grain" aria-pressed="' + (p.grain ? 'true' : 'false') + '" title="' + (p.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned') + '"' + by('c-grain') + '>' + ICON.grain + '</button>' : '') +
+          (sheet ? '<input class="mono" data-f="wid" value="' + (p.wid > 0 ? esc(fieldLen(p.wid)) : '') + '"' + lenMode() + ' enterkeyhint="next"' + by('c-wid') + ' autocomplete="off" placeholder="' + (U === 'mm' ? '400' : '16') + '"><button class="grain" type="button" data-a="grain" aria-pressed="' + (p.grain ? 'true' : 'false') + '" title="' + (p.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned') + '"' + by('c-grain') + '>' + ICON.grain + '</button>' : '<input class="mono pw" data-f="wid" value="' + (p.wid > 0 ? esc(fieldLen(p.wid)) : '') + '"' + lenMode() + ' enterkeyhint="next"' + by('c-wid') + ' autocomplete="off" placeholder="' + (m.wid > 0 ? esc(fieldLen(m.wid)) : '') + '">') +
           '<button class="icon" type="button" data-a="delpart" aria-label="Remove ' + esc(p.name || 'part') + '">✕</button></div>';
       });
       h += '<button class="addpart" type="button" data-a="addpart">+ Add a part</button></div><div class="perr" data-err="' + m.id + '" hidden></div>' +
-        '<details class="stock" data-mid="' + m.id + '"' + (open[m.id] ? ' open' : '') + '><summary><span class="chips">' + stockSummary(m) + '</span><span class="chev" aria-hidden="true">›</span><span class="sr">Edit stock and prices</span></summary><div class="stock-bd">' +
+        '<details class="stock" data-mid="' + m.id + '"' + (open[m.id] ? ' open' : '') + '><summary><span class="chips">' + stockSummary(m) + '</span><span class="chev" aria-hidden="true">›</span><span class="sr">Edit stock and prices</span></summary><div class="stock-bd">' + (sheet ? '' :
+        '<label class="bw"><span>Board width</span><input class="mono" data-f="bwid" value="' + (m.wid > 0 ? esc(fieldLen(m.wid)) : '') + '"' + lenMode() + ' enterkeyhint="next" autocomplete="off" placeholder="' + (U === 'mm' ? '140' : '5 1/2') + '"></label>' +
+        '<p class="hint">With a width, a part can be narrower than the board, ripped from it along its length. A part’s width left blank is the whole board’s.</p>') +
         '<div class="srow head"><span>' + (sheet ? 'Length (grain)' : 'Length') + '</span>' + (sheet ? '<span>Width</span>' : '') + '<span>Price</span><span>Source</span><span></span></div>';
       m.stock.forEach(function (s) {
         var nm = sizeName(m, s);
@@ -1545,7 +1585,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           return 'The ' + have + ' you have can’t hold every part' + (q ? ', and ' + (q.name || 'part ' + letter(e.only)) + ' (' + (r.kind === 'sheet' ? fmtT(q.len) + ' × ' + fmtT(q.wid) : fmtT(q.len)) + ') fits only those. Add a size to buy that fits it.' : '. Add a size to buy.');
         }
         if (e.max) return (e.part.name || 'A part') + ' × ' + e.part.qty + ': Kerf plans at most ' + e.max + ' of one ' + r.kind + ' part — split it into two rows.';
-        var p = e.part, dims = r.kind === 'sheet' ? fmtT(p.len) + ' × ' + fmtT(p.wid) : fmtT(p.len);
+        var p = e.part, dims = partDims(r, p, fmtT);
+        // a part ripped from a board that's wider than the board
+        if (r.rip && p.wid > r.mat.wid + 1e-9) return (p.name || 'A part') + ' (' + fmtT(p.wid) + ' wide) is wider than the board (' + fmtT(r.mat.wid) + '). Make it narrower, or the board wider in its sizes below.';
         // The grain is only worth a mention when turning the part would let it fit, by the planner's own test.
         // Nor the trim off a sheet's edges, unless the part would fit with them left on.
         var e = r.kind === 'sheet' ? P.edge || 0 : 0, on = function (rot, e) { return r.mat.stock.some(function (st) { return st.len > 2 * e && st.wid > 2 * e && fitsStock({ l: p.len, w: p.wid, rot: rot }, { L: st.len - 2 * e, W: st.wid - 2 * e }); }); };
@@ -1554,7 +1596,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       });
       // the parts the stock on hand has no room for, planned without them
       if (short.length) msgs.push('The ' + (r.kind === 'sheet' ? 'sheets' : 'boards') + ' you have can’t hold every part: ' + andList(short.map(function (e) {
-        var p = e.part; return (p.name || 'Part ' + letter(e.pi)) + ' × ' + e.short + ' (' + (r.kind === 'sheet' ? fmtT(p.len) + ' × ' + fmtT(p.wid) : fmtT(p.len)) + ')';
+        var p = e.part; return (p.name || 'Part ' + letter(e.pi)) + ' × ' + e.short + ' (' + partDims(r, p, fmtT) + ')';
       })) + (short.length > 1 || short[0].short > 1 ? ' are' : ' is') + ' left out of the plan. Add a size to buy that fits ' + (short.length > 1 || short[0].short > 1 ? 'them.' : 'it.'));
       el.hidden = !msgs.length; el.textContent = msgs.join(' ');
     });
@@ -1569,6 +1611,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var el = e.target, f = el.dataset && el.dataset.f; if (!f) return;
     var m = findMat(el); if (!m) return;
     if (f === 'mname') { m.name = el.value; touch(); resolve(true, m); return; }
+    if (f === 'bwid') { // the board's width: with one, its parts can be ripped narrower and show a width
+      var w = parseLen(el.value); el.classList.toggle('bad', !!el.value.trim() && !(w > 0)); m.wid = w > 0 ? w : 0;
+      var art = el.closest('.mat'); art.classList.toggle('bwmat', m.wid > 0);
+      art.querySelectorAll('.prow [data-f="wid"]').forEach(function (x) { x.placeholder = m.wid > 0 ? fieldLen(m.wid) : ''; });
+      touch(); resolve(true, m); return;
+    }
     var p = findPart(m, el), s = findStock(m, el), v;
     if (p) {
       if (f === 'pname') p.name = el.value;
@@ -1609,8 +1657,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var el = e.target, f = el.dataset && el.dataset.f; if (!f) return;
     var m = findMat(el); if (!m) return;
     var p = findPart(m, el), s = findStock(m, el);
-    if (f === 'len' || f === 'wid' || f === 'slen' || f === 'swid') resolveNow();
+    if (f === 'len' || f === 'wid' || f === 'slen' || f === 'swid' || f === 'bwid') resolveNow();
     if (p && (f === 'len' || f === 'wid') && p[f] > 0) el.value = fieldLen(p[f]);
+    if (f === 'bwid' && m.wid > 0) { el.value = fieldLen(m.wid); el.classList.remove('bad'); }
     if (p && f === 'qty' && p.qty > 0 && el.value.trim() !== String(p.qty)) { el.value = p.qty; el.classList.remove('bad'); } // 12000 becomes the 9999 kept
     if (s && (f === 'slen' || f === 'swid')) { el.value = fieldLen(f === 'slen' ? s.len : s.wid, { ft: f === 'slen' && m.kind === 'board' }); nameSize(m, s, el.closest('.srow')); }
     if (s && f === 'price' && !s.have) { el.value = (+s.price || 0).toFixed(2); el.classList.remove('bad'); }
@@ -1627,17 +1676,17 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function onKey(e) {
     var el = e.target, f = el.dataset && el.dataset.f;
     if (e.key !== 'Enter' || !f || e.isComposing) return;
-    if (f === 'len' || f === 'wid' || f === 'slen' || f === 'swid') resolveNow();
-    var list = function (root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); };
+    if (f === 'len' || f === 'wid' || f === 'slen' || f === 'swid' || f === 'bwid') resolveNow();
+    var list = function (root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)).filter(function (x) { return x.getClientRects().length; }); };
     if (f === 'mname') { // on to the first part's name, adding a part to a material that has none
       e.preventDefault();
       var m0 = findMat(el), first = document.querySelector('[data-mid="' + m0.id + '"] .prow[data-pid] [data-f="pname"]');
       if (first) first.focus(); else addPart(m0, 'pname');
       return;
     }
-    if (el.closest('.srow')) {
+    if (el.closest('.srow') || f === 'bwid') {
       e.preventDefault();
-      var all = list(el.closest('.stock-bd'), '.srow[data-sid] input:not([disabled])'), after = all[all.indexOf(el) + 1];
+      var all = list(el.closest('.stock-bd'), '[data-f="bwid"], .srow[data-sid] input:not([disabled])'), after = all[all.indexOf(el) + 1];
       if (after) after.focus(); else el.blur();
       return;
     }
@@ -1648,7 +1697,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var next = row.nextElementSibling;
     if (next && next.classList.contains('prow')) { next.querySelector('[data-f="pname"]').focus(); return; }
     var m = findMat(el), p = findPart(m, el);
-    var gap = fields.filter(function (x) { return (x.dataset.f === 'len' || x.dataset.f === 'wid') && !(p[x.dataset.f] > 0); })[0];
+    var gap = fields.filter(function (x) { return (x.dataset.f === 'len' || (x.dataset.f === 'wid' && m.kind === 'sheet')) && !(p[x.dataset.f] > 0); })[0]; // a board part's width may be blank
     if (gap) { if (gap !== el) gap.focus(); return; }
     addPart(m, 'pname');
   }
@@ -1771,7 +1820,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     h += '</tbody><tfoot><tr><td colspan="3">Total</td><td class="n">' + esc(money(r.cost)) + '</td></tr></tfoot></table></div></div>';
     r.mats.forEach(function (m, mi) {
       if (!m.items.length) return;
-      h += '<div class="sec"><div class="mdiag"><h4>' + esc(m.mat.name) + '<small><span class="sr">, </span>' + (m.kind === 'sheet' ? plural(m.items.length, 'sheet') : plural(m.items.length, 'board')) + '</small></h4>' + (m.kind === 'sheet' ? sheetDiagrams(m) : boardDiagram(m)) + '</div></div>';
+      h += '<div class="sec"><div class="mdiag"><h4>' + esc(m.mat.name) + '<small><span class="sr">, </span>' + (m.kind === 'sheet' ? plural(m.items.length, 'sheet') : plural(m.items.length, 'board')) + '</small></h4>' + (m.kind === 'sheet' || m.rip ? sheetDiagrams(m) : boardDiagram(m)) + '</div></div>';
     });
     host.innerHTML = h;
     $('copyList').addEventListener('click', copyList);
@@ -1802,6 +1851,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         if (sizes) { sizes.open = true; el = sizes.querySelector('summary'); return true; }
         var p = e.pi >= 0 ? e.part : r.mat.parts[e.only], f = 'len';
         if (e.max) f = 'qty';
+        else if (r.rip && p && p.wid > r.mat.wid + 1e-9) f = 'wid';
         else if (r.kind === 'sheet' && p && r.mat.stock.some(function (st) { return p.len <= (p.grain ? st.len : Math.max(st.len, st.wid)) - 2 * (P.edge || 0) + 1e-9; })) f = 'wid';
         var root = '[data-mid="' + r.mat.id + '"] ';
         el = (p && document.querySelector(root + '.prow[data-pid="' + p.id + '"] [data-f="' + f + '"]')) || document.querySelector(root + '[data-f="mname"]');
@@ -1979,25 +2029,26 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function legendParts(m) {
     var seen = {}, rows = [];
     m.items.forEach(function (it) { (it.pieces || it.placed).forEach(function (p) { seen[p.pi] = (seen[p.pi] || 0) + 1; }); });
-    m.mat.parts.forEach(function (p, i) { if (seen[i]) rows.push('<li><b style="background:var(--' + (m.kind === 'sheet' ? 'ply' : 'pine') + ');color:#2E220F;border:1px solid var(--' + (m.kind === 'sheet' ? 'ply' : 'pine') + '-edge);border-radius:4px">' + letter(i) + '</b><span>' + esc(p.name || 'Part') + ' · ' + seen[i] + ' × ' + (m.kind === 'sheet' ? fmtH(p.len) + ' × ' + fmtH(p.wid) : fmtH(p.len)) + '</span></li>'); });
+    m.mat.parts.forEach(function (p, i) { if (seen[i]) rows.push('<li><b style="background:var(--' + (m.kind === 'sheet' ? 'ply' : 'pine') + ');color:#2E220F;border:1px solid var(--' + (m.kind === 'sheet' ? 'ply' : 'pine') + '-edge);border-radius:4px">' + letter(i) + '</b><span>' + esc(p.name || 'Part') + ' · ' + seen[i] + ' × ' + partDims(m, p, fmtH) + '</span></li>'); });
     return '<ul class="steps">' + rows.join('') + '</ul>';
   }
   function sheetDiagrams(m) {
     var out = '';
     m.items.forEach(function (sh, si) {
-      var width = Math.min(W.plan, 720), px = (width - 2) / sh.L, H = sh.W * px, top = 22;
+      // A ripped board is drawn at least 64 px deep, deeper than it is to scale, so its narrow parts and cuts can be read.
+      var width = Math.min(W.plan, 720), px = (width - 2) / sh.L, py = m.rip ? Math.max(px, 64 / sh.W) : px, H = sh.W * py, top = 22, rip = !!m.rip, what = rip ? 'Board ' : 'Sheet ';
       // A screen reader gets the sheet in words instead of the drawing: "Sheet 1, 4 ft × 8 ft: 4 × A Shelf 47 3/4 in × 23 3/4
       // in; left over 48 in × 6 in", the pieces left over 6" or more each way, as the shop PDF labels them.
       var count = {}, order = [];
       sh.placed.forEach(function (p) { if (!count[p.pi]) { count[p.pi] = 0; order.push(p.pi); } count[p.pi]++; });
       var spare = sh.spare.filter(function (f) { return f.w >= 6 && f.h >= 6; });
-      out += '<p class="sr">Sheet ' + (si + 1) + ', ' + esc(sayLen(sh.W) + ' × ' + sayLen(sh.L)) + (sh.stock.have ? ', yours' : '') + ': ' + (sh.edge > 0 ? 'trim ' + esc(sayLen(sh.edge)) + ' off each edge, ' : '') + order.map(function (pi) {
-        var q = m.mat.parts[pi]; return count[pi] + ' × ' + letter(pi) + (q && q.name ? ' ' + esc(q.name) : '') + ' ' + esc(sayLen(q.len) + ' × ' + sayLen(q.wid));
+      out += '<p class="sr">' + what + (si + 1) + ', ' + esc(rip ? sayLen(sh.L, { ft: true }) + ', ' + sayLen(sh.W) + ' wide' : sayLen(sh.W) + ' × ' + sayLen(sh.L)) + (sh.stock.have ? ', yours' : '') + ': ' + (sh.edge > 0 ? 'trim ' + esc(sayLen(sh.edge)) + ' off each edge, ' : '') + (sh.ends > 0 ? 'trim ' + esc(sayLen(sh.ends)) + ' off each end, ' : '') + order.map(function (pi) {
+        var q = m.mat.parts[pi]; return count[pi] + ' × ' + letter(pi) + (q && q.name ? ' ' + esc(q.name) : '') + ' ' + esc(partDims(m, q, sayLen));
       }).join(', ') + (spare.length ? '; left over ' + spare.map(function (f) { return esc(sayLen(f.w) + ' × ' + sayLen(f.h)); }).join(' and ') : '') + '</p>';
       var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + (H + top + 8).toFixed(1) + '" aria-hidden="true" style="margin-top:' + (si ? 16 : 6) + 'px">';
-      s += '<text class="dg-metab" x="0" y="8">Sheet ' + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + sheetSize(sh.W, sh.L, true) + (sh.stock.have ? '<tspan class="dg-yours"> · yours</tspan>' : '') + '</text>';
+      s += '<text class="dg-metab" x="0" y="8">' + what + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + (rip ? esc(fmtD(sh.L, { ft: true }) + ' · ' + fmtD(sh.W) + ' wide') : sheetSize(sh.W, sh.L, true)) + (sh.stock.have ? '<tspan class="dg-yours"> · yours</tspan>' : '') + '</text>';
       var ox = 1, oy = top;
-      s += '<rect class="dg-ply" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
+      s += '<rect class="' + (rip ? 'dg-wood' : 'dg-ply') + '" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
       s += '<rect class="dg-scrap" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
       // Each label is noted as a box ([x, y, w, h]) for the cut numbers to keep off, and drawn once they're placed.
       // `lo` and `hi` say how far along its part a label may move, should a number land on it anyway.
@@ -2007,11 +2058,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // marks if every part that has room for a size fits it with them, else without. A part too narrow for that form
       // takes the length alone.
       var forms = function (p) { return [fmtD(p.l) + ' × ' + fmtD(p.w), fmtD(p.l, { bare: true }) + ' × ' + fmtD(p.w, { bare: true }), fmtD(p.l)]; };
-      var sized = sh.placed.filter(function (p) { return p.l * px > 30 && p.w * px > 34 && fitLabel(forms(p).slice(1, 2), p.l * px, 7.2); });
+      var sized = sh.placed.filter(function (p) { return p.l * px > 30 && p.w * py > 34 && fitLabel(forms(p).slice(1, 2), p.l * px, 7.2); });
       var form = sized.every(function (p) { return fitLabel(forms(p).slice(0, 1), p.l * px, 7.2); }) ? 0 : 1;
       sh.placed.forEach(function (p, k) {
-        var x = ox + p.x * px, y = oy + p.y * px, w = p.l * px, h = p.w * px, part = m.mat.parts[p.pi], L = letter(p.pi);
-        s += '<rect class="dg-ply" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"/><path class="dg-grain" d="' + grainPaths(x, y, w, h, 7 + k * 13 + si * 101) + '"/>';
+        var x = ox + p.x * px, y = oy + p.y * py, w = p.l * px, h = p.w * py, part = m.mat.parts[p.pi], L = letter(p.pi);
+        s += '<rect class="' + (rip ? 'dg-wood' : 'dg-ply') + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"/><path class="dg-grain" d="' + grainPaths(x, y, w, h, 7 + k * 13 + si * 101) + '"/>';
         s += '<rect class="dg-part" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmtD(p.l) + ' × ' + fmtD(p.w)) + '</title></rect>';
         if (w > 30 && h > 16) {
           // under the letter, the size in the sheet's form, or the length alone
@@ -2021,16 +2072,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           if (dims) { a.with = label('dg-lbl', x + w / 2, y + h / 2 + 9, dims, 7.2, x + 2, x + w - 2); a.with.sub = true; a.alt = fitLabel([fmtD(p.l)], w, 7.2); }
         }
       });
-      sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * px, t = fitLabel([fmtD(f.w) + ' × ' + fmtD(f.h)], w, 6.6); if (t && h > 18) label('dg-scrapt', ox + f.x * px + w / 2, oy + f.y * px + h / 2, t, 6.6, ox + f.x * px + 2, ox + (f.x + f.w) * px - 2); });
+      sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * py, t = fitLabel([fmtD(f.w) + ' × ' + fmtD(f.h)], w, 6.6); if (t && h > 18) label('dg-scrapt', ox + f.x * px + w / 2, oy + f.y * py + h / 2, t, 6.6, ox + f.x * px + 2, ox + (f.x + f.w) * px - 2); });
       var at = s.length; // the labels go here, under the outline, the cuts and their numbers
-      s += '<rect class="dg-pedge" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>'; // under the cuts and their numbers
+      s += '<rect class="' + (rip ? 'dg-edge' + (sh.stock.have ? ' have' : '') : 'dg-pedge') + '" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>'; // under the cuts and their numbers
       sh.steps.forEach(function (st, k) {
         if (st.type === 'none') return;
-        var l = st.line, x1 = ox + l[0] * px, y1 = oy + l[1] * px, x2 = ox + l[2] * px, y2 = oy + l[3] * px;
+        var l = st.line, x1 = ox + l[0] * px, y1 = oy + l[1] * py, x2 = ox + l[2] * px, y2 = oy + l[3] * py;
         var xy = '" x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>';
         s += '<line class="dg-under cu' + xy + '<line class="dg-cut' + xy;
       });
-      var cuts = sh.steps.filter(function (st) { return st.type !== 'none'; }).map(function (st) { var l = st.line; return [ox + l[0] * px, oy + l[1] * px, ox + l[2] * px, oy + l[3] * px]; });
+      var cuts = sh.steps.filter(function (st) { return st.type !== 'none'; }).map(function (st) { var l = st.line; return [ox + l[0] * px, oy + l[1] * py, ox + l[2] * px, oy + l[3] * py]; });
       var nums = placeNums(cuts, boxes, [ox, oy, ox + sh.L * px, oy + H], 8, 6);
       nums.forEach(function (c, k) {
         s += '<circle class="dg-num" cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="' + c[2] + '"/><text class="dg-numt' + (c[2] < 8 ? ' sm' : '') + '" x="' + c[0].toFixed(1) + '" y="' + c[1].toFixed(1) + '">' + (k + 1) + '</text>';
@@ -2062,6 +2113,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       s = s.slice(0, at) + lbls + s.slice(at);
       out += s + '</svg>';
       var steps = sh.steps.filter(function (x) { return x.type !== 'none'; });
+      if (sh.ends > 0) out += '<p class="steps-first">First square up both ends: trim <span class="m">' + fmtH(sh.ends) + '</span> off each, leaving <span class="nw">' + fmtH(sh.L - 2 * sh.ends) + '</span>. Every crosscut is measured from a squared end.</p>';
       if (sh.edge > 0) out += '<p class="steps-first">First trim <span class="m">' + fmtH(sh.edge) + '</span> off each factory edge, leaving <span class="nw">' + sheetSize(sh.W - 2 * sh.edge, sh.L - 2 * sh.edge) + '</span>. Every cut is measured from a trimmed edge.</p>';
       if (steps.length) out += '<ol class="steps">' + steps.map(function (st, k) { return '<li><b>' + (k + 1) + '</b><span>' + stepText(st, m) + '</span></li>'; }).join('') + '</ol>';
     });
@@ -2069,7 +2121,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   function stepText(st, m) {
     var name = function (pi) { var part = m.mat.parts[pi]; return letter(pi) + (part && part.name ? ' ' + esc(part.name) : ''); };
-    return (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + pieceName(st.on, fmtH) + ' at <span class="m">' + fmtH(st.at) + '</span>' + stepGives(st, name, ' → ');
+    return (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + pieceName(st.on, fmtH, m.rip) + ' at <span class="m">' + fmtH(st.at) + '</span>' + stepGives(st, name, ' → ');
   }
 
   // ---------- at the saw ----------
@@ -2081,11 +2133,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var tasks = [], measH = function (x) { return U === 'mm' ? esc(mmOf(x)) + '<span class="u"> mm</span>' : fmtH(x); };
     RES.mats.forEach(function (m) {
       m.items.forEach(function (it, ii) {
-        var s = it.stock, sheet = m.kind === 'sheet';
-        var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (sheet ? sheetSize(s.wid, s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
+        var s = it.stock, sheet = m.kind === 'sheet', rip = !!m.rip;
+        var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : rip ? s.len + '×' + it.W + ' ripped' : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (sheet ? sheetSize(s.wid, s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
         t.say = m.mat.name + ', ' + (sheet ? sayLen(s.wid) + ' × ' + sayLen(s.len) : sayLen(s.len, { ft: true })) + (s.have ? ', yours' : ''); // the heading as a screen reader names its group
         var name = function (pi) { var part = m.mat.parts[pi]; return '<b>' + letter(pi) + '</b> ' + esc(part && part.name || 'Part'); };
-        if (!sheet) {
+        if (!sheet && !rip) {
           if (it.trim > 0) t.cuts.push({ id: 'trim ' + it.trim.toFixed(4), meas: measH(it.trim), what: 'Square up one end', sub: 'Trim off ' + fmtH(it.trim) + ' and measure every part from this fresh end' });
           it.pieces.forEach(function (p, k) {
             var last = k === it.pieces.length - 1, left = last && lastIsLeft(it), far = last && it.trim > 0 && it.offcut <= 0;
@@ -2098,15 +2150,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           if (it.offcut > 0) t.note = 'Leaves a ' + fmtH(it.offcut + it.trim) + ' offcut' + (it.trim > 0 ? ' (' + fmtH(it.offcut) + ' once its end is squared)' : '') + (worthKeeping(it.offcut) ? ' — worth keeping' : '');
         } else {
           // With the factory edges to trim, that comes first, and every cut is measured from a trimmed edge.
+          if (it.ends > 0) t.cuts.push({ id: 'ends ' + it.ends.toFixed(4), meas: measH(it.ends), what: 'Square up both ends', sub: 'Trim ' + fmtH(it.ends) + ' off each end, leaving ' + fmtH(it.L - 2 * it.ends) + ', and measure every crosscut from a squared end' });
           if (it.edge > 0) t.cuts.push({ id: 'edges ' + it.edge.toFixed(4), meas: measH(it.edge), what: 'Trim the factory edges', sub: 'Take ' + fmtH(it.edge) + ' off each edge, leaving ' + sheetSize(it.W - 2 * it.edge, it.L - 2 * it.edge) + ', and measure every cut from a trimmed edge' });
           it.steps.forEach(function (st) {
             var g = st.gives, tag = function (g) { return g.it.pi + ' ' + g.l.toFixed(4) + '×' + g.w.toFixed(4) + (g.rot ? ' turned' : ''); };
             var gives = (g ? ' → ' + tag(g) : '') + (st.also ? ' · left ' + st.also.map(tag).join(' + ') : '');
-            if (st.type === 'none') { t.cuts.push({ id: 'whole' + gives, noCut: true, note: it.edge > 0 ? 'The trimmed sheet is ' + name(g.it.pi) + ' — no other cut needed' : 'The whole sheet is ' + name(g.it.pi) + ' — no cut needed' }); return; }
-            t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: measH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + pieceName(st.on, fmtH) + stepGives(st, name, ' → '), sub: st.type === 'rip' ? 'Along the grain — set the fence at ' + fmtH(st.at) + ', or mark it and cut on the waste side' : 'Across the grain — measure from the end, cut on the waste side' });
+            if (st.type === 'none') { t.cuts.push({ id: 'whole' + gives, noCut: true, note: rip ? (it.ends > 0 ? 'The squared board is ' : 'The whole board is ') + name(g.it.pi) + ' — no ' + (it.ends > 0 ? 'other ' : '') + 'cut needed' : it.edge > 0 ? 'The trimmed sheet is ' + name(g.it.pi) + ' — no other cut needed' : 'The whole sheet is ' + name(g.it.pi) + ' — no cut needed' }); return; }
+            t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: measH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + pieceName(st.on, fmtH, rip) + stepGives(st, name, ' → '), sub: st.type === 'rip' ? 'Along the grain — set the fence at ' + fmtH(st.at) + ', or mark it and cut on the waste side' : 'Across the grain — measure from the end, cut on the waste side' });
           });
-          // What's left that's worth keeping, at least the smallest offcut worth keeping each way.
-          var keep = it.spare.filter(function (f) { return worthKeeping(f.w) && worthKeeping(f.h); });
+          // What's left that's worth keeping, at least the smallest offcut worth keeping each way (on a ripped board, long).
+          var keep = it.spare.filter(function (f) { return worthKeeping(f.w) && (rip || worthKeeping(f.h)); });
           if (keep.length) t.note = 'Leaves ' + keep.map(function (f) { return 'a ' + fmtH(f.w) + ' × ' + fmtH(f.h) + ' piece'; }).join(' and ') + ' — worth keeping';
         }
         tasks.push(t);
@@ -2420,8 +2473,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           r = r || {};
           var qty = r.qty == null || r.qty === '' ? 1 : Math.min(MAXQTY, Math.max(0, r.qty | 0)), most = sheet ? 300 : 500, pname = str(r.name, LIMITS.name);
           if (qty > most) notes.push((pname || 'A part') + ' × ' + qty + ': Kerf plans at most ' + most + ' of one ' + (sheet ? 'sheet' : 'board') + ' part — split it into two rows.');
-          return part(pname, qty, num(r.len, 0, 1200), sheet ? num(r.wid, 0, 1200) : null, sheet ? r.grain !== false : null);
+          return part(pname, qty, num(r.len, 0, 1200), sheet ? num(r.wid, 0, 1200) : num(r.wid, 0, 1200) || null, sheet ? r.grain !== false : null);
         }) };
+      if (!sheet && num(m.wid, 0, 1200)) c.wid = num(m.wid, 0, 1200); // a board's width, for parts ripped narrower
       if (!c.stock.length && c.parts.length) { c.stock = materialFrom(c.kind, otherPreset(c.kind, units), units).stock; notes.push(name + ' came with no size to buy, so it has Kerf’s usual ' + (sheet ? 'sheet' : 'board') + '. Check the sizes.'); }
       return c;
     }).filter(function (m) { return m.stock.length; }); // with no size and no parts, there's nothing in it
@@ -2614,29 +2668,31 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (!m.items.length) return;
       var width = PW - 2 * M;
       // The parts legend comes last, and stays on the page with the end of the last diagram.
-      var legend = pdfLines('H', 8, m.mat.parts.map(function (p, i) { return letter(i) + ' ' + (p.name || 'Part') + ' ' + (m.kind === 'sheet' ? fmt(p.len) + ' × ' + fmt(p.wid) : fmt(p.len)) + '  ×' + p.qty; }), '    ', width);
+      var legend = pdfLines('H', 8, m.mat.parts.map(function (p, i) { return letter(i) + ' ' + (p.name || 'Part') + ' ' + partDims(m, p, fmt) + '  ×' + p.qty; }), '    ', width);
       var legendH = 16 + (legend.length - 1) * 11;
       // A sheet's steps, line by line: each step's first line 12 points below the last, a line it wraps onto 11.
       var stepLines = function (sh) {
         var lines = [];
+        if (sh.ends > 0) pdfLines('H', 9, ('First square up both ends: trim ' + fmt(sh.ends) + ' off each, leaving ' + fmt(sh.L - 2 * sh.ends) + '. Every crosscut is measured from a squared end.').split(' '), ' ', width).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: M, text: l }); });
         if (sh.edge > 0) pdfLines('H', 9, ('First trim ' + fmt(sh.edge) + ' off each factory edge, leaving ' + fmt(sh.W - 2 * sh.edge) + ' × ' + fmt(sh.L - 2 * sh.edge) + '. Every cut is measured from a trimmed edge.').split(' '), ' ', width).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: M, text: l }); });
         sh.steps.filter(function (s) { return s.type !== 'none'; }).forEach(function (st, k) {
           var no = (k + 1) + '.  ', ind = textW('H', 9, no), name = function (pi) { var part = m.mat.parts[pi]; return letter(pi) + (part && part.name ? ' ' + part.name : ''); };
-          var s = (st.type === 'rip' ? 'Rip ' : 'Crosscut ') + pieceName(st.on, fmt) + ' at ' + fmt(st.at) + stepGives(st, name, '  »  ');
+          var s = (st.type === 'rip' ? 'Rip ' : 'Crosscut ') + pieceName(st.on, fmt, m.rip) + ' at ' + fmt(st.at) + stepGives(st, name, '  »  ');
           pdfLines('H', 9, s.split(' '), ' ', width - ind).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: M + (i ? ind : 0), text: i ? l : no + l }); });
         });
         return lines;
       };
-      var sheetPx = function (sh) { return Math.min(width / sh.L, 250 / sh.W); };
+      // a board ripped into parts is drawn at least 48 points deep, deeper than to scale (`py`, its scale across)
+      var sheetPx = function (sh) { return Math.min(width / sh.L, 250 / sh.W); }, sheetPy = function (sh) { return m.rip ? Math.max(sheetPx(sh), 48 / sh.W) : sheetPx(sh); };
       // A sheet's block, kept together on one page: its title and drawing with all its steps when they fit on a page
       // under a heading, or else the first few lines of them, the rest flowing on.
       var sheetBlock = function (sh, lines) {
-        var h = function (n) { return 20 + sh.W * sheetPx(sh) + 4 + lines.slice(0, n).reduce(function (a, l) { return a + l.gap; }, 0); };
+        var h = function (n) { return 20 + sh.W * sheetPy(sh) + 4 + lines.slice(0, n).reduce(function (a, l) { return a + l.gap; }, 0); };
         return h(lines.length) <= PH - 2 * M - 24 ? h(lines.length) : h(3);
       };
       // The heading stays with the first diagram.
-      need(24 + (m.kind === 'sheet' ? sheetBlock(m.items[0], stepLines(m.items[0])) : 46)); y += 18; text('HB', 12, M, y, fitText('HB', 12, m.mat.name, width - textW('HB', 12, ' — sheets')) + (m.kind === 'sheet' ? ' — sheets' : ' — boards')); y += 6;
-      if (m.kind === 'board') {
+      need(24 + (m.kind === 'sheet' || m.rip ? sheetBlock(m.items[0], stepLines(m.items[0])) : 46)); y += 18; text('HB', 12, M, y, fitText('HB', 12, m.mat.name, width - textW('HB', 12, ' — sheets')) + (m.kind === 'sheet' ? ' — sheets' : ' — boards')); y += 6;
+      if (m.kind === 'board' && !m.rip) {
         var maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; })), lw = 44, px = (width - lw) / maxLen;
         m.items.forEach(function (b, bi) {
           var parts = b.pieces.map(function (p) { var q = m.mat.parts[p.pi]; return letter(p.pi) + ' ' + (q && q.name ? q.name + ' ' : '') + fmt(p.len); });
@@ -2664,13 +2720,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         });
       } else {
         m.items.forEach(function (sh, si) {
-          var px = sheetPx(sh), H = sh.W * px, lines = stepLines(sh), last = si === m.items.length - 1;
+          var px = sheetPx(sh), py = sheetPy(sh), H = sh.W * py, lines = stepLines(sh), last = si === m.items.length - 1;
           need(sheetBlock(sh, lines) + (last && lines.length < 3 ? legendH : 0)); y += 14;
-          text('HB', 10, M, y, 'Sheet ' + (si + 1)); text('H', 9, M + 50, y, fmt(sh.W) + ' × ' + fmt(sh.L) + (sh.stock.have ? '  (yours)' : '')); y += 6;
+          text('HB', 10, M, y, (m.rip ? 'Board ' : 'Sheet ') + (si + 1)); text('H', 9, M + 50, y, (m.rip ? fmt(sh.L, { ft: true }) + ', ' + fmt(sh.W) + ' wide' : fmt(sh.W) + ' × ' + fmt(sh.L)) + (sh.stock.have ? '  (yours)' : '')); y += 6;
           hatch(M, y, sh.L * px, H);
           var boxes = [];
           sh.placed.forEach(function (p) {
-            var x = M + p.x * px, yy = y + p.y * px, w = p.l * px, h = p.w * px;
+            var x = M + p.x * px, yy = y + p.y * py, w = p.l * px, h = p.w * py;
             rect(x, yy, w, h, '#FFFFFF', '#9E7F52', 0.6);
             if (!(w > 16 && h > 12)) return;
             var t = letter(p.pi), d = '', tw = textW('HB', 9, t), dw;
@@ -2681,17 +2737,17 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           });
           // the size of each piece left over, 6" or more each way, where it fits
           sh.spare.forEach(function (f) {
-            var w = f.w * px, h = f.h * px, t = fmt(f.w) + ' × ' + fmt(f.h), tw = textW('H', 7.5, t);
+            var w = f.w * px, h = f.h * py, t = fmt(f.w) + ' × ' + fmt(f.h), tw = textW('H', 7.5, t);
             if (f.w < 6 || f.h < 6 || tw > w - 6 || h < 12) return;
-            var tx = M + f.x * px + (w - tw) / 2, base = y + f.y * px + h / 2 + 2.5;
+            var tx = M + f.x * px + (w - tw) / 2, base = y + f.y * py + h / 2 + 2.5;
             rect(tx - 1.5, base - 7, tw + 3, 9.5, '#FFFFFF'); text('H', 7.5, tx, base, t, '#50575E'); boxes.push([tx - 1.5, base - 7, tw + 3, 9.5]);
           });
           rect(M, y, sh.L * px, H, null, '#9E7F52', 0.8); // under the cuts and their numbers
           var cuts = [];
           sh.steps.forEach(function (st) {
             if (st.type === 'none') return;
-            var l = st.line; line(M + l[0] * px, y + l[1] * px, M + l[2] * px, y + l[3] * px, '#2361CC', 1, true);
-            cuts.push([M + l[0] * px, y + l[1] * px, M + l[2] * px, y + l[3] * px]);
+            var l = st.line; line(M + l[0] * px, y + l[1] * py, M + l[2] * px, y + l[3] * py, '#2361CC', 1, true);
+            cuts.push([M + l[0] * px, y + l[1] * py, M + l[2] * px, y + l[3] * py]);
           });
           placeNums(cuts, boxes, [M, y, M + sh.L * px, y + H], 6, 4.5, true).forEach(function (c, k) {
             var t = String(k + 1), fs = c[2] < 6 ? 6 : 7.5;

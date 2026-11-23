@@ -22,15 +22,15 @@ const SOLVER = [
   "var U = 'in', CUR = '$';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
   ...['esc', 'plural', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'sayLen', 'parseLen', 'money', 'mulberry', 'bestFill', 'onlyHave', 'planWhatFits', 'solveBoards', 'lastIsLeft', 'orientations',
-    'newSheet', 'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'orderSteps', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
+    'newSheet', 'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'orderSteps', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets', 'ripped', 'solveRip'].map(fn),
 ];
-const K = new Function([...SOLVER, 'return { fmt: fmt, parseLen: parseLen, solveBoards: solveBoards, solveSheets: solveSheets, units: function (u) { U = u; } };'].join('\n'))();
+const K = new Function([...SOLVER, 'return { fmt: fmt, parseLen: parseLen, solveBoards: solveBoards, solveSheets: solveSheets, solveRip: solveRip, units: function (u) { U = u; } };'].join('\n'))();
 // The page without its DOM: the plans it keeps between edits, the saw's checklist and its tick keys, the tips search
 // (each idle step run at once, in turn), which tips are still shown, and the ticks put aside or brought back.
 function page() {
   return new Function([
     ...SOLVER, 'var P = null, RES = null, TIPS = [], GEN = 0;', line('var PLANS = '),
-    ...['worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'marks', 'fmtD', 'sheetSize', 'sawTasks', 'tickKeys', 'findTips', 'tipFor', 'syncTicks'].map(fn),
+    ...['worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'partDims', 'stepGives', 'marks', 'fmtD', 'sheetSize', 'sawTasks', 'tickKeys', 'findTips', 'tipFor', 'syncTicks'].map(fn),
     'var queue = []; function whenIdle(f) { queue.push(f); } function renderTips() {} function toast() {} function save() {}',
     'return {',
     ' solve: function (p) { P = p; U = p.units; CUR = p.cur || "$"; return solveAll(); },',
@@ -155,10 +155,24 @@ console.log('boards: random jobs');
 console.log('sheets: random jobs, the steps replayed at the saw');
 {
   // Parts that tile a sheet exactly, full-length strips and the strip a rip leaves, inches or millimetres. Every fifth
-  // job trims the sheets' factory edges first, and its parts tile what's left.
+  // job trims the sheets' factory edges first, and its parts tile what's left. Then 40 boards ripped into parts, planned
+  // the same way, some with their ends trimmed: parts that fill the board's length or width exactly, and parts with no
+  // width, as wide as the board.
   const R = rng(37), pick = a => a[Math.floor(R() * a.length)];
-  let n = 0, steps = 0, left = 0, strips = 0, edged = 0;
-  for (let t = 0; t < 100; t++) {
+  let n = 0, steps = 0, left = 0, strips = 0, edged = 0, ripped = 0;
+  for (let t = 0; t < 140; t++) {
+    if (t >= 100) {
+      const kerf = pick([0.125, 0.09375]), wid = pick([3.5, 5.5, 7.25, 11.25]), trim = t % 3 ? 0 : 0.5, L = 96 - 2 * trim, parts = [];
+      for (let k = 0, nT = 1 + Math.floor(R() * 4); k < nT; k++) {
+        const r = R(), w = q16(0.75 + R() * (wid - 1));
+        parts.push(r < 0.2 ? { len: (L - kerf) / 2, wid: w, qty: 1 + Math.floor(R() * 2) } : r < 0.35 ? { len: q16(6 + R() * 50), qty: 1 } : { len: q16(4 + R() * 60), wid: w, qty: 1 + Math.floor(R() * 4) });
+      }
+      if (R() < 0.4) { const w = q16(1 + R() * (wid - 2)); parts.push({ len: q16(10 + R() * 40), wid: w, qty: 1 }, { len: q16(10 + R() * 40), wid: wid - w - kerf, qty: 1 }); }
+      if (!parts.some(p => p.wid > 0 && Math.abs(p.wid - wid) > 1e-9)) continue;
+      replay(`ripped board job ${t}`, K.solveRip({ id: 'm', kind: 'board', wid, stock: [{ id: 'a', len: 96, price: 8, have: 0 }, { id: 'b', len: 120, price: 10, have: 0 }], parts }, { kerf, trim }), kerf, 0, trim);
+      ripped++;
+      continue;
+    }
     const metric = R() < 0.3;
     const kerf = metric ? pick([3, 2.5, 4]) / 25.4 : pick([0.125, 0.09375, 0.25, 0]);
     const stock = metric ? [{ len: 2440 / 25.4, wid: 1220 / 25.4, price: 62, have: 0 }] : [{ len: 96, wid: 48, price: 58, have: 0 }];
@@ -178,17 +192,20 @@ console.log('sheets: random jobs, the steps replayed at the saw');
     const r = K.solveSheets({ stock, parts }, { kerf, edge });
     K.units('in');
     if (r.errors.some(e => e.pi === -1)) continue;
-    n++;
     if (edge) edged++;
     if (r.run && r.run.strip) strips++;
+    replay(`sheet job ${t}`, r, kerf, edge, 0, metric ? 'mm' : 'in');
+  }
+  function replay(job, r, kerf, edge, ends, units = 'in') {
+    n++;
     r.items.forEach((sh, si) => {
-      const id = `sheet job ${t}, sheet ${si + 1} (${metric ? 'mm' : 'in'})`;
+      const id = `${job}, ${r.rip ? 'board' : 'sheet'} ${si + 1} (${units})`;
       // Saw it as the steps say, a piece at a time: each cut runs edge to edge across one piece, at the distance it
       // gives, on the piece it names; the far side of a cut that says "what's left is" is that part, and each cut's
-      // own part is what's left on the near side once its last cut is made.
-      const e = sh.edge || 0;
-      check(e === edge, 'each sheet says how much its edges are trimmed', `${id}: edge ${sh.edge}, want ${edge}`);
-      let pieces = [{ x: e, y: e, w: sh.L - 2 * e, h: sh.W - 2 * e }];
+      // own part is what's left on the near side once its last cut is made. A ripped board's ends come off first.
+      const e = sh.edge || 0, ex = e + (sh.ends || 0);
+      check(e === edge && (sh.ends || 0) === ends, 'each sheet says how much its edges are trimmed', `${id}: edge ${sh.edge}, want ${edge}; ends ${sh.ends}, want ${ends}`);
+      let pieces = [{ x: ex, y: e, w: sh.L - 2 * ex, h: sh.W - 2 * e }];
       const at = (p, g) => sh.placed.some(q => q.pi === g.it.pi && Math.abs(q.x - p.x) < E && Math.abs(q.y - p.y) < E && Math.abs(q.l - p.w) < E && Math.abs(q.w - p.h) < E && Math.abs(q.l - g.l) < E && Math.abs(q.w - g.w) < E);
       let ok = true;
       for (const [k, st] of sh.steps.entries()) {
@@ -198,8 +215,8 @@ console.log('sheets: random jobs, the steps replayed at the saw');
         const i = pieces.findIndex(p => rip ? Math.abs(p.x - x1) < E && Math.abs(p.x + p.w - x2) < E && y1 > p.y + E && y1 < p.y + p.h - E
           : Math.abs(p.y - y1) < E && Math.abs(p.y + p.h - y2) < E && x1 > p.x + E && x1 < p.x + p.w - E);
         if (i < 0) { check(false, 'every cut runs across a piece', `${id}: step ${k + 1} (${st.type} at ${st.at})`); ok = false; break; }
-        const p = pieces[i], of = st.of === 'sheet' ? [sh.L - 2 * e, sh.W - 2 * e] : (/^(?:piece|strip) ([\d.]+)×([\d.]+)$/.exec(st.of) || []).slice(1).map(Number);
-        check(Math.abs(of[0] - p.w) < 1e-3 && Math.abs(of[1] - p.h) < 1e-3 && (st.of !== 'sheet' || (p.x === e && p.y === e)), 'each cut names the piece it’s made on', `${id}: step ${k + 1} says ${st.of}, the piece is ${p.w}×${p.h}`);
+        const p = pieces[i], of = st.of === 'sheet' ? [sh.L - 2 * ex, sh.W - 2 * e] : (/^(?:piece|strip) ([\d.]+)×([\d.]+)$/.exec(st.of) || []).slice(1).map(Number);
+        check(Math.abs(of[0] - p.w) < 1e-3 && Math.abs(of[1] - p.h) < 1e-3 && (st.of !== 'sheet' || (p.x === ex && p.y === e)), 'each cut names the piece it’s made on', `${id}: step ${k + 1} says ${st.of}, the piece is ${p.w}×${p.h}`);
         check(Math.abs((rip ? y1 - p.y : x1 - p.x) - st.at) < E, 'each cut is at the distance it gives', `${id}: step ${k + 1} says ${st.at}`);
         const near = rip ? { x: p.x, y: p.y, w: p.w, h: y1 - p.y } : { x: p.x, y: p.y, w: x1 - p.x, h: p.h };
         const far = rip ? { x: p.x, y: y1 + kerf, w: p.w, h: p.y + p.h - y1 - kerf } : { x: x1 + kerf, y: p.y, w: p.x + p.w - x1 - kerf, h: p.h };
@@ -214,26 +231,31 @@ console.log('sheets: random jobs, the steps replayed at the saw');
       const named = [].concat(...sh.steps.map(s => (s.gives ? [s.gives] : []).concat(s.also || []))).map(g => g.it.pi + '@' + g.l + '×' + g.w).sort();
       const drawn = sh.placed.map(p => p.pi + '@' + p.l + '×' + p.w).sort();
       check(JSON.stringify(named) === JSON.stringify(drawn), 'every part named by exactly one step', `${id}: the steps name ${named.join(', ')}; the sheet holds ${drawn.join(', ')}`);
-      if (sh.steps.some(s => s.type === 'none')) check(sh.steps.length === 1 && Math.abs(sh.placed[0].l - sh.L + 2 * e) < E && Math.abs(sh.placed[0].w - sh.W + 2 * e) < E, 'the whole-sheet note only for a whole sheet', id);
+      if (sh.steps.some(s => s.type === 'none')) check(sh.steps.length === 1 && Math.abs(sh.placed[0].l - sh.L + 2 * ex) < E && Math.abs(sh.placed[0].w - sh.W + 2 * e) < E, 'the whole-sheet note only for a whole sheet', id);
       // Each offcut the drawing labels with its size is a piece left over after the steps, of that size.
       for (const f of sh.spare) check(pieces.some(p => Math.abs(p.x - f.x) < E && Math.abs(p.y - f.y) < E && Math.abs(p.w - f.w) < E && Math.abs(p.h - f.h) < E), 'labelled offcuts are real', `${id}: offcut ${f.w}×${f.h} at ${f.x},${f.y}`);
     });
   }
-  console.log(`  ${n} jobs (${strips} planned as strip layouts, ${edged} with trimmed edges), ${steps} cuts replayed, ${left} parts named as what a cut leaves`);
+  check(ripped > 25, 'enough ripped boards', `only ${ripped}`);
+  console.log(`  ${n} jobs (${strips} planned as strip layouts, ${edged} with trimmed edges, ${ripped} boards ripped into parts), ${steps} cuts replayed, ${left} parts named as what a cut leaves`);
 }
 
 console.log('a long run of edits: plans, tips and ticks');
-{
-  // One page through a long session of seeded edits (with ticks at the saw, tips taken, and going back to an earlier
-  // copy of the project, as Undo does). After every edit: the plan kept between edits is the plan a fresh start finds;
-  // every tip still shown is true now, saving what it says; and every tick is on the cut it was made on.
-  const R = rng(5), pick = a => a[Math.floor(R() * a.length)];
+// One page through a long session of seeded edits (with ticks at the saw, tips taken, and going back to an earlier
+// copy of the project, as Undo does). After every edit: the plan kept between edits is the plan a fresh start finds;
+// every tip still shown is true now, saving what it says; and every tick is on the cut it was made on. A second
+// session adds a 1×6 with face-frame parts ripped from it, and edits to parts' widths and boards' widths.
+function session(seed, frameToo) {
+  const R = rng(seed), pick = a => a[Math.floor(R() * a.length)];
   let ids = 0; const id = () => 'i' + ids++;
   const studs = { id: id(), kind: 'board', name: '2×4', note: '', stock: LUMBER.map(s => ({ id: id(), len: s[0], price: s[1], have: 0 })), parts: [] };
   const ply = { id: id(), kind: 'sheet', name: '¾ ply', note: '', stock: [{ id: id(), len: 96, wid: 48, price: 58, have: 0 }, { id: id(), len: 48, wid: 24, price: 21, have: 0 }], parts: [] };
   for (let k = 0; k < 3; k++) studs.parts.push({ id: id(), name: 'B' + k, qty: 1 + Math.floor(R() * 4), len: q16(10 + R() * 70) });
   for (let k = 0; k < 3; k++) ply.parts.push({ id: id(), name: 'S' + k, qty: 1 + Math.floor(R() * 3), len: q16(8 + R() * 40), wid: q16(6 + R() * 20), grain: R() < 0.5 });
-  const p = { name: 'P', units: 'in', kerf: 0.125, trim: 0, keep: 12, cur: '$', materials: [studs, ply], done: {} };
+  // a 1×6 with face-frame parts ripped from it
+  const frame = { id: id(), kind: 'board', name: '1×6', note: '', wid: 5.5, stock: [{ id: id(), len: 96, price: 8.28, have: 0 }, { id: id(), len: 72, price: 6.28, have: 0 }], parts: [] };
+  if (frameToo) for (let k = 0; k < 3; k++) frame.parts.push({ id: id(), name: 'F' + k, qty: 1 + Math.floor(R() * 3), len: q16(10 + R() * 40), wid: k ? q16(1 + R() * 3) : 0 });
+  const p = { name: 'P', units: 'in', kerf: 0.125, trim: 0, keep: 12, cur: '$', materials: frameToo ? [studs, ply, frame] : [studs, ply], done: {} };
   const pg = page(), fresh = page(), hist = [];
   // What a cut is in the wood: its board or sheet (size and place in the plan), and what it cuts and gives, by part id.
   const cutIs = (res, mid, ck) => {
@@ -264,7 +286,7 @@ console.log('a long run of edits: plans, tips and ticks');
       ['a length', () => q && (q.len = q16(R() < 0.1 ? 0 : 5 + R() * 60))],
       // a length a hair too long to fit twice (or three times) on a board or across a sheet, which a tip can fix
       ['a length that just misses', () => q && (q[sheet && R() < 0.5 ? 'wid' : 'len'] = pick(sheet ? [24, 16, 48] : [48, 32, 24, 60]))],
-      ['a width', () => q && sheet && (q.wid = q16(4 + R() * 30))],
+      ['a width', () => q && (sheet ? (q.wid = q16(4 + R() * 30)) : m.wid > 0 && (q.wid = pick([0, 1.5, q16(1 + R() * 4), m.wid])))],
       ['a name', () => q && (q.name = 'r' + Math.floor(R() * 99))],
       ['grain', () => q && sheet && (q.grain = !q.grain)],
       ['the kerf', () => (p.kerf = pick([0.125, 0.09375, 0.1875]))],
@@ -277,7 +299,7 @@ console.log('a long run of edits: plans, tips and ticks');
       ['a tip taken', () => { const t = pg.shown()[0]; if (t) { p.materials.find(x => x.id === t.mid).parts.find(x => x.id === t.pid)[t.dim] = t.to; tipsTaken++; } }],
       ['a tick', tick], ['a tick', tick], ['a tick', tick],
       ['back to an earlier copy', () => { if (hist.length > 3) { const old = JSON.parse(hist[hist.length - 1 - Math.floor(R() * 3)]); old.done = p.done; Object.assign(p, old); } }],
-    ]);
+    ].concat(frameToo ? [['a board’s width', () => !sheet && (m.wid = pick([0, 3.5, 5.5, 5.5]))], ['a width', () => q && !sheet && m.wid > 0 && (q.wid = pick([0, 1.5, q16(1 + R() * 4)]))]] : []));
     edit();
     res = pg.solve(p); pg.sync();
     const copy = JSON.parse(JSON.stringify(p)); fresh.forget();
@@ -300,8 +322,10 @@ console.log('a long run of edits: plans, tips and ticks');
     }
     if (e % 5 === 0) { pg.tips(); searches++; }
   }
-  console.log(`  150 edits, ${ticks} ticks made, ${searches} tips searches, ${tipsChecked} tips checked (${tipsTaken} taken)`);
+  console.log(`  150 edits${frameToo ? ' with a board ripped into parts' : ''}, ${ticks} ticks made, ${searches} tips searches, ${tipsChecked} tips checked (${tipsTaken} taken)`);
 }
+session(5, false);
+session(7, true);
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall good');
 process.exit(failed ? 1 : 0);

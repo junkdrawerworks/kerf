@@ -23,11 +23,11 @@ const SOLVER = [
   "var U = 'in';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
   ...['esc', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'onlyHave', 'planWhatFits', 'solveBoards', 'orientations', 'newSheet',
-    'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'orderSteps', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
+    'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'orderSteps', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets', 'ripped', 'solveRip'].map(fn),
 ];
 const K = new Function([
   ...SOLVER,
-  'return { parseLen: parseLen, fmt: fmt, fmtH: fmtH, solveBoards: solveBoards, solveSheets: solveSheets, units: function (u) { U = u; } };'
+  'return { parseLen: parseLen, fmt: fmt, fmtH: fmtH, solveBoards: solveBoards, solveSheets: solveSheets, ripped: ripped, solveRip: solveRip, units: function (u) { U = u; } };'
 ].join('\n'))();
 // The page's own solveAll, with the plans it keeps between edits, noting the id of each material it plans (a full solve:
 // the quick ones that look for tips aren't plans). `forget` drops the kept plans, as opening the page afresh does.
@@ -475,6 +475,50 @@ console.log('sheets: random jobs, every layout checked');
   console.log('  ' + n + ' jobs');
 }
 
+console.log('boards ripped into narrower parts');
+{
+  // A face frame from a 1×6 (5 1/2" wide): two 1 1/2" stiles and three rails ripped from it, and a full-width shelf.
+  // The board is planned like a sheet that wide, but it's still a board plan, pointing at the material's own sizes.
+  const stock = [{ id: 'a', len: 72, price: 6.28, have: 0 }, { id: 'b', len: 96, price: 8.28, have: 0 }];
+  const frame = { id: 'm', kind: 'board', wid: 5.5, stock, parts: [{ len: 30, wid: 1.5, qty: 2 }, { len: 20, wid: 1.5, qty: 3 }, { len: 30, qty: 1 }] };
+  check(K.ripped(frame) && !K.ripped({ ...frame, parts: [{ len: 30, qty: 2 }, { len: 20, wid: 5.5, qty: 1 }] }) && !K.ripped({ ...frame, wid: 0 }), 'which boards are ripped');
+  let r = K.solveRip(frame, { kerf: 0.125, trim: 0 });
+  check(r.kind === 'board' && r.rip && r.mat === frame && !r.errors.length && Math.abs(r.cost - 8.28) < 1e-9 && r.items.length === 1 && r.items[0].stock === stock[1], `the face frame: $${r.cost} on ${r.items.length} boards, ${JSON.stringify(r.errors)}`);
+  check(r.items[0].steps.some(st => st.type === 'rip' && Math.abs(st.at - 1.5) < 1e-9), 'the face frame has no rip at 1 1/2"');
+  // Seeded jobs, some with end trim: every part on its board at its size (a part with no width is the board's), never
+  // turned, inside the trimmed ends, clear of the others by the kerf, and every one placed.
+  const R = rng(23); let n = 0, rips = 0;
+  for (let t = 0; t < 120; t++) {
+    const kerf = t % 2 ? 0.125 : 0.09375, trim = t % 3 === 0 ? 0.5 : 0, wid = [3.5, 5.5, 7.25][t % 3];
+    const parts = Array.from({ length: 1 + Math.floor(R() * 4) }, () => ({ len: Math.round((6 + R() * 60) * 4) / 4, qty: 1 + Math.floor(R() * 4), ...(R() < 0.7 ? { wid: Math.round((0.75 + R() * (wid - 0.75)) * 8) / 8 } : {}) }));
+    const mat = { id: 'm', kind: 'board', wid, stock: [{ id: 'a', len: 96, price: 5, have: 0 }, { id: 'b', len: 120, price: 6.5, have: 0 }], parts };
+    if (!K.ripped(mat)) continue;
+    const r = K.solveRip(mat, { kerf, trim });
+    check(!r.errors.length, `job ${t}: ${JSON.stringify(r.errors.map(e => e.pi))}`);
+    n++; let count = 0;
+    r.items.forEach(b => {
+      check(mat.stock.includes(b.stock) && Math.abs(b.W - wid) < 1e-9 && Math.abs(b.L - b.stock.len) < 1e-9 && b.ends === trim, `job ${t}: a board's size`);
+      b.steps.forEach(st => { if (st.type === 'rip') rips++; });
+      b.placed.forEach((p, i) => {
+        count++;
+        const part = parts[p.pi], w = part.wid > 0 ? part.wid : wid;
+        check(!p.rot && Math.abs(p.l - part.len) < 1e-9 && Math.abs(p.w - w) < 1e-9, `job ${t}: part placed at the wrong size or turned`);
+        check(p.x >= trim - 1e-9 && p.x + p.l <= b.L - trim + 1e-9 && p.y > -1e-9 && p.y + p.w <= wid + 1e-9, `job ${t}: part off the board or in its trimmed ends`);
+        b.placed.forEach((q, j) => {
+          if (j <= i) return;
+          check(p.x + p.l + kerf <= q.x + 1e-9 || q.x + q.l + kerf <= p.x + 1e-9 || p.y + p.w + kerf <= q.y + 1e-9 || q.y + q.w + kerf <= p.y + 1e-9, `job ${t}: parts overlap (kerf included)`);
+        });
+      });
+    });
+    check(count === parts.reduce((a, p) => a + p.qty, 0), `job ${t}: placed ${count} parts`);
+  }
+  check(n > 60 && rips > n, `only ${n} ripped jobs, ${rips} rips`);
+  console.log('  ' + n + ' jobs, ' + rips + ' rips');
+  // A part wider than the board is too big, and the rest are planned.
+  r = K.solveRip({ ...frame, parts: [{ len: 30, wid: 7, qty: 1 }, { len: 20, wid: 1.5, qty: 2 }] }, { kerf: 0.125, trim: 0 });
+  check(r.errors.length === 1 && r.errors[0].pi === 0 && !r.errors[0].short && r.items.length === 1, 'a part wider than the board: ' + JSON.stringify(r.errors.map(e => e.pi)));
+}
+
 console.log('sheets: every part named by one step');
 {
   // Each part on a sheet is named once at the saw: by the cut that gives it, by the cut that leaves it ("what's left
@@ -563,6 +607,8 @@ console.log('the same plan on a slow or busy device');
     ['14 lengths of 2×4', () => K.solveBoards({ stock, parts: Array.from({ length: 14 }, (_, i) => ({ len: 9.5 + i * 5.375, qty: 1 + i % 4 })) }, { kerf: 0.125, trim: 0 })],
     ['a plywood cabinet', () => K.solveSheets({ stock: sheets, parts: [{ len: 34.5, wid: 23.25, qty: 4, grain: true }, { len: 30, wid: 23.25, qty: 2, grain: true }, { len: 30, wid: 4, qty: 4 },
       { len: 28.5, wid: 11.25, qty: 6, grain: true }, { len: 33, wid: 15.75, qty: 2, grain: true }, { len: 15, wid: 6, qty: 8 }] }, { kerf: 0.125 })],
+    ['face frames ripped from 1×6s', () => K.solveRip({ id: 'f', kind: 'board', wid: 5.5, stock: [{ len: 72, price: 6.28, have: 0 }, { len: 96, price: 8.28, have: 0 }],
+      parts: [{ len: 30, wid: 1.5, qty: 6 }, { len: 20, wid: 1.5, qty: 9 }, { len: 30, qty: 3 }, { len: 14.25, wid: 2.25, qty: 4 }] }, { kerf: 0.125, trim: 0.25 })],
   ];
   const realNow = Date.now;
   for (const [what, solve] of jobs) {

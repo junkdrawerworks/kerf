@@ -139,7 +139,7 @@ Past these, add a middle support or stiffen the front edge.
 ## 7. Things Kerf doesn't model, and what to do
 
 - **Glue-ups wider than a board** (tabletops, wide panels): one board part per strip, 1–2″ longer than the finished length for trimming. Size the strips so the widths add up past the finished width by about ½″ for jointing. Note the glue-up in the part names.
-- **Rips:** a narrower strip from a board is still a board part; name it "Cleat — rip to 1½".
+- **Rips:** a narrower strip from a board is a board part with its own `"wid"` (the board material needs its `"wid"` too); Kerf plans and draws the rip.
 - **Rough hardwood by the board foot:** pick a board width and length to model it, e.g. "4/4 walnut, 6″ wide". Price each board as its board feet × the price per board foot; board feet = thickness × width × length in inches ÷ 144. Say it's an approximation.
 - **Hardware, glue, finish, edge banding:** list them in the notes, not the project.
 - **Spares:** construction lumber has knots and warps. Suggest one spare board per material rather than adding one silently.

@@ -14,6 +14,9 @@ plan.json (lengths may be numbers in the plan's units, or strings the way a tape
     {"kind": "board", "name": "2×4", "note": "1½ × 3½ in",
      "stock": [{"len": "8'", "price": 4.28}, {"len": "10'", "price": 6.38}, {"len": "30", "have": 1}],
      "parts": [{"name": "Leg", "qty": 4, "len": "17 1/4"}]},
+    {"kind": "board", "name": "1×6 board", "note": "¾ × 5½ in", "wid": "5 1/2",   # "wid": the board's actual width
+     "stock": [{"len": "8'", "price": 8.28}],
+     "parts": [{"name": "Stile", "qty": 2, "len": "30", "wid": "1 1/2"}]},  # ripped from the board; no "wid" = the whole width
     {"kind": "sheet", "name": "¾ plywood", "note": "23/32 in actual",
      "stock": [{"len": "96", "wid": "48", "price": 58}],
      "parts": [{"name": "Seat", "qty": 1, "len": "48", "wid": "16", "grain": true}]}
@@ -132,8 +135,19 @@ def build(plan):
             continue
         sheet = kind == 'sheet'
         mname = str(m.get('name') or ('Sheet' if sheet else 'Board'))
-        out = {'kind': kind, 'name': mname, 'note': str(m.get('note') or ''), 'stock': [], 'parts': []}
+        out = {'kind': kind, 'name': mname, 'note': str(m.get('note') or '')}
         name_ok(f'material {mi + 1} name', mname)
+        # a board's actual width ("wid"), so parts can be ripped narrower from it
+        bw = None
+        if not sheet and m.get('wid') is not None:
+            bw = L(m.get('wid'))
+            if bw is None or bw <= 0:
+                errors.append(f'{mname}: can\'t read the board width {m.get("wid")!r}')
+                bw = None
+            else:
+                len_ok(f'{mname}: the board width', bw)
+                out['wid'] = bw
+        out.update({'stock': [], 'parts': []})
         name_ok(f'{mname}: the note', out['note'])
         if len(m.get('stock') or []) > LIMITS['sizes']:
             errors.append(f'{mname}: {len(m["stock"])} sizes; Kerf opens up to {LIMITS["sizes"]} per material')
@@ -207,7 +221,16 @@ def build(plan):
                                     f'({show(wd, units)}). Kerf runs the grain along "len" — swap them if that\'s wrong.')
             else:
                 if p.get('wid') is not None:
-                    warnings.append(f'{mname} / {label}: board parts only take a length; the width was ignored')
+                    wd = L(p.get('wid'))
+                    if bw is None:
+                        warnings.append(f'{mname} / {label}: a board part\'s width needs the board\'s width ("wid" on the material); it was ignored')
+                    elif wd is None or wd <= 0:
+                        errors.append(f'{mname} / {label}: can\'t read the width {p.get("wid")!r}')
+                        continue
+                    elif wd > bw + 1e-9:
+                        errors.append(f'{mname} / {label} ({show(wd, units)} wide) is wider than the board ({show(bw, units)})')
+                    else:
+                        q['wid'] = wd  # ripped from the board along its length; the board's width is the whole board
                 if not any(ln <= s['len'] - 2 * trim + 1e-9 for s in out['stock']):
                     errors.append(f'{mname} / {label} ({show(ln, units)}) is longer than any board listed')
             out['parts'].append(q)
@@ -225,7 +248,7 @@ def summary(project):
                           + (f" (have {s['have']})" if s['have'] else f" @ {project['cur']}{s['price']:.2f}") for s in m['stock'])
         lines.append(f'  stock: {stock}')
         for p in m['parts']:
-            dims = f"{show(p['len'], units)} × {show(p['wid'], units)}" + (' grain' if p['grain'] else '') if m['kind'] == 'sheet' else show(p['len'], units)
+            dims = f"{show(p['len'], units)} × {show(p['wid'], units)}" + (' grain' if p['grain'] else '') if m['kind'] == 'sheet' else show(p['len'], units) + (f" × {show(p['wid'], units)} ripped" if 'wid' in p and abs(p['wid'] - m.get('wid', 0)) > 1e-9 else '')
             lines.append(f"  {p['qty']:>3} × {p['name'] or '(unnamed)'}  {dims}")
         if m['kind'] == 'board' and m['parts'] and m['stock']:
             need = sum(p['qty'] * (p['len'] + kerf) for p in m['parts'])
@@ -268,6 +291,8 @@ def main():
     for k in ('kerf', 'trim', 'edge', 'keep'):
         project[k] = round(project[k], 5)
     for m in project['materials']:
+        if 'wid' in m:
+            m['wid'] = round(m['wid'], 5)
         for s in m['stock']:
             s['len'] = round(s['len'], 5)
             if 'wid' in s:

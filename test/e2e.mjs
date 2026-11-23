@@ -384,18 +384,19 @@ assert.equal((await stored()).order.length, 3);
       // What the cut list shows: each material's name, sizes to buy and parts (name, count, length and width).
       const cutList = () => page.$$eval('#mats .mat', ms => ms.map(m => [m.querySelector('[data-f="mname"]').value,
         [...m.querySelectorAll('.srow[data-sid]')].map(r => [...r.querySelectorAll('[data-f="slen"], [data-f="swid"]')].map(i => i.value).join(' × ')),
-        [...m.querySelectorAll('.prow[data-pid]')].map(r => [...r.querySelectorAll('[data-f="pname"], [data-f="qty"], [data-f="len"], [data-f="wid"]')].map(i => i.value).join(' / '))]));
-      const want = [['2×4', ["8'", "10'", "2' 6\""], ['Leg / 4 / 17 1/4"']], ['¾ plywood', ['96" × 48"'], ['Seat / 1 / 48" / 16"']]];
+        [...m.querySelectorAll('.prow[data-pid]')].map(r => [...r.querySelectorAll('[data-f="pname"], [data-f="qty"], [data-f="len"], [data-f="wid"]')].filter(i => i.getClientRects().length).map(i => i.value).join(' / '))]));
+      // the 1×6's stiles ripped from it, 1 1/2" wide
+      const want = [['2×4', ["8'", "10'", "2' 6\""], ['Leg / 4 / 17 1/4"']], ['1×6 board', ["8'"], ['Stile / 2 / 30" / 1 1/2"']], ['¾ plywood', ['96" × 48"'], ['Seat / 1 / 48" / 16"']]];
       await open(null, link.slice(base.length));
       await page.waitForSelector('#lkAdd');
-      assert.match(await page.textContent('#sheet .lk'), /^Mudroom bench\s*2×4 — 4 pieces\s*¾ plywood — 1 piece$/, 'make_kerf.py’s link');
+      assert.match(await page.textContent('#sheet .lk'), /^Mudroom bench\s*2×4 — 4 pieces\s*1×6 board — 2 pieces\s*¾ plywood — 1 piece$/, 'make_kerf.py’s link');
       await page.click('#lkAdd');
       await view('list');
       assert.deepEqual(await cutList(), want, 'make_kerf.py’s link in the cut list');
       await page.click('#projBtn');
       await page.setInputFiles('#pjFile', path);
       await page.waitForSelector('#lkAdd');
-      assert.match(await page.textContent('#sheet .lk'), /^Mudroom bench\s*2×4 — 4 pieces\s*¾ plywood — 1 piece$/, 'make_kerf.py’s file');
+      assert.match(await page.textContent('#sheet .lk'), /^Mudroom bench\s*2×4 — 4 pieces\s*1×6 board — 2 pieces\s*¾ plywood — 1 piece$/, 'make_kerf.py’s file');
       await page.click('#lkAdd');
       await page.waitForFunction(() => document.getElementById('sheet').hidden);
       assert.deepEqual(await cutList(), want, 'make_kerf.py’s file in the cut list');
@@ -1011,9 +1012,10 @@ await page.click('#stx');
   assert.deepEqual([await rows(), await at()], [3, 'pname:'], 'Enter after the length doesn’t add the next part');
   for (let i = 0; i < 4; i++) await page.keyboard.press('Enter');
   assert.equal(await rows(), 3, 'Enter on a blank part added a second blank part');
-  assert.deepEqual(await page.$$eval('.mat:not(.sheetmat) .prow[data-pid]', rs => rs.map(r => [...r.querySelectorAll('input')].map(i => i.value).join('|'))), ['Leg|4|30"', 'Apron|2|20"', '|1|']);
+  // (a board with no width shows no width for its parts)
+  assert.deepEqual(await page.$$eval('.mat:not(.sheetmat) .prow[data-pid]', rs => rs.map(r => [...r.querySelectorAll('input')].filter(i => i.getClientRects().length).map(i => i.value).join('|'))), ['Leg|4|30"', 'Apron|2|20"', '|1|']);
   // A blank part's length (and a sheet part's width) shows an example of how to type it.
-  assert.deepEqual(await page.$$eval('.prow[data-pid] input', is => [...new Set(is.map(i => i.dataset.f + ':' + i.placeholder))]), ['pname:Part', 'qty:', 'len:35 3/4', 'wid:16'], 'a length field’s example is broken');
+  assert.deepEqual(await page.$$eval('.prow[data-pid] input', is => [...new Set(is.filter(i => i.getClientRects().length).map(i => i.dataset.f + ':' + i.placeholder))]), ['pname:Part', 'qty:', 'len:35 3/4', 'wid:16'], 'a length field’s example is broken');
   // In the sizes to buy, Enter goes on to the next field.
   await page.click('.sheetmat details.stock summary');
   await page.locator('.sheetmat .srow[data-sid] input[data-f="slen"]').focus();
@@ -1852,8 +1854,10 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
     sheet('18 mm plywood', [{ len: 2440 / 25.4, wid: 1220 / 25.4, price: 62 }], [{ name: 'Seite', qty: 1, len: 2033.5 / 25.4, wid: 1210 / 25.4 }])], { units: 'mm' })));
   await view('list');
   const fields = () => page.$$eval('#mats input.mono:not([data-f="qty"]):not([data-f="price"])', is => is.map(i => i.dataset.f + ' ' + i.value + ' ' + i.inputMode));
-  assert.deepEqual(await fields(), ['len 1233.5 decimal', 'slen 2400 decimal', 'len 2033.5 decimal', 'wid 1210 decimal', 'slen 2440 decimal', 'swid 1220 decimal']);
-  assert.deepEqual(await page.$$eval('.prow[data-pid] input[data-f="len"], .prow[data-pid] input[data-f="wid"]', is => is.map(i => i.placeholder)), ['900', '900', '400'], 'an mm length field’s example is broken');
+  // (the board's width and its part's, empty and hidden while the board has no width, get the number pad too)
+  assert.deepEqual(await fields(), ['len 1233.5 decimal', 'wid  decimal', 'bwid  decimal', 'slen 2400 decimal', 'len 2033.5 decimal', 'wid 1210 decimal', 'slen 2440 decimal', 'swid 1220 decimal']);
+  assert.deepEqual(await page.$$eval('.prow[data-pid] input[data-f="len"], .sheetmat .prow[data-pid] input[data-f="wid"]', is => is.map(i => i.placeholder)), ['900', '900', '400'], 'an mm length field’s example is broken');
+  assert.equal(await page.getAttribute('[data-f="bwid"]', 'placeholder'), '140', 'an mm board width’s example');
   const len = page.locator('.prow[data-pid] input[data-f="len"]').first();
   await len.fill('1250');
   await len.blur();
@@ -2163,6 +2167,61 @@ for (const [units, len, short] of [['in', 47 + 15 / 16, 9.5], ['mm', 1213.5 / 25
   assert.equal(rows.length, 3);
   assert.ok(rows.every(r => r.left === rows[0].left && r.fits), `the rows' text doesn't line up in ${units}: ${JSON.stringify(rows)}`);
   assert.ok(rows.every(r => r.fr >= 0.8), `a fraction at the saw is small in ${units}`);
+}
+
+// A board ripped into narrower parts: a face frame from a 1×6, two 1 1/2" stiles and three rails ripped from it and a
+// shelf the board's width. The cut list shows the parts' widths (a blank one shows the board's), the plan draws a board
+// that rips and crosscuts, the saw says "the board", ticks stay through a reload, and the shop PDF has the board. With
+// the board's width taken away, its parts' widths hide and it's planned as plain boards again; a part wider than the
+// board says so.
+{
+  await open(saved(project('Face frame', [{ ...board('1×6 board', [{ len: 72, price: 6.28 }, { len: 96, price: 8.28 }], [{ name: 'Stile', qty: 2, len: 30, wid: 1.5 }, { name: 'Rail', qty: 3, len: 20, wid: 1.5 }, { name: 'Shelf', qty: 1, len: 30 }]), wid: 5.5 }])));
+  assert.equal(await page.textContent('.total'), '$8.28');
+  assert.equal(await page.textContent('#planOut .mdiag h4'), '1×6 board, 1 board');
+  assert.match(await page.textContent('#planOut .mdiag svg'), /^Board 18′ · 5 1\/2″ wide/);
+  assert.equal(shown(await page.textContent('#planOut .steps li')), '1Crosscut the board at 30″ → C Shelf');
+  assert.ok((await page.$$eval('#planOut .mdiag .steps li', ls => ls.map(l => l.textContent))).some(t => /Rip the .* at 1 1⁄2″/.test(shown(t))), 'the plan has no rip at 1 1/2"');
+  assert.match(shown(await page.textContent('#planOut .mdiag')), /Stile · 2 × 30″ × 1 1⁄2″/);
+  await fitsPhone('ripped board plan');
+  const pdf = pdfRuns(await shopPdf()).map(r => r.text);
+  assert.ok(pdf.includes('Board 1') && pdf.some(t => /^1\.  Crosscut the board at 30"/.test(t)) && pdf.some(t => /Rip the .* at 1 1\/2"/.test(t)), 'the shop PDF’s ripped board: ' + pdf.filter(t => /Board|Rip|Crosscut/.test(t)).join(' / '));
+  await view('saw');
+  assert.equal(await page.textContent('#sawOut .stk-hd b'), 'Board 1');
+  const sawCuts = page.locator('#sawOut .cut[data-k]');
+  assert.match(shown(await sawCuts.nth(0).locator('.what').textContent()), /^Next Crosscut the board → C ShelfAcross the grain/);
+  await sawCuts.nth(0).click(); await sawCuts.nth(1).click();
+  assert.equal(await page.textContent('.saw-bar b'), '2 of 8 cuts');
+  await page.waitForTimeout(600);
+  await page.reload();
+  await page.waitForSelector('#sawOut .cut[data-k]');
+  assert.equal(await page.textContent('.saw-bar b'), '2 of 8 cuts', 'a ripped board’s ticks don’t survive a reload');
+  await view('list');
+  const widths = () => page.$$eval('.prow[data-pid] [data-f="wid"]', is => is.map(i => i.getClientRects().length ? i.value + '|' + i.placeholder : 'hidden'));
+  assert.deepEqual(await widths(), ['1 1/2"|5 1/2"', '1 1/2"|5 1/2"', '|5 1/2"']);
+  // Enter goes along a board part to its width, then the next part.
+  await page.locator('.prow[data-pid] [data-f="len"]').first().focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.f), 'wid');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => document.activeElement.value), 'Rail');
+  // No board width: the widths hide and the board is planned as plain boards (the stiles from the whole width).
+  await page.click('details.stock summary');
+  await page.fill('[data-f="bwid"]', '');
+  await page.locator('[data-f="bwid"]').press('Enter');
+  assert.deepEqual(await widths(), ['hidden', 'hidden', 'hidden']);
+  await view('plan');
+  await page.waitForFunction(() => document.querySelector('.total').textContent !== '$8.28', null, { timeout: 5000 }).catch(() => {});
+  assert.equal(await page.textContent('.total'), '$14.56', 'without its width the 1×6 isn’t planned as plain boards');
+  await view('list');
+  await page.fill('[data-f="bwid"]', '5 1/2');
+  await page.locator('[data-f="bwid"]').press('Enter');
+  assert.deepEqual(await widths(), ['1 1/2"|5 1/2"', '1 1/2"|5 1/2"', '|5 1/2"']);
+  // A part wider than the board says so.
+  await page.fill('.prow[data-pid] [data-f="wid"] >> nth=0', '7');
+  await page.locator('.prow[data-pid] [data-f="wid"] >> nth=0').press('Enter');
+  await page.waitForFunction(() => !document.querySelector('.perr').hidden, null, { timeout: 5000 });
+  assert.equal(await page.textContent('.perr'), 'Stile (7″ wide) is wider than the board (5\u00a01/2″). Make it narrower, or the board wider in its sizes below.');
+  await fitsPhone('ripped board cut list');
 }
 
 // Boards on hand that run short say so in the cut list, instead of stopping the page: which parts are left out, and

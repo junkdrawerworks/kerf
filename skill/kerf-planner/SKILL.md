@@ -57,7 +57,7 @@ Name parts by what they are ("Front rail", "Left side"), not "Part A". The names
 **Watch for parts that are exact fractions of a stock length.** Two 48″ parts won't come out of one 8′ board, and two 60″ slats won't come out of a 10′ board: each saw cut eats about ⅛″. When the design has slack, size the part a hair under, like 47⅞. Otherwise, point out that it takes a longer board. Kerf's tips catch these too, but the cut list is the better place to settle it.
 
 How Kerf sees materials, so the plan maps cleanly:
-- **Boards.** Each board material is one cross-section: "2×4", "1×6 pine", "5/4 × 6 decking". Board parts have only a length. A strip ripped narrower from a board is still a board part; say so in its name ("Cleat — rip to 1½").
+- **Boards.** Each board material is one cross-section: "2×4", "1×6 pine", "5/4 × 6 decking". Give the material its actual width as `"wid"` (a 1×6 is `"5 1/2"`). Board parts have a length, and a part ripped narrower from the board (face-frame stiles, edging, cleats) gets its own `"wid"` too: Kerf plans the rips and draws them. A part with no width takes the whole board.
 - **Sheets.** Plywood, MDF and so on. Parts have a length and a width.
   - A sheet size's `len` is the way its grain runs, as a part's is: a 4×8 sheet is `len` 96, `wid` 48.
   - Set `grain: true` on visible parts (tops, sides, doors), so the grain runs along the part's length.
@@ -88,9 +88,9 @@ In `plan.json`, lengths are written the way a tape reads — `"35 3/4"`, `"8'"`,
 ```json
 {"name": "Mudroom bench", "units": "in",
  "materials": [
-  {"kind": "board", "name": "2×4", "note": "1½ × 3½ in",
+  {"kind": "board", "name": "2×4", "note": "1½ × 3½ in", "wid": "3 1/2",
    "stock": [{"len": "8'", "price": 4.28}, {"len": "10'", "price": 6.38}, {"len": "30", "have": 1}],
-   "parts": [{"name": "Leg", "qty": 4, "len": "16 1/2"}]},
+   "parts": [{"name": "Leg", "qty": 4, "len": "16 1/2"}, {"name": "Cleat", "qty": 2, "len": "14", "wid": "1 1/2"}]},
   {"kind": "sheet", "name": "¾ plywood", "note": "23/32 in actual",
    "stock": [{"len": "96", "wid": "48", "price": 58}, {"len": "48", "wid": "24", "price": 24}],
    "parts": [{"name": "Seat", "qty": 1, "len": "48", "wid": "16", "grain": true}]}]}
