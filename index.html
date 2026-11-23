@@ -2229,9 +2229,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             if (st.type === 'none') { t.cuts.push({ id: 'whole' + gives, noCut: true, note: rip ? (it.ends > 0 ? 'The squared board is ' : 'The whole board is ') + name(g.it.pi) + ' — no ' + (it.ends > 0 ? 'other ' : '') + 'cut needed' : it.edge > 0 ? 'The trimmed sheet is ' + name(g.it.pi) + ' — no other cut needed' : 'The whole sheet is ' + name(g.it.pi) + ' — no cut needed' }); return; }
             // A rip wider than what's left past the blade can be made with the fence set to that instead: a small table
             // saw can't set its fence far enough for a 31 1/4" rip off a 48" sheet, but it can for the 16 5/8" left over.
+            // Not for less than an inch, which would leave a thin strip trapped between the blade and the fence.
             var far = st.type === 'rip' ? (st.on ? st.on.h : it.W) - st.at - P.kerf : 0;
             t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: measH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + pieceName(st.on, fmtH, rip) + stepGives(st, name, ' → '), sub: st.type === 'rip' ? 'Along the grain — set the fence at ' + fmtH(st.at) + ', or mark it and cut on the waste side' : 'Across the grain — measure from the end, cut on the waste side',
-              alt: far >= 1 / 32 && far < st.at - 1e-9 ? 'or set the fence at ' + fmtH(far) + ' — ' + (st.gives ? 'the part' : 'the ' + fmtH(st.at) + ' piece') + ' is the piece past the blade' : '' });
+              alt: far >= 1 - 1e-9 && far < st.at - 1e-9 ? 'or set the fence at ' + fmtH(far) + ' — ' + (st.gives ? 'the part is the piece' : 'the ' + fmtH(st.at) + ' piece is the one') + ' past the blade' : '' });
           });
           // What's left that's worth keeping, at least the smallest offcut worth keeping each way (on a ripped board, long).
           var keep = it.spare.filter(function (f) { return worthKeeping(f.w) && (rip || worthKeeping(f.h)); });

@@ -2217,8 +2217,17 @@ for (const c of sawCases) {
 }
 
 // A rip wider than what's left past the blade gives the fence setting for that too, for a saw whose fence can't go that
-// far: 31 1/4" off a 48" sheet leaves 16 5/8" past an 1/8" kerf. A rip narrower than what's left has no such line.
+// far: 31 1/4" off a 48" sheet leaves 16 5/8" past an 1/8" kerf. A rip narrower than what's left has no such line, and
+// nor has one that leaves less than an inch, a strip that would be trapped between the blade and the fence. A rip that
+// gives a strip to cut again names the strip.
 {
+  const second = async parts => {
+    await open(saved(project('Wide rip', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], parts)])));
+    await view('saw');
+    return page.$$eval('#sawOut .cut[data-k] .what', ws => ws.map(w => w.querySelectorAll('small')[1]?.textContent || '')).then(a => a.map(shown));
+  };
+  assert.deepEqual(await second([{ name: 'Door', qty: 2, len: 30, wid: 31.25 }]), ['or set the fence at 16 5⁄8″ — the 31 1⁄4″ piece is the one past the blade', '', ''], 'a wide rip that gives a strip');
+  assert.deepEqual(await second([{ name: 'Panel', qty: 1, len: 96, wid: 47.5 }]), [''], 'a rip that leaves 3/8" gives no fence setting for it');
   await open(saved(project('Wide rip', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Top', qty: 1, len: 96, wid: 31.25 }, { name: 'Shelf', qty: 1, len: 96, wid: 6 }])])));
   await view('saw');
   const rows = await page.$$eval('#sawOut .cut[data-k] .what', ws => ws.map(w => [...w.querySelectorAll('small')].map(s => s.textContent))).then(a => a.map(r => r.map(shown)));
