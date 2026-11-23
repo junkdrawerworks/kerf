@@ -75,7 +75,7 @@ It's a static site: plain HTML, CSS and JavaScript in one page, with no build st
 
 ```sh
 npx serve .                   # or any static file server, then open the printed address
-npm test                      # checks the solver against brute force, then uses the real page in Chromium (needs Playwright)
+npm test                      # checks the solver against brute force, then seeded random jobs and edits, then uses the real page in Chromium (needs Playwright)
 node tools/screenshots.mjs    # redraws docs/*.png and og.png
 node tools/make-icons.mjs     # redraws the PNG icons from icon.svg
 ```
@@ -84,7 +84,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 
 ### Tests
 
-`npm test` runs two suites. `test/solver.test.cjs` needs no dependencies: it reads the solver straight out of `index.html` and checks:
+`npm test` runs three suites. `test/solver.test.cjs` needs no dependencies: it reads the solver straight out of `index.html` and checks:
 
 - **Parsing:** lengths in each format parse to the right value, and read back to the 32nd or the tenth of a millimetre in a field. The kerf-planner skill's `make_kerf.py` reads every one of them to the same inches (skipped, with a note, where there's no `python3`).
 - **Boards:** the example project costs the known optimum, several hundred random jobs match a brute-force search, and 150 bigger ones (and a 24-piece job that used to cost $1.22 more) never cost more than first fit, longest piece first. The random jobs include offcuts on hand, end trim and two kerf widths. Boards on hand that run short are reported, not left to crash.
@@ -95,6 +95,12 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - **Offcuts worth keeping:** a 300 mm offcut with Keep offcuts over at 300 mm, and an 11 31/32″ one shown as 12″ with it at 12″, are worth keeping at the saw; a 299 mm one isn't.
 - **Ticks stay on their cuts:** over 400 seeded random edits, wherever an edit keeps a material's tick key, every cut the saw shows for it reads as before; switching units keeps the keys.
 - **Plans kept between edits:** in a project with a board and a sheet material, each of 35 edits plans again only the materials it changes (nothing for a rename, only the plywood for a part's grain, both for the kerf), and the plan Kerf keeps is the one a fresh start finds, down to the sizes and parts it points at, also when another window's save brings a new copy of the project.
+
+`test/invariants.test.cjs` needs no dependencies either: it reads the solver, the saw's checklist, the tips search and the ticks out of `index.html` and runs seeded random cases against what Kerf promises, whatever the job, in about ten seconds. The same cases every run:
+
+- **Boards:** 320 jobs, in inches and millimetres, with end trim, offcuts on hand and parts that fill a board exactly. Up to 9 pieces, the plan costs what brute force finds; a plan the exact search finished costs the cheapest possible; none costs more than first fit, longest piece first; and the saw says an offcut is worth keeping exactly when its shown length is at least Keep offcuts over, shown the same way.
+- **Sheets:** 100 jobs with parts that tile a sheet exactly or fill what a rip leaves, in inches and millimetres. Sawn step by step, every cut runs edge to edge across the piece it names, at the distance it gives; each step's part is what's left on the near side of its cut, and "what's left is" the part beyond it; every part comes off whole and is named by exactly one step; and every offcut the drawing labels is a piece left over, of that size.
+- **A long run of edits:** 150 seeded edits in one session, with ticks at the saw, tips taken and going back to an earlier copy: after each, the plan kept between edits is the one a fresh start finds, every tip still shown saves what it says, and every tick is on the cut it was made on.
 
 `test/e2e.mjs` uses the real page in Chromium at phone size (it needs Playwright). It opens the example and checks its total, runs the kerf-planner skill's `make_kerf.py` on the plan in its instructions and opens the link and the file it writes, checking each part's name, count and length (skipped without `python3`), opens a link and a project file as the skill makes them (and broken links, links that picked up a full stop or a line break, the same project opened again by link, file and pasted text, a project of 201 parts saved as a file and opened whole, and what's past the limits, and on an iPhone, the note and Copy link for Kerf on the home screen), ticks cuts at the saw and reloads, keeps the screen on while the checklist shows, marks the next cut and opens at it, checks that ticks stay on their cuts through edits (another material's, a count changed and changed back, end trim turned on, a sheet part resized where it sits), checks the steps for boards that need a last cut or end trim, Undo after removing a part and after Start over, the plan's warnings and drawings (labels that fit their parts, and cut numbers on the sheet clear of each other and of the part letters), that an edit plans again only the material it changes (renaming a part plans nothing, and the new name shows in the plan, at the saw and in the cut list) and that a reload then finds the same plan, the shop PDF's layout (a sheet of 36 steps keeps its heading and the legend company), a 3/32″ kerf and lengths typed to the 32nd or the tenth of a millimetre reading back as typed, tips, the dialogs from the keyboard, where focus goes after removing a part, a size or a material or using a tip, when Kerf saves and what it says when it can't (storage full, or blocked), two windows open at once, and damaged storage. Throughout, nothing may scroll sideways, throw an error or load from elsewhere, and at the end it opens offline.
 
