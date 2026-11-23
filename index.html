@@ -2777,9 +2777,21 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   // A project from a link, a file or pasted text. Your first one takes the place of the example if you never changed
   // it; one you changed stays.
+  function exampleToGo() { var only = DB.order.length === 1 && DB.projects[DB.order[0]]; return untouchedExample(only) ? only : null; }
+  // The name a project coming in takes: its own, or beside a project of the same name "Mudroom bench (2)", then (3),
+  // so a revised design doesn't make two rows Projects can't tell apart. The example it takes the place of doesn't count.
+  function freeName(name) {
+    var taken = {}, go = exampleToGo(), key = function (n) { return n.trim().toLowerCase(); };
+    DB.order.forEach(function (id) { var q = DB.projects[id]; if (q && q !== go) taken[key(q.name)] = 1; });
+    if (!taken[key(name)]) return name;
+    var stem = name.replace(/ \(\d+\)$/, ''), n = 2;
+    while (taken[key(stem + ' (' + n + ')')]) n++;
+    return stem + ' (' + n + ')';
+  }
   function addProject(p) {
-    var only = DB.order.length === 1 && DB.projects[DB.order[0]];
-    if (untouchedExample(only)) { delete DB.projects[only.id]; DB.deleted[only.id] = Math.max(Date.now(), (only.updated || 0) + 1); DB.order = []; }
+    var go = exampleToGo();
+    if (go) { delete DB.projects[go.id]; DB.deleted[go.id] = Math.max(Date.now(), (go.updated || 0) + 1); DB.order = []; }
+    p.name = freeName(p.name); // its signature (`from`) stays the one it came with, so opening it again still finds it
     DB.projects[p.id] = p; DB.order.unshift(p.id); DB.current = p.id; P = p; save(true); closeSheet(); applyProject(); toast('Opened “' + P.name + '”');
   }
   function importText(t, how) {
@@ -2807,7 +2819,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       '<div class="lk"><b>' + esc(p.name) + '</b><ul>' + p.materials.map(function (m) { return '<li>' + esc(m.name) + ' — ' + plural(pieces(m), 'piece') + '</li>'; }).join('') + '</ul></div>' +
       notes.map(function (n) { return '<p class="note">' + esc(n) + '</p>'; }).join('') +
       (had ? '<p class="note">You opened this project before; your copy is still in Projects.</p><div class="row"><button class="btn tape" type="button" id="lkOpen">Open my copy</button><button class="btn sec" type="button" id="lkAdd">Add another copy</button></div>'
-        : '<div class="row"><button class="btn tape" type="button" id="lkAdd">Add to my projects</button></div><p class="note">It comes in as a new project; nothing you already have changes. Check the prices — they’re whatever the ' + { link: 'link', file: 'file', text: 'text' }[how] + ' came with.</p>') +
+        : '<div class="row"><button class="btn tape" type="button" id="lkAdd">' + (freeName(p.name) === p.name ? 'Add to my projects' : 'Add as “' + esc(freeName(p.name)) + '”') + '</button></div><p class="note">It comes in as a new project; nothing you already have changes. Check the prices — they’re whatever the ' + { link: 'link', file: 'file', text: 'text' }[how] + ' came with.</p>') +
       (link && iosBrowser() ? '<p class="note">Using Kerf from your home screen? It keeps its own projects — copy this link and paste it under Projects there.</p><div class="row"><button class="btn sec sm" type="button" id="lkCopy">Copy link</button></div>' : '') + '</div>');
     if ($('lkCopy')) $('lkCopy').addEventListener('click', function () {
       var done = function () { toast('Link copied — paste it under Projects in Kerf on your home screen'); };

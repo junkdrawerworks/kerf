@@ -543,6 +543,8 @@ await page.click('#lkx');
   await page.waitForSelector('#lkOpen');
   await page.click('#lkAdd');
   assert.equal(await count(), 3);
+  // It takes the next free number, so the two rows can be told apart.
+  assert.equal(await page.inputValue('#pname'), 'Mudroom bench (2)', 'another copy came in with the same name');
   // Updated today: the time, so two copies of one name can be told apart; on another day, the date.
   const db = await stored();
   await open({ ...db, projects: { ...db.projects, [db.order[2]]: { ...db.projects[db.order[2]], updated: Date.now() - 3 * 86400000 } } });
@@ -551,6 +553,24 @@ await page.click('#lkx');
   assert.ok(rows.slice(0, 2).every(r => / · \d{1,2}:\d\d/.test(r)), 'a project changed today shows its date, not the time: ' + rows.join(', '));
   assert.ok(!/:/.test(rows[2]), 'a project changed days ago shows a time: ' + rows[2]);
   await page.click('#pjx');
+  // A revised design of the same name says on its button that it comes in numbered, and does; opening the first
+  // link again still finds a copy it made (the newest, Mudroom bench (2)), not the revised one.
+  const revised = { kerf: 1, project: { ...MUDROOM.project, notes: 'Revised: a deeper seat.' } };
+  await page.evaluate(hash => { location.hash = hash; }, linkTo(revised));
+  await page.waitForSelector('#lkAdd');
+  assert.equal(await page.textContent('#lkAdd'), 'Add as “Mudroom bench (3)”');
+  await page.click('#lkAdd');
+  assert.equal(await page.inputValue('#pname'), 'Mudroom bench (3)');
+  assert.equal(await page.textContent('#toast'), 'Opened “Mudroom bench (3)”');
+  await page.evaluate(hash => { location.hash = hash; }, linkTo(MUDROOM));
+  await page.waitForSelector('#lkOpen', { timeout: 5000 });
+  await page.click('#lkOpen');
+  assert.equal(await page.inputValue('#pname'), 'Mudroom bench (2)');
+  // A name that isn't taken comes in as it is, and so does one that matches only the example it takes the place of.
+  await open(null, linkTo({ kerf: 1, project: { ...MUDROOM.project, name: 'Garage shelves (example)' } }));
+  assert.equal(await page.textContent('#lkAdd'), 'Add to my projects');
+  await page.click('#lkAdd');
+  assert.equal(await page.inputValue('#pname'), 'Garage shelves (example)');
 }
 
 // What Kerf saves opens again whole: a project with a long name, 201 parts of one material (one with a long name) and
@@ -582,7 +602,7 @@ await page.click('#lkx');
   await page.click('#lkAdd');
   const back = await stored();
   assert.equal(back.order.length, 2);
-  assert.deepEqual(bare(back.projects[back.order[0]]), bare(big), 'a project saved as a file comes back different');
+  assert.deepEqual(bare(back.projects[back.order[0]]), { ...bare(big), name: big.name + ' (2)' }, 'a project saved as a file comes back different (numbered beside the one it was saved from)');
 
   const many = Array.from({ length: 1005 }, (_, i) => ({ name: 'Slat ' + i, qty: 0, len: 20 }));
   many[3] = { name: 'A long name '.repeat(21), qty: 2, len: 30 }; // 252 characters
