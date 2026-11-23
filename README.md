@@ -77,7 +77,7 @@ It's a static site: plain HTML, CSS and JavaScript in one page, with no build st
 npx serve .                   # or any static file server, then open the printed address
 npm test                      # checks the solver against brute force, then seeded random jobs and edits, then uses the real page in Chromium (needs Playwright)
 node tools/screenshots.mjs    # redraws docs/*.png and og.png
-node tools/make-icons.mjs     # redraws the PNG icons from icon.svg
+node tools/make-icons.mjs     # redraws the PNG icons from icon.svg and the two in tools/
 ```
 
 To put it online with GitHub Pages: **Settings → Pages → Build and deployment → Deploy from a branch**, then pick `main` and `/ (root)`.
@@ -113,7 +113,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - `og.png`: the link preview.
 - `CNAME` and `carry.js`: Kerf moved from junkdrawer.works/kerf/ to its own address. `CNAME` gives it kerf.junkdrawer.works, and `carry.js` brings the projects saved at the old address over the first time it opens at the new one.
 - `skill/kerf-planner/`: the skill for Claude, above.
-- `tools/`: `screenshots.mjs` for the pictures; `make-icons.mjs` and `icon-full-bleed.svg` for the icons.
+- `tools/`: `screenshots.mjs` for the pictures; `make-icons.mjs`, `icon-full-bleed.svg` (for the iPhone's icon, which iOS rounds itself) and `icon-maskable.svg` for the icons. Android crops the maskable icon to a circle or another shape and keeps only the middle circle, 80% across, so `icon-maskable.svg` has the same art smaller, all of it inside that circle.
 - `test/`: `solver.test.cjs` and `e2e.mjs`.
 
 ## License
