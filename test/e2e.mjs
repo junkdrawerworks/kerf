@@ -1097,6 +1097,33 @@ await page.keyboard.press('Enter');
 assert.equal(await page.evaluate(() => document.activeElement.dataset.k.split('/')[1]), '0.0', 'focus after Start over');
 assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
+// At the saw on a short screen (a phone on its side, or 200% zoom), each board's heading stays in sight under the top
+// bar while its cuts scroll by, and Shift+Tab up the list never leaves the focused cut under either. Their cards don't
+// clip, so a focus ring shows whole.
+{
+  await page.setViewportSize({ width: 640, height: 400 });
+  await open(null);
+  await view('saw');
+  const cover = () => page.evaluate(() => {
+    const a = document.activeElement, r = a.getBoundingClientRect(), hd = a.closest('.stk').querySelector('.stk-hd').getBoundingClientRect();
+    return { top: Math.round(r.top), under: Math.round(Math.max(document.querySelector('.top').getBoundingClientRect().bottom, hd.bottom)) };
+  });
+  await page.locator('#sawOut .cut[data-k]').last().focus();
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Shift+Tab');
+    const c = await cover();
+    assert.ok(c.top >= c.under - 1, `Shift+Tab ${i + 1} left the focused cut under the top bar or its board's heading: ${JSON.stringify(c)}`);
+  }
+  const stuck = await page.evaluate(() => {
+    const bar = document.querySelector('.top').getBoundingClientRect().bottom, card = document.querySelectorAll('#sawOut .stk')[1];
+    scrollBy(0, card.getBoundingClientRect().top - bar + 90);
+    return [Math.round(card.querySelector('.stk-hd').getBoundingClientRect().top), Math.round(bar), card.querySelector('.stk-hd b').textContent];
+  });
+  assert.deepEqual(stuck, [stuck[1], stuck[1], 'Board 2'], 'a board\'s heading scrolls away with its cuts');
+  assert.deepEqual(await page.evaluate(() => ['.stk', '.seg', '.cut'].map(s => getComputedStyle(document.querySelector(s)).overflow)), ['visible', 'visible', 'visible'], 'a card clips its focus rings');
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 // An action that draws the cut list again leaves keyboard focus where the work is, not on the page itself with the
 // next Tab at the top: a part's ✕ moves it to the next part's ✕ (or the one before, or + Add a part), a size's ✕ to
 // the next size's, a material's ✕ to the next material's name (or the buttons that add one), a tip's Use to the field
