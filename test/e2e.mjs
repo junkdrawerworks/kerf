@@ -1518,6 +1518,30 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓', 'Board 2— same as board 11/3', 'Board 3— same as board 10/3›'], 'a reload folds a board with ticks');
 }
 
+// At tablet and laptop widths a drawing names each part where there's room: "B Front & back rail 48″" on a board, and on
+// a sheet part with room for three lines, its name between its letter and its size. A long name is cut short with …
+// to fit. The shop PDF does the same. On a phone the drawings keep to letters, which the legend names.
+{
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await open(null);
+  const labels = () => page.$$eval('#planOut svg.diag .dg-lbl:not(.dg-nm)', ts => ts.map(t => {
+    const r = t.previousElementSibling, a = t.getBBox(), b = r && r.matches('rect.dg-part') ? r.getBBox() : null;
+    return { t: t.textContent, inside: !b || (a.x >= b.x && a.x + a.width <= b.x + b.width) };
+  }));
+  let got = await labels();
+  assert.ok(['B Front & back rail 48″', 'C Side ra… 21″', 'A Leg 72″'].every(t => got.some(l => l.t === t)), 'the boards don’t name their parts: ' + got.map(l => l.t).join(', '));
+  assert.deepEqual(await page.$$eval('#planOut svg.diag .dg-nm', ts => ts.map(t => t.textContent)), ['Shelf', 'Shelf', 'Shelf', 'Shelf'], 'the sheet doesn’t name its parts');
+  assert.ok(got.every(l => l.inside), 'a label runs past its part: ' + JSON.stringify(got.filter(l => !l.inside)));
+  const pdf = pdfRuns(await shopPdf()).map(r => r.text);
+  assert.ok(['B Front & back rail 48"', 'A Leg 72"', 'Shelf'].every(t => pdf.includes(t)), 'the shop PDF’s drawings don’t name their parts');
+  await open(saved(project('Face frame', [board('1×2 board', [{ len: 96, price: 3.5 }], [{ name: 'Face frame stile, left and right', qty: 2, len: 34.5 }])])));
+  got = await labels();
+  assert.ok(got.length === 2 && got.every(l => /^A Face frame.*… 34 1\/2″$/.test(l.t) && l.inside), 'a long name isn’t cut short to fit: ' + JSON.stringify(got));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(null);
+  assert.ok((await page.$$eval('#planOut svg.diag .dg-lbl', ts => ts.map(t => t.textContent))).every(t => !/[a-z]{2}/.test(t)), 'a phone’s drawing names its parts');
+}
+
 // On a 320 px phone the project's name had room for "Gara", cut off with no sign of more: under 360 px it gets a line of
 // its own, ending in … if it's still too long. The tip's button goes under its words, and a size in the shopping list
 // stays on one line. At 390 the name stays beside the brand.

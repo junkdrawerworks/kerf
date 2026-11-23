@@ -229,6 +229,7 @@ div.sec{margin-top:22px}
 .dg-numt.sm{font-size:8px}
 .dg-lbl{fill:#2E220F;font:600 12px var(--mono);dominant-baseline:central}
 .dg-lblb{fill:#2E220F;font:700 12px var(--mono);dominant-baseline:central}
+.dg-nm{font-weight:500}
 .dg-meta{fill:var(--ink2);font:500 12px var(--mono);dominant-baseline:central}
 .dg-metab{fill:var(--ink);font:700 12px var(--mono);dominant-baseline:central}
 .dg-yours{fill:var(--good);font:500 12px var(--mono);dominant-baseline:central}
@@ -1956,6 +1957,17 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // The first of `texts` that fits `room` px across, at `cw` px a character (12px mono is 7.2) with 4 px to spare each
   // side, or ''.
   function fitLabel(texts, room, cw) { return texts.filter(function (t) { return t.length * cw + 8 <= room; })[0] || ''; }
+  // A part's name for a label, whole and then cut ever shorter with … (keeping at least four characters of it), each
+  // between `pre` and `post`: "B Front & back rail 48″", "B Front & back r… 48″", … "B Fron… 48″". None for no name.
+  function nameForms(name, pre, post) {
+    var out = []; name = String(name || '').trim();
+    if (name) out.push(pre + name + post);
+    for (var k = name.length - 1; k >= 4; k--) out.push(pre + name.slice(0, k).replace(/[\s,.&·–—-]+$/, '') + '…' + post);
+    return out;
+  }
+  // Drawings name their parts where there's room, at tablet and laptop widths; on a phone they keep to letters, which
+  // the legend under each drawing names.
+  function namesFit() { return W.plan >= 560; }
   // Where each cut's number goes: on its cut line (`lines`, [x1, y1, x2, y2]), as near the middle as it can be while
   // clear of the labels (`boxes`, [x, y, w, h]) and of the other numbers, and inside `bound` ([x1, y1, x2, y2]). Each
   // number is a circle of radius `r` (a box `r` from its centre either way, if `square`), or `small` where no place on
@@ -2018,7 +2030,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     // Boards cut alike are drawn once, a row to each run of them: "1–4" over "10′ ×4", with a second board showing behind.
     // The left column is as wide as its widest length (12px mono is 7.2px a character), with 4px to spare: "600 mm"
     // needs more than "2.4 m" or "10'".
-    var rs = runs(m), many = function (r) { return r[1] > r[0] ? ' ×' + (r[1] - r[0] + 1) : ''; };
+    var rs = runs(m), many = function (r) { return r[1] > r[0] ? ' ×' + (r[1] - r[0] + 1) : ''; }, named = namesFit();
     var width = W.plan, maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; }));
     var labelW = Math.max(40, Math.ceil(Math.max.apply(null, rs.map(function (r) { return Math.max((fmtD(m.items[r[0]].stock.len, { ft: true }) + many(r)).length, (r[0] + 1 + '–' + (r[1] + 1)).length * (r[1] > r[0])); })) * 7.2 + 4));
     var drawW = width - labelW - (rs.length < m.items.length ? 4 : 0), px = drawW / maxLen, rowH = 34, gap = 22, top = 24, H = top + rs.length * (rowH + gap) - gap + 6;
@@ -2042,7 +2054,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // both trimmed ends first, so the cut that squares up the far end draws over its hatching
       if (b.trim > 0) s += '<rect class="dg-scrap" x="' + x + '" y="' + y + '" width="' + (b.trim * px).toFixed(1) + '" height="' + rowH + '"/><rect class="dg-scrap" x="' + (x + bw - b.trim * px).toFixed(1) + '" y="' + y + '" width="' + (b.trim * px).toFixed(1) + '" height="' + rowH + '"/>';
       b.pieces.forEach(function (p, k) {
-        var w = p.len * px, part = m.mat.parts[p.pi], L = letter(p.pi, m.mat), lbl = fitLabel([L + ' ' + fmtD(p.len), fmtD(p.len), fmtD(p.len, { bare: true }), L], w, 7.2);
+        var w = p.len * px, part = m.mat.parts[p.pi], L = letter(p.pi, m.mat), lbl = fitLabel((named ? nameForms(part && part.name, L + ' ', ' ' + fmtD(p.len)) : []).concat([L + ' ' + fmtD(p.len), fmtD(p.len), fmtD(p.len, { bare: true }), L]), w, 7.2);
         s += '<rect class="dg-part" x="' + cx.toFixed(1) + '" y="' + (y + 0.5) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmtD(p.len)) + '</title></rect>';
         if (lbl) s += '<text class="dg-lbl" x="' + (cx + w / 2).toFixed(1) + '" y="' + (y + rowH / 2) + '" text-anchor="middle">' + esc(lbl) + '</text>';
         cx += w;
@@ -2092,18 +2104,20 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // marks if every part that has room for a size fits it with them, else without. A part too narrow for that form
       // takes the length alone.
       var forms = function (p) { return [fmtD(p.l) + ' × ' + fmtD(p.w), fmtD(p.l, { bare: true }) + ' × ' + fmtD(p.w, { bare: true }), fmtD(p.l)]; };
-      var sized = sh.placed.filter(function (p) { return p.l * px > 30 && p.w * py > 34 && fitLabel(forms(p).slice(1, 2), p.l * px, 7.2); });
+      var sized = sh.placed.filter(function (p) { return p.l * px > 30 && p.w * py > 34 && fitLabel(forms(p).slice(1, 2), p.l * px, 7.2); }), named = namesFit();
       var form = sized.every(function (p) { return fitLabel(forms(p).slice(0, 1), p.l * px, 7.2); }) ? 0 : 1;
       sh.placed.forEach(function (p, k) {
         var x = ox + p.x * px, y = oy + p.y * py, w = p.l * px, h = p.w * py, part = m.mat.parts[p.pi], L = letter(p.pi, m.mat);
         s += '<rect class="' + (rip ? 'dg-wood' : 'dg-ply') + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"/><path class="dg-grain" d="' + grainPaths(x, y, w, h, 7 + k * 13 + si * 101) + '"/>';
         s += '<rect class="dg-part" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"><title>' + esc(L + ' · ' + (part && part.name ? part.name + ' · ' : '') + fmtD(p.l) + ' × ' + fmtD(p.w)) + '</title></rect>';
         if (w > 30 && h > 16) {
-          // under the letter, the size in the sheet's form, or the length alone
-          var dims = h > 34 ? fitLabel(forms(p).slice(form), w, 7.2) : '';
-          var a = label('dg-lblb', x + w / 2, y + h / 2 - (dims ? 8 : 0), L, 7.2, x + 2, x + w - 2);
+          // under the letter, the size in the sheet's form, or the length alone; with room for three lines, the part's
+          // name between them
+          var dims = h > 34 ? fitLabel(forms(p).slice(form), w, 7.2) : '', nm = named && dims && h > 54 ? fitLabel(nameForms(part && part.name, '', ''), w, 7.2) : '';
+          var a = label('dg-lblb', x + w / 2, y + h / 2 - (nm ? 17 : dims ? 8 : 0), L, 7.2, x + 2, x + w - 2);
           a.cy = y + h / 2;
-          if (dims) { a.with = label('dg-lbl', x + w / 2, y + h / 2 + 9, dims, 7.2, x + 2, x + w - 2); a.with.sub = true; a.alt = fitLabel([fmtD(p.l)], w, 7.2); }
+          if (nm) { a.name = label('dg-lbl dg-nm', x + w / 2, y + h / 2, nm, 7.2, x + 2, x + w - 2); a.name.sub = true; }
+          if (dims) { a.with = label('dg-lbl', x + w / 2, y + h / 2 + (nm ? 17 : 9), dims, 7.2, x + 2, x + w - 2); a.with.sub = true; a.alt = fitLabel([fmtD(p.l)], w, 7.2); }
         }
       });
       sh.spare.forEach(function (f) { var w = f.w * px, h = f.h * py, t = fitLabel([fmtD(f.w) + ' × ' + fmtD(f.h)], w, 6.6); if (t && h > 18) label('dg-scrapt', ox + f.x * px + w / 2, oy + f.y * py + h / 2, t, 6.6, ox + f.x * px + 2, ox + (f.x + f.w) * px - 2); });
@@ -2134,14 +2148,20 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var lbls = '';
       labels.forEach(function (l) {
         if (l.sub) return;
-        var tries = [l.with ? [l, l.with] : [l]], dx = null, pick;
+        // with a name: the three lines, then with the length alone, then as a part with no room for a name
+        var mid = l.name ? [l.name] : [], tries = [l.with ? [l].concat(mid, [l.with]) : [l]], dx = null, pick;
         if (l.with) {
-          if (l.alt && l.alt !== l.with.t) tries.push([l, relabel(l.with, l.alt, l.with.y)]);
+          if (l.alt && l.alt !== l.with.t) tries.push([l].concat(mid, [relabel(l.with, l.alt, l.with.y)]));
+          if (l.name) {
+            var two = relabel(l, l.t, l.cy - 8);
+            tries.push([two, relabel(l.with, l.with.t, l.cy + 9)]);
+            if (l.alt && l.alt !== l.with.t) tries.push([two, relabel(l.with, l.alt, l.cy + 9)]);
+          }
           tries.push([relabel(l, l.t, l.cy)], [l]);
         }
         tries.some(function (g) { dx = clear(g); pick = g; return dx != null; });
         // nowhere clear, even for the letter alone: the longest size no number covers stays, under its letter
-        if (dx == null) { dx = 0; pick = tries.filter(function (g) { return !g[1] || !covered(g[1].b, 0); })[0]; }
+        if (dx == null) { dx = 0; pick = tries.filter(function (g) { return !g.slice(1).some(function (x) { return covered(x.b, 0); }); })[0]; }
         pick.forEach(function (g) { lbls += '<text class="' + g.cls + '" x="' + (g.x + dx).toFixed(1) + '" y="' + g.y.toFixed(1) + '" text-anchor="middle">' + esc(g.t) + '</text>'; });
       });
       s = s.slice(0, at) + lbls + s.slice(at);
@@ -2760,7 +2780,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           if (b.trim > 0) { hatch(x, y, b.trim * px, 24); hatch(x + (b.stock.len - b.trim) * px, y, b.trim * px, 24); }
           b.pieces.forEach(function (p, k) {
             var w = p.len * px; rect(cx, y, w, 24, null, '#B08447', 0.6);
-            var lbl = letter(p.pi, m.mat) + ' ' + fmt(p.len); if (textW('H', 8, lbl) > w - 4) lbl = letter(p.pi, m.mat); if (textW('H', 8, lbl) < w - 2) text('H', 8, cx + (w - textW('H', 8, lbl)) / 2, y + 15, lbl, '#2E220F');
+            // the part's name too where it fits, whole or cut short, as on a wide screen
+            var L = letter(p.pi, m.mat), q = m.mat.parts[p.pi], lbl = nameForms(q && q.name, L + ' ', ' ' + fmt(p.len)).concat([L + ' ' + fmt(p.len)]).filter(function (c) { return textW('H', 8, c) <= w - 4; })[0] || L;
+            if (textW('H', 8, lbl) < w - 2) text('H', 8, cx + (w - textW('H', 8, lbl)) / 2, y + 15, lbl, '#2E220F');
             cx += w; if (k < b.pieces.length - 1 || !lastIsLeft(b)) { line(cx + P.kerf * px / 2, y - 2, cx + P.kerf * px / 2, y + 26, '#2361CC', 1); cx += P.kerf * px; }
           });
           var rest = x + b.stock.len * px - cx - b.trim * px;
@@ -2785,11 +2807,14 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             var x = M + p.x * px, yy = y + p.y * py, w = p.l * px, h = p.w * py;
             rect(x, yy, w, h, '#FFFFFF', '#9E7F52', 0.6);
             if (!(w > 16 && h > 12)) return;
-            var t = letter(p.pi, m.mat), d = '', tw = textW('HB', 9, t), dw;
+            var t = letter(p.pi, m.mat), d = '', tw = textW('HB', 9, t), dw, q = m.mat.parts[p.pi], nm = '', nw;
             if (w > 70 && h > 26) [fmt(p.l) + ' × ' + fmt(p.w), fmt(p.l, { bare: true }) + ' × ' + fmt(p.w, { bare: true }), fmt(p.l)].some(function (c) { return textW('H', 7.5, c) < w - 4 && (d = c); });
-            var base = yy + h / 2 + (d ? -2 : 3);
+            // with room for three lines, the part's name between its letter and its size, whole or cut short
+            if (d && h > 38) nm = nameForms(q && q.name, '', '').filter(function (c) { return textW('H', 7.5, c) < w - 4; })[0] || '';
+            var up = nm ? 9 : 0, base = yy + h / 2 + (d ? -2 : 3) - up;
             text('HB', 9, x + (w - tw) / 2, base, t, '#2E220F'); boxes.push([x + (w - tw) / 2 - 1, base - 8, tw + 2, 10]);
-            if (d) { dw = textW('H', 7.5, d); text('H', 7.5, x + (w - dw) / 2, yy + h / 2 + 9, d, '#2E220F'); boxes.push([x + (w - dw) / 2 - 1, yy + h / 2 + 3, dw + 2, 8]); }
+            if (nm) { nw = textW('H', 7.5, nm); text('H', 7.5, x + (w - nw) / 2, yy + h / 2 + 4.5, nm, '#2E220F'); boxes.push([x + (w - nw) / 2 - 1, yy + h / 2 - 1.5, nw + 2, 8]); }
+            if (d) { dw = textW('H', 7.5, d); text('H', 7.5, x + (w - dw) / 2, yy + h / 2 + 9 + up, d, '#2E220F'); boxes.push([x + (w - dw) / 2 - 1, yy + h / 2 + 3 + up, dw + 2, 8]); }
           });
           // the size of each piece left over, 6" or more each way, where it fits
           sh.spare.forEach(function (f) {
