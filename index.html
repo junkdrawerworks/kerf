@@ -505,6 +505,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // Why this browser isn't keeping projects, while it isn't: 'blocked' (no storage at all: cookies blocked, or some
   // private windows) or 'full'. Shown in the strip under the top bar (storeBar).
   var UNSAVED = null;
+  // What was stored when it couldn't all be read at startup, until it's saved as a file or put away (Not now).
+  var DAMAGED = null;
   function isFull(e) { return !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014); }
   // Only Kerf writes kerf.v1, but a browser add-on, a hand edit or a half-written save could leave something the
   // page would stop on. So what's stored is checked as it's read: each field of the wrong type is repaired, and
@@ -561,7 +563,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (raw != null) {
       var got = null; try { got = repairDB(JSON.parse(raw)); } catch (e) { }
       if (got) { DB = got.db; kept = true; }
-      if (!got || got.lost) try { localStorage.setItem(LS + '.bad', raw); } catch (e) { }
+      if (!got || got.lost) { DAMAGED = raw; try { localStorage.setItem(LS + '.bad', raw); } catch (e) { } }
     }
     localStorage.setItem(LS + '.probe', '1'); localStorage.removeItem(LS + '.probe');
   } catch (e) { if (!isFull(e)) UNSAVED = 'blocked'; } // full: said once an edit can't be saved
@@ -1673,10 +1675,17 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     full: 'This browser’s storage is full, so the last change isn’t saved. Save the project as a file.'
   };
   function unsaved(why) { if (why !== UNSAVED) { UNSAVED = why; storeBar(); } }
+  // Not saving comes first; damaged storage is said once saves work.
   function storeBar() {
-    var b = $('storeBar'), msg = STORE_MSG[UNSAVED];
-    b.innerHTML = msg ? '<div class="example store"><span>' + msg + '</span><div class="acts"><button class="btn sm" type="button" id="stFile">Save as a file</button></div></div>' : '';
+    var b = $('storeBar'), msg = STORE_MSG[UNSAVED], bad = !msg && DAMAGED != null;
+    var strip = function (text, acts) { return '<div class="example store"><span>' + text + '</span><div class="acts">' + acts + '</div></div>'; };
+    b.innerHTML = msg ? strip(msg, '<button class="btn sm" type="button" id="stFile">Save as a file</button>')
+      : bad ? strip('Kerf couldn’t read everything this browser had saved. What it could read is here; the rest is kept as it was.', '<button class="btn sm" type="button" id="stBad">Save the damaged copy as a file</button><button class="btn sm sec" type="button" id="stNo">Not now</button>') : '';
     if (msg) $('stFile').addEventListener('click', exportProject);
+    if (bad) {
+      $('stBad').addEventListener('click', function () { saveFile('kerf-damaged.txt', DAMAGED, 'text/plain').then(function (ok) { if (ok) { DAMAGED = null; storeBar(); toast('Saved kerf-damaged.txt'); } }, function (e) { toast(e.message || 'Couldn’t save the file'); }); });
+      $('stNo').addEventListener('click', function () { DAMAGED = null; storeBar(); });
+    }
     if ($('pjNote')) $('pjNote').textContent = projectsNote();
   }
   function projectsNote() { return UNSAVED ? 'Projects aren’t being saved in this browser right now.' : 'Projects are saved in this browser on this device. To use one on another phone or computer, save it as a file or copy it as text, then open or paste it there.'; }

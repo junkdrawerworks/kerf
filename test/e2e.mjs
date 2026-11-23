@@ -346,6 +346,20 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   await page.fill('#pname', 'Saved anyway');
   await page.waitForFunction(() => (localStorage.getItem('kerf.v1') || '').includes('Saved anyway'), null, { timeout: 3000 })
     .catch(() => assert.fail('the projects weren’t saved when the damaged copy couldn’t be kept'));
+  // What couldn't be read is said, under the top bar, and the copy kept can be saved as a file; Not now puts it away.
+  const notice = () => page.textContent('#storeBar');
+  await open('hello');
+  assert.equal(await notice(), 'Kerf couldn’t read everything this browser had saved. What it could read is here; the rest is kept as it was.Save the damaged copy as a fileNot now');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#storeBar button >> text=Save the damaged copy as a file')]);
+  assert.equal(dl.suggestedFilename(), 'kerf-damaged.txt');
+  assert.equal(await readFile(await dl.path(), 'utf8'), 'hello');
+  await page.waitForFunction(() => !document.getElementById('storeBar').textContent, null, { timeout: 3000 }).catch(() => assert.fail('the notice stays once the copy is saved'));
+  await open(raw);
+  assert.match(await notice(), /^Kerf couldn’t read everything/, 'a repaired project opens without a word');
+  await page.click('#storeBar button >> text=Not now');
+  assert.equal(await notice(), '');
+  await open(saved(project('Fine', [])));
+  assert.equal(await notice(), '', 'a good save says it was damaged');
 }
 
 // When Kerf can't save, a strip under the top bar says so until a save works, with a button to save the project as a
