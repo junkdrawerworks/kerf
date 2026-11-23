@@ -1595,6 +1595,13 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   await page.waitForTimeout(600);
   await view('plan');
   assert.match(await page.textContent('#planOut .steps'), /Bein · 2 × 1250 mm/, 'a bare number isn’t read as mm');
+  // A sheet's size is in one unit, in the cut list's chips as in the plan: a chip read '1.22 m×2.44 m', and a
+  // 610 × 1220 mm sheet '610 mm×1.22 m'.
+  await view('list');
+  assert.equal(await page.textContent('.sheetmat details.stock .chips .chip'), '1220 × 2440 mm · $62.00', 'a sheet’s chip mixes metres and millimetres');
+  await view('plan');
+  assert.ok((await page.$$eval('#planOut svg.diag text.dg-meta', ts => ts.map(t => t.textContent))).includes('1220 × 2440 mm'), 'the sheet’s heading isn’t in one unit');
+  assert.match(await page.textContent('#planOut .shop'), /1 ×1220 × 2440 mm\$62\.00/, 'the shopping list doesn’t give the sheet in one unit');
 }
 
 // A price typed with a decimal comma means what it says, and a thousands comma still reads as one.

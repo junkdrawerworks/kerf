@@ -466,7 +466,7 @@ console.log('ticks stay on their cuts');
   // aside: renaming a part keeps its ticks). Seeded random edits to a project with a board and a sheet material.
   const saw = () => new Function([
     ...SOLVER, 'var P = null, RES = null, CUR = "$";', line('var PLANS = '),
-    ...['plural', 'sayLen', 'lastIsLeft', 'worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'sawTasks', 'tickKeys'].map(fn),
+    ...['plural', 'sayLen', 'lastIsLeft', 'worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'marks', 'fmtD', 'sheetSize', 'sawTasks', 'tickKeys'].map(fn),
     'return { solve: function (p) { P = p; U = p.units; solveAll(); var t = sawTasks(); return { keys: tickKeys(t), tasks: t }; } };'
   ].join('\n'))();
   const R = rng(11), pick = a => a[Math.floor(R() * a.length)], q16 = x => Math.round(x * 16) / 16;
@@ -539,7 +539,7 @@ console.log('offcuts worth keeping');
   // 114 and two 3 mm kerfs is 300 mm, and came to 11.811023622047232" against a keep of 11.811023622047244".
   const saw = new Function([
     ...SOLVER, 'var P = null, RES = null, CUR = "$";', line('var PLANS = '),
-    ...['plural', 'sayLen', 'lastIsLeft', 'worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'sawTasks'].map(fn),
+    ...['plural', 'sayLen', 'lastIsLeft', 'worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'marks', 'fmtD', 'sheetSize', 'sawTasks'].map(fn),
     'return function (p) { P = p; U = p.units; PLANS = {}; solveAll(); return sawTasks().map(function (t) { return t.note || ""; }); };'
   ].join('\n'))();
   const mm = x => x / 25.4;

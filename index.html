@@ -482,6 +482,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function marks(s) { return s.replace(/'/g, '′').replace(/"/g, '″'); }
   function fmtD(x, o) { return marks(fmt(x, o)); }
   function fmtT(x, o) { return fmtD(x, o).replace(/ /g, '\u00a0'); }
+  // A sheet's size, width first: 48″ × 96″, or in one unit, 1219 × 2438 mm, rather than 1219 mm × 2438 mm. HTML with
+  // typeset fractions, or `plain` text with the tape's marks for a drawing.
+  function sheetSize(w, l, plain) { return U === 'mm' ? esc(fmt(w, { bare: true }) + ' × ' + fmt(l)) : plain ? fmtD(w) + ' × ' + fmtD(l) : fmtH(w) + ' × ' + fmtH(l); }
   // A length for a name a screen reader says: 8 ft, 8 ft 6 in, 47 3/4 in, 2.4 m.
   function sayLen(x, o) { return fmt(x, o).replace(/'/g, ' ft').replace(/"$/, ' in'); }
   var VULGAR = { '½': ' 1/2', '¼': ' 1/4', '¾': ' 3/4', '⅛': ' 1/8', '⅜': ' 3/8', '⅝': ' 5/8', '⅞': ' 7/8' };
@@ -1228,7 +1231,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function letter(i) { return i < 26 ? String.fromCharCode(65 + i) : String.fromCharCode(65 + Math.floor(i / 26) - 1) + String.fromCharCode(65 + i % 26); }
   function stockSummary(m) {
     return m.stock.map(function (s) {
-      var dims = m.kind === 'sheet' ? fmtH(s.wid, { ft: true }) + '×' + fmtH(s.len, { ft: true }) : fmtH(s.len, { ft: true });
+      // in mm a sheet is in mm (1219 × 2438 mm), not 1.219 m×2.438 m or 609.5 mm×1.219 m; a board is as the plan has it
+      var dims = m.kind !== 'sheet' ? fmtH(s.len, { ft: true }) : U === 'mm' ? sheetSize(s.wid, s.len) : fmtH(s.wid, { ft: true }) + '×' + fmtH(s.len, { ft: true });
       return '<span class="chip' + (s.have ? ' have' : '') + '">' + dims + ' · ' + (s.have ? s.have + ' on hand' : esc(money(+s.price || 0))) + '</span>';
     }).join('');
   }
@@ -1523,7 +1527,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var map = {}, lines = [];
     m.items.forEach(function (it) {
       var s = it.stock, k = s.id;
-      if (!map[k]) { map[k] = { n: 0, price: it.price, have: !!s.have, dimsH: m.kind === 'sheet' ? fmtH(s.wid) + ' × ' + fmtH(s.len) : fmtH(s.len, { ft: true }), dims: m.kind === 'sheet' ? fmt(s.wid) + ' x ' + fmt(s.len) : fmt(s.len, { ft: true }), len: s.len }; lines.push(map[k]); }
+      if (!map[k]) { map[k] = { n: 0, price: it.price, have: !!s.have, dimsH: m.kind === 'sheet' ? sheetSize(s.wid, s.len) : fmtH(s.len, { ft: true }), dims: m.kind === 'sheet' ? (U === 'mm' ? fmt(s.wid, { bare: true }) : fmt(s.wid)) + ' x ' + fmt(s.len) : fmt(s.len, { ft: true }), len: s.len }; lines.push(map[k]); }
       map[k].n++;
     });
     return lines.sort(function (a, b) { return (a.have ? 1 : 0) - (b.have ? 1 : 0) || b.len - a.len; });
@@ -1702,7 +1706,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         var q = m.mat.parts[pi]; return count[pi] + ' × ' + letter(pi) + (q && q.name ? ' ' + esc(q.name) : '') + ' ' + esc(sayLen(q.len) + ' × ' + sayLen(q.wid));
       }).join(', ') + (spare.length ? '; left over ' + spare.map(function (f) { return esc(sayLen(f.w) + ' × ' + sayLen(f.h)); }).join(' and ') : '') + '</p>';
       var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + (H + top + 8).toFixed(1) + '" aria-hidden="true" style="margin-top:' + (si ? 16 : 6) + 'px">';
-      s += '<text class="dg-metab" x="0" y="8">Sheet ' + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + esc(fmtD(sh.W) + ' × ' + fmtD(sh.L)) + (sh.stock.have ? '<tspan class="dg-yours"> · yours</tspan>' : '') + '</text>';
+      s += '<text class="dg-metab" x="0" y="8">Sheet ' + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + sheetSize(sh.W, sh.L, true) + (sh.stock.have ? '<tspan class="dg-yours"> · yours</tspan>' : '') + '</text>';
       var ox = 1, oy = top;
       s += '<rect class="dg-ply" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
       s += '<rect class="dg-scrap" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
@@ -1788,7 +1792,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     RES.mats.forEach(function (m) {
       m.items.forEach(function (it, ii) {
         var s = it.stock, sheet = m.kind === 'sheet';
-        var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (sheet ? fmtH(s.wid) + ' × ' + fmtH(s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
+        var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (sheet ? sheetSize(s.wid, s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
         t.say = m.mat.name + ', ' + (sheet ? sayLen(s.wid) + ' × ' + sayLen(s.len) : sayLen(s.len, { ft: true })) + (s.have ? ', yours' : ''); // the heading as a screen reader names its group
         var name = function (pi) { var part = m.mat.parts[pi]; return '<b>' + letter(pi) + '</b> ' + esc(part && part.name || 'Part'); };
         if (!sheet) {

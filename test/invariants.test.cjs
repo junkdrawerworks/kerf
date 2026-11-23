@@ -30,7 +30,7 @@ const K = new Function([...SOLVER, 'return { fmt: fmt, parseLen: parseLen, solve
 function page() {
   return new Function([
     ...SOLVER, 'var P = null, RES = null, TIPS = [], GEN = 0;', line('var PLANS = '),
-    ...['worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'sawTasks', 'tickKeys', 'findTips', 'tipFor', 'syncTicks'].map(fn),
+    ...['worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'marks', 'fmtD', 'sheetSize', 'sawTasks', 'tickKeys', 'findTips', 'tipFor', 'syncTicks'].map(fn),
     'var queue = []; function whenIdle(f) { queue.push(f); } function renderTips() {} function toast() {} function save() {}',
     'return {',
     ' solve: function (p) { P = p; U = p.units; CUR = p.cur || "$"; return solveAll(); },',
