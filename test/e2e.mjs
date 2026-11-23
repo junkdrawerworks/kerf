@@ -470,6 +470,12 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   await cdp.detach();
 }
 
+// The cut list says how to type lengths on a phone too, where the pane's heading is left out for its tab.
+await open(null);
+await view('list');
+assert.ok(await page.isVisible('#unitNote'), 'a phone isn’t told how to type lengths');
+assert.equal(await page.textContent('#unitNote'), 'Lengths in inches — 35 3/4, 2\' 11 3/4", 910mm all work');
+
 // A three-letter currency sits clear of the price, and a price typed over an old one isn't read as both.
 {
   await open(saved(project('Franken', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }], [{ name: 'Shelf', qty: 2, len: 30, wid: 12 }])], { cur: 'CHF' })));
