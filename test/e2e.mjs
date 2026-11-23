@@ -662,6 +662,16 @@ await page.click('#lkx');
   assert.equal(await page.textContent('#lkAdd'), 'Add to my projects');
   await page.click('#lkAdd');
   assert.equal(await page.inputValue('#pname'), 'Garage shelves (example)');
+  // A number that's part of the name stays: Shelves (2024) beside Shelves (2024) is Shelves (2024) (2), not
+  // Shelves (2). A copy of that one, coming in beside both, counts on to (3).
+  const shelves = (name, notes) => linkTo({ kerf: 1, project: { ...MUDROOM.project, name, notes } });
+  for (const [name, notes, want] of [['Shelves (2024)', 'a', null], ['Shelves (2024)', 'b', 'Shelves (2024) (2)'], ['Shelves (2024) (2)', 'c', 'Shelves (2024) (3)']]) {
+    await page.evaluate(hash => { location.hash = hash; }, shelves(name, notes));
+    await page.waitForSelector('#lkAdd');
+    assert.equal(await page.textContent('#lkAdd'), want ? 'Add as “' + want + '”' : 'Add to my projects', name + ' (' + notes + ')');
+    await page.click('#lkAdd');
+    assert.equal(await page.inputValue('#pname'), want || name);
+  }
 }
 
 // What Kerf saves opens again whole: a project with a long name, 201 parts of one material (one with a long name) and

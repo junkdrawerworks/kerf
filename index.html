@@ -2837,7 +2837,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var taken = {}, go = exampleToGo(), key = function (n) { return n.trim().toLowerCase(); };
     DB.order.forEach(function (id) { var q = DB.projects[id]; if (q && q !== go) taken[key(q.name)] = 1; });
     if (!taken[key(name)]) return name;
-    var stem = name.replace(/ \(\d+\)$/, ''), n = 2;
+    // "Mudroom bench (2)" coming in beside Mudroom bench counts on from it; "Shelves (2024)" is a name of its own.
+    var num = / \(\d+\)$/.exec(name), stem = num && taken[key(name.slice(0, num.index))] ? name.slice(0, num.index) : name, n = 2;
     while (taken[key(stem + ' (' + n + ')')]) n++;
     return stem + ' (' + n + ')';
   }
