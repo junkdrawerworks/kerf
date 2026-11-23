@@ -230,15 +230,20 @@ console.log('boards: never dearer than first fit');
   const job = [{ len: 18.25, qty: 4 }, { len: 89.75, qty: 3 }, { len: 33, qty: 5 }, { len: 35.75, qty: 6 }, { len: 29.5, qty: 6 }];
   let r = K.solveBoards({ stock, parts: job }, { kerf: 0.125, trim: 0 });
   check(r.cost <= 42.80 + 1e-6, `24 pieces of 2×4 cost $${r.cost.toFixed(2)}, first fit buys them for $42.80`);
-  const R = rng(4); let n = 0;
+  const R = rng(4); let n = 0, alike = 0;
   for (let t = 0; t < 150; t++) {
     const parts = [];
     for (let k = 0, nT = 2 + Math.floor(R() * 10); k < nT; k++) parts.push({ len: Math.round((6 + R() * 90) * 16) / 16, qty: 1 + Math.floor(R() * 8) });
     r = K.solveBoards({ stock, parts }, { kerf: 0.125, trim: 0 });
     const g = ffd(pieces(parts), caps, 0.125); n++;
     check(r.cost <= g + 1e-6, `job ${t}: $${r.cost.toFixed(2)}, first fit costs $${g.toFixed(2)} ${JSON.stringify(parts)}`);
+    // Boards cut alike come one after another, so the plan can draw them once ("Boards 1–4") and the saw count them on.
+    const keys = r.items.map(b => b.stock.len + ':' + b.pieces.map(p => p.pi).join(','));
+    if (keys.some((k, i) => i && k !== keys[i - 1] && keys.indexOf(k) < i - 1)) check(false, `job ${t}: boards cut alike aren't together: ${keys.join(' | ')}`);
+    if (new Set(keys).size < keys.length) alike++;
   }
-  console.log('  ' + n + ' jobs');
+  check(alike > 50, `only ${alike} jobs had boards cut alike`);
+  console.log('  ' + n + ' jobs, ' + alike + ' with boards cut alike');
 }
 
 console.log('boards: a big job stays quick');

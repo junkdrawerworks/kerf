@@ -258,6 +258,11 @@ div.sec{margin-top:22px}
 .stk-hd b{font:700 16px var(--body);white-space:nowrap;flex:none}
 .stk-hd span{color:var(--ink2);font-size:13.5px;min-width:0}
 .stk-hd .n{margin-left:auto;font:600 13px var(--mono);color:var(--ink3)}
+button.stk-hd{width:100%;font:inherit;color:inherit;text-align:left;border:0;border-bottom:1px solid var(--line);cursor:pointer;min-height:44px}
+button.stk-hd .chev{margin-left:auto;color:var(--ink3);font-size:20px;line-height:1;transition:transform .15s;flex:none}
+button.stk-hd .n+.chev{margin-left:0}
+button.stk-hd[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.stk.fold .stk-hd{border-bottom:0;border-radius:calc(var(--r) - 1px);position:static}
 .stk.done .stk-hd .n{color:var(--good);font-weight:700}
 .cut{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 14px;min-height:56px;scroll-margin-top:60px}
 /* A row's focus ring sits inside it, clear of the rows above and below; a cut the keyboard moves to scrolls clear of
@@ -388,7 +393,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .tip{flex-wrap:wrap}
   .tip>span:not(.tag){flex:1 1 180px;min-width:0}
 }
-@media (prefers-reduced-motion:reduce){.toast,.saw-bar .prog i,.stock>summary .chev{transition:none}}
+@media (prefers-reduced-motion:reduce){.toast,.saw-bar .prog i,.stock>summary .chev,button.stk-hd .chev{transition:none}}
 [hidden]{display:none!important}
 .jd-foot{text-align:center;font-size:13px;color:var(--ink2);padding:0 var(--gr) calc(24px + env(safe-area-inset-bottom,0px)) var(--gl)}
 .jd-foot a{color:inherit;text-underline-offset:3px}
@@ -1017,6 +1022,23 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   // A board's last part comes off with no cut only when it's all that's left: nothing past it (a sliver
   // thinner than the kerf still has to be cut away) and no far end to square up.
+  // Boards cut alike in plan `m`: the same size, yours or bought, and the same parts in the same order. For each board,
+  // the place of the first board it's cut like (its own, if none before it is). A board ripped into parts, and a sheet,
+  // is drawn and listed on its own.
+  function sameAs(m) {
+    var firsts = {};
+    return m.items.map(function (b, i) {
+      if (m.kind !== 'board' || m.rip) return i;
+      var key = b.stock.id + ':' + b.trim + ':' + b.pieces.map(function (p) { return p.pi + '@' + p.len; }).join(',');
+      return key in firsts ? firsts[key] : (firsts[key] = i);
+    });
+  }
+  // The runs of boards cut alike, as [first, last] places in the plan.
+  function runs(m) {
+    var same = sameAs(m), out = [];
+    same.forEach(function (f, i) { var r = out[out.length - 1]; if (r && same[r[0]] === f && r[1] === i - 1) r[1] = i; else out.push([i, i]); });
+    return out;
+  }
   function lastIsLeft(b) { return !(b.trim > 0) && b.cap - b.need < 1 / 32; }
   // An offcut is worth keeping when the length shown for it (to the sixteenth, or the half millimetre) is at least the
   // one shown for Keep offcuts over: a 300 mm offcut that works out a hair short of 300 mm is still 300 mm.
@@ -1993,24 +2015,28 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     return out;
   }
   function boardDiagram(m) {
+    // Boards cut alike are drawn once, a row to each run of them: "1–4" over "10′ ×4", with a second board showing behind.
     // The left column is as wide as its widest length (12px mono is 7.2px a character), with 4px to spare: "600 mm"
     // needs more than "2.4 m" or "10'".
+    var rs = runs(m), many = function (r) { return r[1] > r[0] ? ' ×' + (r[1] - r[0] + 1) : ''; };
     var width = W.plan, maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; }));
-    var labelW = Math.max(40, Math.ceil(Math.max.apply(null, m.items.map(function (b) { return fmtD(b.stock.len, { ft: true }).length; })) * 7.2 + 4));
-    var drawW = width - labelW, px = drawW / maxLen, rowH = 34, gap = 22, top = 24, H = top + m.items.length * (rowH + gap) - gap + 6;
-    // A screen reader gets the drawing as a list, a board to an item: "Board 1, 10 ft: B 48 in, B 48 in, C 21 in, leaves a
-    // 2 5/8 in offcut". The drawing itself is left out for it.
-    var said = m.items.map(function (b, bi) {
-      return '<li>Board ' + (bi + 1) + ', ' + esc(sayLen(b.stock.len, { ft: true })) + (b.stock.have ? ', yours' : '') + ': ' + (b.trim > 0 ? 'trim ' + esc(sayLen(b.trim)) + ' off each end, ' : '') +
+    var labelW = Math.max(40, Math.ceil(Math.max.apply(null, rs.map(function (r) { return Math.max((fmtD(m.items[r[0]].stock.len, { ft: true }) + many(r)).length, (r[0] + 1 + '–' + (r[1] + 1)).length * (r[1] > r[0])); })) * 7.2 + 4));
+    var drawW = width - labelW - (rs.length < m.items.length ? 4 : 0), px = drawW / maxLen, rowH = 34, gap = 22, top = 24, H = top + rs.length * (rowH + gap) - gap + 6;
+    // A screen reader gets the drawing as a list, a row to an item: "Board 1, 10 ft: B 48 in, B 48 in, C 21 in, leaves a
+    // 2 5/8 in offcut", or "Boards 1 to 4, each 10 ft: …". The drawing itself is left out for it.
+    var said = rs.map(function (r) {
+      var b = m.items[r[0]];
+      return '<li>' + (r[1] > r[0] ? 'Boards ' + (r[0] + 1) + ' to ' + (r[1] + 1) + ', each ' : 'Board ' + (r[0] + 1) + ', ') + esc(sayLen(b.stock.len, { ft: true })) + (b.stock.have ? ', yours' : '') + ': ' + (b.trim > 0 ? 'trim ' + esc(sayLen(b.trim)) + ' off each end, ' : '') +
         b.pieces.map(function (p) { return letter(p.pi, m.mat) + ' ' + esc(sayLen(p.len)); }).join(', ') + (b.offcut > 0 ? ', leaves a ' + esc(sayLen(b.offcut)) + ' offcut' + (worthKeeping(b.offcut) ? ' worth keeping' : '') : '') + '</li>';
     }).join('');
     var s = '<ol class="sr">' + said + '</ol><svg class="diag" viewBox="0 0 ' + width + ' ' + H + '" aria-hidden="true">' + tapeRuler(labelW, drawW, maxLen, 2);
-    m.items.forEach(function (b, bi) {
-      var y = top + bi * (rowH + gap), bw = b.stock.len * px, x = labelW;
+    rs.forEach(function (r, ri) {
+      var bi = r[0], b = m.items[bi], y = top + ri * (rowH + gap), bw = b.stock.len * px, x = labelW;
       // a board you have says so under its length, and its edge is dashed green, like its size in the cut list
       var mine = !!b.stock.have, ly = mine ? [-12, 1, 14] : [-7, 8];
-      s += '<text class="dg-metab" x="0" y="' + (y + rowH / 2 + ly[0]) + '">' + (bi + 1) + '</text><text class="dg-meta" x="0" y="' + (y + rowH / 2 + ly[1]) + '">' + esc(fmtD(b.stock.len, { ft: true })) + '</text>';
+      s += '<text class="dg-metab" x="0" y="' + (y + rowH / 2 + ly[0]) + '">' + (bi + 1) + (r[1] > bi ? '–' + (r[1] + 1) : '') + '</text><text class="dg-meta" x="0" y="' + (y + rowH / 2 + ly[1]) + '">' + esc(fmtD(b.stock.len, { ft: true }) + many(r)) + '</text>';
       if (mine) s += '<text class="dg-yours" x="0" y="' + (y + rowH / 2 + ly[2]) + '">yours</text>';
+      if (r[1] > bi) s += '<rect class="dg-wood" x="' + (x + 4) + '" y="' + (y + 4) + '" width="' + bw.toFixed(1) + '" height="' + rowH + '" rx="2"/><rect class="dg-edge' + (mine ? ' have' : '') + '" x="' + (x + 4) + '" y="' + (y + 4) + '" width="' + bw.toFixed(1) + '" height="' + rowH + '" rx="2"/>';
       s += '<rect class="dg-wood" x="' + x + '" y="' + y + '" width="' + bw.toFixed(1) + '" height="' + rowH + '" rx="2"/><path class="dg-grain" d="' + grainPaths(x, y, bw, rowH, 17 + bi * 31) + '"/>';
       var cx = x + b.trim * px;
       // both trimmed ends first, so the cut that squares up the far end draws over its hatching
@@ -2209,6 +2235,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (moved) save();
   }
   var SAW = { done: 0, total: 0 }; // the saw's count as last drawn
+  var SAWOPEN = {}; // the folded boards opened with a tap ('material id/board'), for as long as the page is open
   function renderSaw() {
     var host = $('sawOut');
     if (!RES) { host.innerHTML = ''; return; }
@@ -2218,12 +2245,19 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var ticked = function (t, ci) { var d = P.done[t.mid]; return !!(d && d.ticks[t.ii + '.' + ci]) && !t.cuts[ci].noCut; };
     host.dataset.u = U;
     var h = '', next = null; // the first cut not ticked yet, marked as the next to make
+    var same = {}; RES.mats.forEach(function (m) { same[m.mat.id] = sameAs(m); });
     // Each board is a group named by its heading ("Board 2, 2×4, 10 ft"), and each cut says which of the board's it is.
+    // A board cut like one before it is folded, "Board 2 — same as board 1", and opens on a tap. It's open while any of
+    // its cuts is ticked or it holds the next cut, so ticks are made board by board and the next cut always shows.
     tasks.forEach(function (t, ti) {
-      var n = 0, d = 0, at = 0;
+      var n = 0, d = 0, at = 0, first = same[t.mid][t.ii], fk = t.mid + '/' + t.ii;
       t.cuts.forEach(function (c, ci) { if (!c.noCut) { n++; if (ticked(t, ci)) d++; } });
+      var forced = d > 0 || (!next && d < n), open = first === t.ii || forced || !!SAWOPEN[fk];
       total += n; done += d;
-      h += '<div class="stk' + (n && d === n ? ' done' : '') + '" role="group" aria-label="' + t.title + ', ' + esc(t.say) + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span>' + (n ? '<span class="n">' + d + '/' + n + (d === n ? ' ✓' : '') + '</span>' : '') + '</div>';
+      var like = first === t.ii ? '' : '<span>— same as board ' + (first + 1) + '</span>', count = n ? '<span class="n">' + d + '/' + n + (d === n ? ' ✓' : '') + '</span>' : '';
+      h += '<div class="stk' + (n && d === n ? ' done' : '') + (open ? '' : ' fold') + '" role="group" aria-label="' + t.title + ', ' + (like ? 'same as board ' + (first + 1) + ', ' : '') + esc(t.say) + '">' +
+        (like && !forced ? '<button class="stk-hd" type="button" aria-expanded="' + open + '" data-fold="' + fk + '"><b>' + t.title + '</b>' + like + count + '<span class="chev" aria-hidden="true">›</span></button>' : '<div class="stk-hd"><b>' + t.title + '</b>' + (like || '<span>' + t.sub + '</span>') + count + '</div>');
+      if (!open) { h += '</div>'; return; }
       t.cuts.forEach(function (c, ci) {
         if (c.noCut) { h += '<div class="cut note"><span>' + c.note + '</span></div>'; return; }
         var on = ticked(t, ci), k = t.mid + '/' + t.ii + '.' + ci, nx = !on && !next;
@@ -2248,6 +2282,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         // The tick that finishes the job says so, once: never a reload or a redraw of a finished job.
         if (on && SAW.total && SAW.done === SAW.total) toast('That’s every cut. ' + (P.name.replace(/ \(example\)$/, '') || 'The project') + ' is ready to put together.');
       });
+    });
+    host.querySelectorAll('[data-fold]').forEach(function (b) {
+      b.addEventListener('click', function () { var k = b.dataset.fold; SAWOPEN[k] = !SAWOPEN[k]; renderSaw(); var f = host.querySelector('[data-fold="' + k + '"]'); if (f) f.focus({ preventScroll: true }); });
     });
     // Start over clears every tick in one tap, so it can be undone.
     var rs = $('sawReset');
@@ -2702,12 +2739,23 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       need(24 + (m.kind === 'sheet' || m.rip ? sheetBlock(m.items[0], stepLines(m.items[0])) : 46)); y += 18; text('HB', 12, M, y, fitText('HB', 12, m.mat.name, width - textW('HB', 12, ' — sheets')) + (m.kind === 'sheet' ? ' — sheets' : ' — boards')); y += 6;
       if (m.kind === 'board' && !m.rip) {
         var maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; })), lw = 44, px = (width - lw) / maxLen;
-        m.items.forEach(function (b, bi) {
+        // Boards cut alike are drawn once, as on screen: "1–4" over "10' ×4", with a second board showing behind.
+        // The left column is as wide as its widest label, at least 44 points.
+        var rs = runs(m), stack = rs.length < m.items.length ? 3 : 0, says = rs.map(function (r) {
+          var b = m.items[r[0]], n = r[1] - r[0] + 1;
+          return [(r[0] + 1) + (n > 1 ? '–' + (r[1] + 1) : ''), fmt(b.stock.len, { ft: true }) + (n > 1 ? ' ×' + n : '') + (b.stock.have ? ' yours' : '')];
+        });
+        says.forEach(function (t) { lw = Math.max(lw, Math.ceil(Math.max(textW('HB', 10, t[0]), textW('H', 8.5, t[1])) + 6)); });
+        px = (width - lw - stack) / maxLen;
+        rs.forEach(function (r, ri) {
+          var bi = r[0], b = m.items[bi], n = r[1] - r[0] + 1;
           var parts = b.pieces.map(function (p) { var q = m.mat.parts[p.pi]; return letter(p.pi, m.mat) + ' ' + (q && q.name ? q.name + ' ' : '') + fmt(p.len); });
           var lines = pdfLines('H', 8, parts, '   ·   ', width - lw);
-          need(46 + (lines.length - 1) * 10 + (bi === m.items.length - 1 ? legendH : 0)); y += 12;
-          text('HB', 10, M, y + 10, String(bi + 1)); text('H', 8.5, M, y + 22, fmt(b.stock.len, { ft: true }) + (b.stock.have ? ' yours' : ''));
-          var x = M + lw; rect(x, y, b.stock.len * px, 24, '#FFFFFF');
+          need(46 + stack + (lines.length - 1) * 10 + (ri === rs.length - 1 ? legendH : 0)); y += 12;
+          text('HB', 10, M, y + 10, says[ri][0]); text('H', 8.5, M, y + 22, says[ri][1]);
+          var x = M + lw;
+          if (n > 1) rect(x + stack, y + stack, b.stock.len * px, 24, '#FFFFFF', '#B08447', 0.8);
+          rect(x, y, b.stock.len * px, 24, '#FFFFFF');
           var cx = x + b.trim * px;
           if (b.trim > 0) { hatch(x, y, b.trim * px, 24); hatch(x + (b.stock.len - b.trim) * px, y, b.trim * px, 24); }
           b.pieces.forEach(function (p, k) {
@@ -2723,7 +2771,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             if (t) { var tw = textW('H', 7.5, t); rect(cx + (rest - tw) / 2 - 1.5, y + 8, tw + 3, 9.5, '#FFFFFF'); text('H', 7.5, cx + (rest - tw) / 2, y + 15, t, '#50575E'); }
           }
           rect(x, y, b.stock.len * px, 24, null, '#B08447', 0.8);
-          y += 34;
+          y += 34 + stack;
           lines.forEach(function (l, i) { if (i) { need(10); y += 10; } text('H', 8, M + lw, y, l, '#50575E'); });
         });
       } else {

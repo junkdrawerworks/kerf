@@ -268,6 +268,30 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Next Square up one end/);
   assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
+// Boards cut alike are drawn once: the example's eight 2×4s are two rows, "1–4" over "10′ ×4" and "5–8" over "8′ ×4",
+// and so on the shop PDF. At the saw each board keeps its row and its own ticks: board 2, cut like board 1, is folded
+// until board 1 is done, then opens with the next cut, while boards 3 and 4 stay folded.
+{
+  await open(null);
+  const rows = await page.$$eval('#planOut .mdiag svg.diag', ([svg]) => [...svg.querySelectorAll('text.dg-metab')].map(t => t.textContent + ' ' + t.nextElementSibling.textContent));
+  assert.deepEqual(rows, ['1–4 10′ ×4', '5–8 8′ ×4'], 'the 2×4s aren’t drawn a row to each run of boards cut alike');
+  const pdf = pdfRuns(await shopPdf()).map(r => r.text);
+  assert.ok(['1\x964', "10' ×4", '5\x968', "8' ×4"].every(t => pdf.includes(t)), 'the shop PDF doesn’t draw boards cut alike once: ' + pdf.slice(0, 40).join(' / '));
+  await view('saw');
+  const heads = () => page.$$eval('#sawOut .stk-hd', hs => hs.map(h => h.textContent));
+  assert.deepEqual((await heads()).slice(0, 4), ['Board 12×4 · 10′0/3', 'Board 2— same as board 10/3›', 'Board 3— same as board 10/3›', 'Board 4— same as board 10/3›']);
+  for (let i = 0; i < 3; i++) await page.locator('#sawOut .cut[data-k]').nth(i).click();
+  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓', 'Board 2— same as board 10/3', 'Board 3— same as board 10/3›'], 'board 2 didn’t open once board 1 was done');
+  assert.match(await page.textContent('#sawOut .cut.next'), /Next B Front & back rail/);
+  assert.match(await page.getAttribute('#sawOut .cut.next', 'data-k'), /\/1\.0$/, 'the next cut isn’t board 2’s first');
+  await page.locator('#sawOut .cut.next').click();
+  await page.waitForTimeout(600);
+  const ticks = await page.evaluate(() => { const db = JSON.parse(localStorage.getItem('kerf.v1')); const d = db.projects[db.current].done; return Object.values(d).map(x => Object.keys(x.ticks).sort().join(' ')).join(' | '); });
+  assert.equal(ticks, '0.0 0.1 0.2 1.0', 'the ticks aren’t kept board by board');
+  await page.reload(); await page.waitForSelector('#sawOut .cut[data-k]');
+  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓', 'Board 2— same as board 11/3', 'Board 3— same as board 10/3›'], 'a reload folds a board with ticks');
+}
+
   // A sheet part resized where it sits: the full sheet's rip moves from 20" to 25", so its tick clears.
   await open(saved(project('One shelf', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Shelf', qty: 1, len: 30, wid: 20 }])])));
   await view('saw');
@@ -1337,7 +1361,7 @@ await open(saved(project('Yours', [board('2×4', [{ len: 96, price: 4.28 }, { le
   const studs = [{ len: 96, price: 4.28 }, { len: 120, price: 6.38 }, { len: 144, price: 7.68 }, { len: 192, price: 10.98 }, { len: 96, have: 1 }];
   await open(saved(project('Shelves', [board('2×4', studs, [{ name: 'Leg', qty: 4, len: 72 }, { name: 'Front & back rail', qty: 8, len: 48 }, { name: 'Side rail', qty: 8, len: 21 }])])));
   const labels = await page.$$eval('#planOut svg.diag .dg-lbl', ts => ts.map(t => t.textContent));
-  assert.ok(labels.length > 10 && labels.every(t => /^[A-C] /.test(t)), 'a board label lost its letter beside a board you have: ' + labels.join(', '));
+  assert.ok(labels.length > 5 && labels.every(t => /^[A-C] /.test(t)), 'a board label lost its letter beside a board you have: ' + labels.join(', '));
 }
 
 // The shop PDF keeps everything on the page: a long project name stops short of the total, a board's parts and the
@@ -1413,8 +1437,15 @@ for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page
   assert.match(await page.locator('[data-tip]').evaluate(b => document.getElementById(b.getAttribute('aria-describedby')).textContent), /^Make Front & back rail 47 15\/16/, 'a tip’s button isn’t described by its tip');
   assert.match(await page.locator('#tips').ariaSnapshot(), /Make Front & back rail 47 15\/16 ?″ instead of 48″/);
   await view('saw');
-  const board2 = page.getByRole('group', { name: 'Board 2, 2×4, 10 ft', exact: true });
+  // Board 2 is cut like board 1, so it's folded: a button that says so and opens on a press.
+  const board2 = page.getByRole('group', { name: 'Board 2, same as board 1, 2×4, 10 ft', exact: true });
   assert.equal(await board2.count(), 1, 'no group named for board 2');
+  const fold2 = board2.getByRole('button', { name: /^Board 2 — same as board 1 0\/3/ });
+  assert.equal(await fold2.getAttribute('aria-expanded'), 'false', 'board 2 isn’t folded');
+  assert.equal(await board2.getByRole('checkbox').count(), 0, 'a folded board shows its cuts');
+  await fold2.press('Enter');
+  assert.equal(await board2.getByRole('button').getAttribute('aria-expanded'), 'true', 'board 2 doesn’t open');
+  assert.ok(await board2.getByRole('button').evaluate(b => b === document.activeElement), 'focus doesn’t stay on board 2’s heading');
   assert.equal(await board2.getByRole('checkbox', { name: /^48″ B Front & back rail .*, cut 2 of 3$/ }).count(), 1, 'a cut doesn’t say which of its board’s it is');
   const saw = await page.locator('#sawOut').ariaSnapshot();
   assert.ok(/Leaves a 2 5\/8 ?″ offcut/.test(saw) && !/superscript|subscript|⁄/.test(saw), 'a fraction at the saw reads as its parts:\n' + saw.slice(0, 600));
@@ -1470,7 +1501,7 @@ for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page
 {
   await open(null);
   const plan = await page.locator('#planOut').ariaSnapshot();
-  assert.ok(plan.includes('listitem: "Board 1, 10 ft: B 48 in, B 48 in, C 21 in, leaves a 2 5/8 in offcut"') && plan.includes('listitem: "Board 8, 8 ft: A 72 in, C 21 in, leaves a 2 3/4 in offcut"'), 'the boards aren’t in words:\n' + plan);
+  assert.ok(plan.includes('listitem: "Boards 1 to 4, each 10 ft: B 48 in, B 48 in, C 21 in, leaves a 2 5/8 in offcut"') && plan.includes('listitem: "Boards 5 to 8, each 8 ft: A 72 in, C 21 in, leaves a 2 3/4 in offcut"'), 'the boards aren’t in words:\n' + plan);
   assert.ok(plan.includes('paragraph: "Sheet 1, 48 in × 96 in: 4 × D Shelf 47 3/4 in × 23 3/4 in"'), 'the sheet isn’t in words:\n' + plan);
   assert.ok(!/- img/.test(plan), 'a drawing is still read as a picture');
   await open(saved(project('Sides', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])])));
@@ -1549,7 +1580,8 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   await open(null);
   await view('saw');
   const cover = () => page.evaluate(() => {
-    const a = document.activeElement, r = a.getBoundingClientRect(), hd = a.closest('.stk').querySelector('.stk-hd').getBoundingClientRect();
+    // a folded board's heading is a button of its own, kept clear of the top bar
+    const a = document.activeElement, r = a.getBoundingClientRect(), hd = a.matches('.stk-hd') ? { bottom: 0 } : a.closest('.stk').querySelector('.stk-hd').getBoundingClientRect();
     return { top: Math.round(r.top), under: Math.round(Math.max(document.querySelector('.top').getBoundingClientRect().bottom, hd.bottom)) };
   });
   await page.locator('#sawOut .cut[data-k]').last().focus();
@@ -1559,11 +1591,11 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
     assert.ok(c.top >= c.under - 1, `Shift+Tab ${i + 1} left the focused cut under the top bar or its board's heading: ${JSON.stringify(c)}`);
   }
   const stuck = await page.evaluate(() => {
-    const bar = document.querySelector('.top').getBoundingClientRect().bottom, card = document.querySelectorAll('#sawOut .stk')[1];
+    const bar = document.querySelector('.top').getBoundingClientRect().bottom, card = [...document.querySelectorAll('#sawOut .stk')].pop();
     scrollBy(0, card.getBoundingClientRect().top - bar + 90);
     return [Math.round(card.querySelector('.stk-hd').getBoundingClientRect().top), Math.round(bar), card.querySelector('.stk-hd b').textContent];
   });
-  assert.deepEqual(stuck, [stuck[1], stuck[1], 'Board 2'], 'a board\'s heading scrolls away with its cuts');
+  assert.deepEqual(stuck, [stuck[1], stuck[1], 'Sheet 1'], 'a board\'s heading scrolls away with its cuts');
   assert.deepEqual(await page.evaluate(() => ['.stk', '.seg', '.cut'].map(s => getComputedStyle(document.querySelector(s)).overflow)), ['visible', 'visible', 'visible'], 'a card clips its focus rings');
   await page.setViewportSize({ width: 390, height: 844 });
 }
@@ -1967,7 +1999,7 @@ await open(saved(project('Metric offcuts', [board('45×90', [{ len: 2400 / 25.4,
     const left = Math.min(...[...svg.querySelectorAll('rect.dg-wood')].map(r => r.getBBox().x));
     return [...svg.querySelectorAll('text.dg-meta')].filter(t => t.getAttribute('x') === '0').map(t => [t.textContent, t.getBBox().x + t.getBBox().width <= left - 2]);
   });
-  assert.deepEqual(clear.map(c => c[0]), ['2.4 m', '2.4 m', '600 mm', '600 mm', '600 mm']);
+  assert.deepEqual(clear.map(c => c[0]), ['2.4 m ×2', '600 mm ×3']);
   assert.ok(clear.every(c => c[1]), 'a board\'s length runs into its drawing: ' + JSON.stringify(clear));
 }
 
