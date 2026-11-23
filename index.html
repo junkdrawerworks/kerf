@@ -111,13 +111,14 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .mat-name{flex:1;min-width:0;font:700 16px var(--body);border-color:transparent;background:transparent;padding:4px 6px}
 .mat-name:hover{border-color:var(--line)}
 .mat-note{flex:none;color:var(--ink3);font-size:13px;white-space:nowrap}
+.mat-note:empty{display:none}
 .icon{flex:none;width:30px;height:30px;border-radius:7px;border:1px solid transparent;background:none;color:var(--ink3);display:inline-flex;align-items:center;justify-content:center;font-size:16px;padding:0}
 .icon:hover{border-color:var(--line2);color:var(--ink)}
 .parts{padding:0 10px 4px}
 .prow{display:grid;grid-template-columns:22px minmax(0,1fr) 52px 104px 30px;gap:6px;align-items:center;padding:3px 0}
 .sheetmat .prow{grid-template-columns:22px minmax(0,1fr) 46px 92px 92px 30px 30px}
 .prow.head{font:600 11px var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);padding:2px 0 4px}
-.prow input{width:100%;padding:6px 7px;font-size:15px}
+.prow input{width:100%;padding:6px 7px}
 .prow .pq{text-align:center}
 .plet{width:22px;height:22px;border-radius:5px;background:var(--pine);color:#3B2A12;font:700 12px var(--mono);display:flex;align-items:center;justify-content:center;border:1px solid var(--pine-edge)}
 .sheetmat .plet{background:var(--ply);border-color:var(--ply-edge)}
@@ -140,10 +141,9 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .srow{display:grid;grid-template-columns:minmax(0,1fr) 88px 110px 30px;gap:6px;align-items:center;padding:3px 0}
 .sheetmat .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 80px 110px 30px}
 .srow.head{font:600 11px var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
-.srow input,.srow select{width:100%;padding:5px 7px;font-size:14.5px}
+.srow input,.srow select{width:100%;padding:5px 7px}
 .money{position:relative}
 .money span{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--ink3);font-size:14px;pointer-events:none}
-.money input{padding-left:20px}
 .hint{color:var(--ink3);font-size:12.5px;margin:6px 0 0}
 .addrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .lbtn{background:none;border:0;color:var(--chalk);font:600 13.5px var(--body);padding:4px 2px}
@@ -276,6 +276,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .right-tabs .seg{display:none}
   .app[data-tab="list"] .pane.plan,.app[data-tab="plan"] .pane.list,.app[data-tab="saw"] .pane.list{display:none}
   .pane-hd.lhd{display:none}
+  /* Every field keeps the 16px text set above: iOS zooms the page into a field with smaller text, and stays zoomed. */
+  textarea{font-size:16px}
 }
 @media (max-width:560px){
   .tbtn .t{display:none}.tbtn{padding:7px 9px}
@@ -284,15 +286,28 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .total{font-size:46px}
   .summary{grid-template-columns:minmax(0,1fr);padding:12px 14px}
   .steps{columns:1}
-  .prow{grid-template-columns:20px minmax(0,1fr) 44px 88px 28px;gap:5px}
-  /* a sheet part takes two lines: its name across the top, then quantity, length, width, grain and ✕ */
-  .sheetmat .prow{grid-template-columns:20px 44px minmax(0,1fr) minmax(0,1fr) 30px 28px;gap:4px 5px;padding:5px 0}
-  .sheetmat .prow>:nth-child(2){grid-column:2/-1}
-  .sheetmat .prow>:nth-child(3){grid-area:2/2}.sheetmat .prow>:nth-child(4){grid-area:2/3}.sheetmat .prow>:nth-child(5){grid-area:2/4}
-  .sheetmat .prow>:nth-child(6){grid-area:2/5}.sheetmat .prow>:nth-child(7){grid-area:2/6}
-  .prow input{padding:6px 5px;font-size:14.5px}
-  .srow,.sheetmat .srow{grid-template-columns:minmax(0,1fr) 78px 96px 28px}
-  .sheetmat .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 70px 96px 28px}
+  .mat-hd{flex-wrap:wrap;row-gap:0}
+  .mat-note{order:1;flex-basis:100%;white-space:normal;padding:0 0 0 44px}
+  /* A part takes two lines: its letter and name across the top, with its ✕ (and a sheet part's grain lock), then its
+     quantity under the letter, and its length (and width). */
+  .plet{width:20px}
+  .prow,.sheetmat .prow{grid-template-columns:20px 26px minmax(0,1fr) minmax(0,1fr);gap:6px 4px;padding:6px 0}
+  .prow.head,.sheetmat .prow.head{padding:2px 0 0;gap:2px 4px}
+  .prow>:nth-child(2){grid-area:1/2/2/-1;justify-self:start;width:calc(100% - 34px)}
+  .prow>:nth-child(3){grid-area:2/1/3/3}
+  .prow>:nth-child(4){grid-area:2/3/3/-1}
+  .prow>:last-child{grid-area:1/4;justify-self:end}
+  .sheetmat .prow>:nth-child(2){width:calc(100% - 70px)}
+  .sheetmat .prow>:nth-child(4){grid-area:2/3}
+  .sheetmat .prow>:nth-child(5){grid-area:2/4}
+  .sheetmat .prow>:nth-child(6){grid-area:1/4;justify-self:end;margin-right:36px}
+  /* A size to buy takes two lines too: its length (and width), then its price, where it comes from and its ✕. */
+  .srow,.sheetmat .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 30px;gap:6px}
+  .srow>:nth-child(1){grid-area:1/1}
+  .srow>:nth-child(2){grid-area:2/1}.srow>:nth-child(3){grid-area:2/2}.srow>:nth-child(4){grid-area:2/3}
+  .sheetmat .srow>:nth-child(2){grid-area:1/2}
+  .sheetmat .srow>:nth-child(3){grid-area:2/1}.sheetmat .srow>:nth-child(4){grid-area:2/2}.sheetmat .srow>:nth-child(5){grid-area:2/3}
+  .srow[data-sid]{padding:8px 0}.srow[data-sid]+.srow[data-sid]{border-top:1px solid var(--line)}
   .cut .meas{font-size:19px;min-width:78px}
 }
 @media (prefers-reduced-motion:reduce){.toast,.saw-bar .prog i,.stock>summary .chev{transition:none}}
@@ -1040,7 +1055,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       m.stock.forEach(function (s) {
         h += '<div class="srow" data-sid="' + s.id + '"><input class="mono" data-f="slen" value="' + esc(fmt(s.len, { ft: !sheet })) + '" aria-label="Stock length" autocomplete="off">' +
           (sheet ? '<input class="mono" data-f="swid" value="' + esc(fmt(s.wid)) + '" aria-label="Stock width" autocomplete="off">' : '') +
-          '<span class="money"><span>' + esc(CUR) + '</span><input class="mono" data-f="price" value="' + (s.have ? '' : (+s.price || 0).toFixed(2)) + '" inputmode="decimal" aria-label="Price" autocomplete="off"' + (s.have ? ' disabled placeholder="free"' : '') + '></span>' +
+          '<span class="money"><span>' + esc(CUR) + '</span><input class="mono" data-f="price" style="padding-left:' + (12 + Array.from(CUR).length * 9) + 'px" value="' + (s.have ? '' : (+s.price || 0).toFixed(2)) + '" inputmode="decimal" aria-label="Price" autocomplete="off"' + (s.have ? ' disabled placeholder="free"' : '') + '></span>' +
           '<select data-f="have" aria-label="Where it comes from"><option value="0"' + (s.have ? '' : ' selected') + '>Buy</option>' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return '<option value="' + n + '"' + (s.have === n ? ' selected' : '') + '>Have ' + n + '</option>'; }).join('') + '</select>' +
           '<button class="icon" type="button" data-a="delstock" aria-label="Remove this size">✕</button></div>';
       });

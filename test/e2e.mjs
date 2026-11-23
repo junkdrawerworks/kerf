@@ -407,6 +407,49 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   assert.deepEqual(await names(), ['Desk', 'Typed just now'], 'an edit waiting to be saved was lost when another window saved');
 }
 
+// On a phone the cut list fits: a part takes two lines, its name across the top, so names, lengths and prices
+// aren't cut short, nothing scrolls sideways, and every field's text is 16px (iOS zooms the page into a smaller one).
+// Checked on the example and on materials with longer names, at 320 and 390 wide.
+{
+  const long = project('Mudroom bench', [
+    { ...board('1×6 board — pine', [{ len: 72, price: 6.28 }, { len: 96, price: 8.28 }, { len: 30, have: 2 }],
+      [{ name: 'Seat slat, rounded', qty: 5, len: 46 }, { name: 'Shiplap backer board', qty: 9, len: 47.5 }, { name: 'Cubby divider', qty: 4, len: 143.9375 }]), note: '¾ × 5½ in' },
+    { ...sheet('¾ plywood', [{ len: 96, wid: 48, price: 134.5 }, { len: 48, wid: 48, price: 34 }, { len: 48, wid: 24, price: 21 }],
+      [{ name: 'Cubby side, left', qty: 2, len: 34.5, wid: 15.25 }, { name: 'Back', qty: 1, len: 47.9375, wid: 34.5, grain: false }]), note: '23/32 in actual' }]);
+  const clipped = () => page.evaluate(() => { document.querySelectorAll('details.stock').forEach(d => { d.open = true; }); return [...document.querySelectorAll('#mats input')].filter(i => i.scrollWidth > i.clientWidth).map(i => i.value); });
+  for (const [width, height] of [[320, 568], [390, 844]]) {
+    await page.setViewportSize({ width, height });
+    for (const db of [null, saved(long)]) {
+      await open(db);
+      await view('list');
+      assert.deepEqual(await clipped(), [], `fields cut short at ${width} wide`);
+      await fitsPhone(`cut list at ${width} wide`);
+    }
+  }
+  // The text in every field is 16px or more, in the cut list and in the dialogs.
+  const small = sel => page.$$eval(sel, els => els.filter(e => parseFloat(getComputedStyle(e).fontSize) < 16).map(e => e.dataset.f || e.id || e.tagName));
+  assert.deepEqual(await small('#mats input, #mats select'), [], 'fields in the cut list under 16px');
+  for (const [btn, done] of [['#setBtn', '#stx'], ['#projBtn', '#pjx']]) {
+    await page.click(btn);
+    assert.deepEqual(await small('#sheet input:not([type=file]), #sheet select, #sheet textarea'), [], 'fields in a dialog under 16px');
+    await page.click(done);
+  }
+  // Nothing scrolls sideways on a tablet or a laptop either.
+  for (const [width, height] of [[768, 1024], [1280, 800]]) {
+    await page.setViewportSize({ width, height });
+    for (const t of ['list', 'plan']) { await page.evaluate(t => document.querySelector(`#tabs button[data-t="${t}"]`).click(), t); await fitsPhone(`${t} at ${width} wide`); }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
+// A three-letter currency sits clear of the price.
+{
+  await open(saved(project('Franken', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }], [{ name: 'Shelf', qty: 2, len: 30, wid: 12 }])], { cur: 'CHF' })));
+  await view('list');
+  await page.click('details.stock summary');
+  assert.ok(await page.$eval('.srow[data-sid] .money', m => m.querySelector('span').getBoundingClientRect().right <= m.querySelector('input').getBoundingClientRect().left + parseFloat(getComputedStyle(m.querySelector('input')).paddingLeft)), 'CHF covers the price');
+}
+
 // On a phone a sheet part takes two lines, its name across the top, so the name isn't cut to a few letters. Enter
 // still goes on to the same field of the next part, and from the last part adds one.
 {
