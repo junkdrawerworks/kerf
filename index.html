@@ -851,6 +851,20 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var ex = exact(quick ? 3000 : 40000, quick ? EFFORT.quickExact : EFFORT.exact);
     consider(ex);
     out.exact = !!ex; // the exact search finished, so no plan costs less
+    // First fit, longest first, on each size to buy alone, each board then moved to the cheapest size it fits: plain,
+    // but on some big jobs cheaper than the greedy's start. A step for each board it looks at, as a tenth (it's a sum).
+    if (!ex) stocks.forEach(function (st, si) {
+      if (isFinite(st.left)) return;
+      var bs = [], ok = true;
+      for (var j = 0; j < L.length && ok; j++) for (var q = 0; q < C0[j]; q++) {
+        for (var k = 0; k < bs.length && bs[k].need + kerf + L[j] > st.cap + 1e-9; k++);
+        work += (k + 1) / 10;
+        if (k < bs.length) { bs[k].need += kerf + L[j]; bs[k].x[j]++; }
+        else if (L[j] <= st.cap + 1e-9) { var x = L.map(function () { return 0; }); x[j] = 1; bs.push({ si: si, x: x, need: L[j] }); }
+        else { ok = false; break; }
+      }
+      if (ok) consider(settle(bs, fresh()));
+    });
     if (!ex && (!quick || total <= 40)) consider(pilot());
     for (var it = 0; !ex && it < (quick ? 20 : 60); it++) {
       if (work > budget) break;

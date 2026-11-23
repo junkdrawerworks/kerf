@@ -127,6 +127,39 @@ console.log('boards: random jobs against brute force (offcuts on hand, end trim,
   console.log('  ' + n + ' jobs');
 }
 
+console.log('boards: never dearer than first fit');
+{
+  // First fit, longest first, on one size to buy, each board then moved to the cheapest size it fits: the plain way to
+  // plan boards by hand. Kerf's plan must never cost more. 24 pieces of 2×4 that Kerf planned at $44.02, where first
+  // fit buys ten 8' boards for $42.80.
+  const ffd = (pieces, stocks, kerf) => {
+    let best = Infinity;
+    for (const s0 of stocks) {
+      const bins = []; let ok = true;
+      for (const p of pieces.slice().sort((a, b) => b - a)) {
+        const b = bins.find(b => b.used + kerf + p <= s0.cap + 1e-9);
+        if (b) b.used += kerf + p; else if (p <= s0.cap + 1e-9) bins.push({ used: p }); else { ok = false; break; }
+      }
+      if (ok) best = Math.min(best, bins.reduce((a, b) => a + Math.min(...stocks.filter(s => s.cap + 1e-9 >= b.used).map(s => s.price)), 0));
+    }
+    return best;
+  };
+  const stock = LUMBER.map(s => ({ len: s[0], price: s[1], have: 0 })), caps = LUMBER.map(s => ({ cap: s[0], price: s[1] }));
+  const pieces = ps => [].concat(...ps.map(p => Array(p.qty).fill(p.len)));
+  const job = [{ len: 18.25, qty: 4 }, { len: 89.75, qty: 3 }, { len: 33, qty: 5 }, { len: 35.75, qty: 6 }, { len: 29.5, qty: 6 }];
+  let r = K.solveBoards({ stock, parts: job }, { kerf: 0.125, trim: 0 });
+  check(r.cost <= 42.80 + 1e-6, `24 pieces of 2×4 cost $${r.cost.toFixed(2)}, first fit buys them for $42.80`);
+  const R = rng(4); let n = 0;
+  for (let t = 0; t < 150; t++) {
+    const parts = [];
+    for (let k = 0, nT = 2 + Math.floor(R() * 10); k < nT; k++) parts.push({ len: Math.round((6 + R() * 90) * 16) / 16, qty: 1 + Math.floor(R() * 8) });
+    r = K.solveBoards({ stock, parts }, { kerf: 0.125, trim: 0 });
+    const g = ffd(pieces(parts), caps, 0.125); n++;
+    check(r.cost <= g + 1e-6, `job ${t}: $${r.cost.toFixed(2)}, first fit costs $${g.toFixed(2)} ${JSON.stringify(parts)}`);
+  }
+  console.log('  ' + n + ' jobs');
+}
+
 console.log('boards: a big job stays quick');
 {
   const stock = LUMBER.map(s => ({ len: s[0], price: s[1], have: 0 }));

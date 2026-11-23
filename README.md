@@ -32,6 +32,7 @@ Settings per project: saw kerf (⅛″ by default), trimming each board end squa
 1. Kerf first tries an exact search. Some board must hold the longest piece left, and it can take every other piece that still fits: moving a piece onto it from another board never costs more. So Kerf branches only on those boards, remembering the cheapest way to finish from each set of pieces left. For the cut lists people actually make — a handful of distinct lengths — this finishes in milliseconds and the answer is the cheapest possible.
 2. When a job is too big for that search, Kerf falls back to heuristics:
    - a greedy fill by price per inch of parts;
+   - first fit, longest piece first, on each size to buy, the way it's done by hand: the plan never costs more than that;
    - a look-ahead that tries every first board and finishes greedily;
    - randomized restarts.
 3. Each board then moves to the cheapest stock length its pieces still fit on.
@@ -86,7 +87,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 `npm test` runs two suites. `test/solver.test.cjs` needs no dependencies: it reads the solver straight out of `index.html` and checks:
 
 - **Parsing:** lengths in each format parse to the right value.
-- **Boards:** the example project costs the known optimum, and several hundred random jobs match a brute-force search. The random jobs include offcuts on hand, end trim and two kerf widths. Boards on hand that run short are reported, not left to crash.
+- **Boards:** the example project costs the known optimum, several hundred random jobs match a brute-force search, and 150 bigger ones (and a 24-piece job that used to cost $1.22 more) never cost more than first fit, longest piece first. The random jobs include offcuts on hand, end trim and two kerf widths. Boards on hand that run short are reported, not left to crash.
 - **Big jobs:** a 90-piece job finishes quickly, and 800 pieces in 16 lengths don't run the search out of stack.
 - **Sheets:** in 200 random jobs, every part is on its sheet at the right size, no two parts overlap once the kerf is counted, and grain-locked parts are never turned. Every part on a sheet is named by exactly one step (the cut that gives it, the cut that leaves it, or the note that it is the whole sheet), in 200 more seeded jobs full of parts that fill what a cut leaves exactly. More than 300 of one part is reported, not quietly left out. One sheet on hand and the same size to buy plan one free and one bought. Two ¾ plywood jobs that cost more when the shuffle had half the work come out as cheap as the old time limit found them.
 - **Tips:** the example's tip saves what it says; a 40-piece workbench, too big for the exact search, gets no tip promising a total its parts as they are can already reach; and two plywood seats free to turn get tips that save exactly what they say.
