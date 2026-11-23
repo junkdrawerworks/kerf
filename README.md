@@ -2,7 +2,7 @@
 
 **Use it: [kerf.junkdrawer.works](https://kerf.junkdrawer.works/)**
 
-**A cut-list optimizer for lumber and plywood.** List the parts a project needs; Kerf works out the cheapest boards and sheets to buy, draws how to cut each one, and gives you a checklist to work through at the saw. It installs as an app (from the browser's menu, or Share → Add to Home Screen on an iPhone) and works offline once it has loaded.
+**A cut-list optimizer for lumber and plywood.** List the parts a project needs; Kerf works out the cheapest boards and sheets to buy, draws how to cut each one, and gives you a checklist to work through at the saw. It plans construction lumber and sheet goods bought by the piece, a 2×4 or a sheet of plywood at a price each, not hardwood sold by the board foot. It installs as an app (from the browser's menu, or Share → Add to Home Screen on an iPhone) and works offline once it has loaded.
 
 <p align="center">
   <img src="docs/phone-list.png" alt="The cut list for a set of garage shelves: how to type lengths, then the 2×4 legs, front and back rails and side rails, each named on one line with its quantity, length and width below (the width left blank, showing the board's 3½ inches), above the 2×4 sizes you can buy and what they cost" width="250">
