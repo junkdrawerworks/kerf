@@ -308,7 +308,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .tabs{display:flex}
   .right-tabs .seg{display:none}
   .app[data-tab="list"] .pane.plan,.app[data-tab="plan"] .pane.list,.app[data-tab="saw"] .pane.list{display:none}
-  .pane-hd.lhd h2{display:none} /* the tab says it; how to type lengths stays */
+  .pane-hd.lhd h2{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap} /* the tab says it, so it's there only for a screen reader; how to type lengths stays */
   .empty .btn{display:inline-block}
   /* Every field keeps the 16px text set above: iOS zooms the page into a field with smaller text, and stays zoomed. */
   textarea{font-size:16px}
@@ -372,6 +372,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
 <body>
 <div class="wrap app" id="app" data-tab="plan">
   <header class="top">
+    <h1 class="sr" id="pTitle">Kerf</h1>
     <div class="top-in">
       <span class="brand" aria-label="Kerf">KERF</span>
       <input class="pname" id="pname" aria-label="Project name" autocomplete="off" spellcheck="false">
@@ -1427,12 +1428,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function renderPlan() {
     var host = $('planOut'), r = RES;
     if (!P.materials.length || !r.mats.some(function (m) { return m.items.length; })) {
-      host.innerHTML = leftOut(r) || '<div class="empty"><b>Nothing to cut yet.</b><br>Add a material in the cut list, then the parts you need from it — Kerf works out what to buy and how to cut it.<br><button class="btn" type="button" data-go="list">Go to the cut list</button></div>';
+      host.innerHTML = '<h2 class="sr">Plan</h2>' + (leftOut(r) || '<div class="empty"><b>Nothing to cut yet.</b><br>Add a material in the cut list, then the parts you need from it — Kerf works out what to buy and how to cut it.<br><button class="btn" type="button" data-go="list">Go to the cut list</button></div>');
       var go = host.querySelector('[data-go]'); if (go) go.addEventListener('click', function () { setTab('list'); });
       return;
     }
     W.plan = planWidth();
-    var h = '<div class="summary"><div><div class="total"><span class="cur">' + esc(CUR) + '</span>' + (Math.round(r.cost * 100) / 100).toFixed(2) + '</div><div class="total-lbl">to buy</div></div><div class="facts">';
+    var h = '<h2 class="sr">Plan</h2><div class="summary"><div><div class="total"><span class="cur">' + esc(CUR) + '</span>' + (Math.round(r.cost * 100) / 100).toFixed(2) + '</div><div class="total-lbl">to buy</div></div><div class="facts">';
     if (r.boards) h += '<div class="fact"><b>' + r.boards + '</b><span>' + (r.boards === 1 ? 'board' : 'boards') + '</span></div>';
     if (r.sheets) h += '<div class="fact"><b>' + r.sheets + '</b><span>' + (r.sheets === 1 ? 'sheet' : 'sheets') + '</span></div>';
     h += '<div class="fact"><b>' + r.cuts + '</b><span>' + (r.cuts === 1 ? 'cut' : 'cuts') + '</span></div>';
@@ -1453,7 +1454,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     h += '</tbody><tfoot><tr><td colspan="3">Total</td><td class="n">' + esc(money(r.cost)) + '</td></tr></tfoot></table></div></div>';
     r.mats.forEach(function (m, mi) {
       if (!m.items.length) return;
-      h += '<div class="sec"><div class="mdiag"><h4>' + esc(m.mat.name) + '<small>' + (m.kind === 'sheet' ? plural(m.items.length, 'sheet') : plural(m.items.length, 'board')) + '</small></h4>' + (m.kind === 'sheet' ? sheetDiagrams(m) : boardDiagram(m)) + '</div></div>';
+      h += '<div class="sec"><div class="mdiag"><h4>' + esc(m.mat.name) + '<small><span class="sr">, </span>' + (m.kind === 'sheet' ? plural(m.items.length, 'sheet') : plural(m.items.length, 'board')) + '</small></h4>' + (m.kind === 'sheet' ? sheetDiagrams(m) : boardDiagram(m)) + '</div></div>';
     });
     host.innerHTML = h;
     $('copyList').addEventListener('click', copyList);
@@ -1739,7 +1740,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (!RES) { host.innerHTML = ''; return; }
     var tasks = sawTasks(), total = 0, done = 0;
     syncTicks(tickKeys(tasks));
-    if (!tasks.length) { host.innerHTML = '<div class="empty">The cutting steps show up here once there’s a plan.</div>'; return; }
+    if (!tasks.length) { host.innerHTML = '<h2 class="sr">At the saw</h2><div class="empty">The cutting steps show up here once there’s a plan.</div>'; return; }
     var ticked = function (t, ci) { var d = P.done[t.mid]; return !!(d && d.ticks[t.ii + '.' + ci]) && !t.cuts[ci].noCut; };
     host.dataset.u = U;
     var h = '', next = null; // the first cut not ticked yet, marked as the next to make
@@ -1758,7 +1759,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (t.note) h += '<div class="cut note"><span>' + t.note + '</span></div>';
       h += '</div>';
     });
-    host.innerHTML = '<div class="saw-bar"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div><b>' + done + '<small> of </small>' + total + '<small> ' + (total === 1 ? 'cut' : 'cuts') + '</small></b>' + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>' + h;
+    host.innerHTML = '<h2 class="sr">At the saw</h2><div class="saw-bar"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div><b>' + done + '<small> of </small>' + total + '<small> ' + (total === 1 ? 'cut' : 'cuts') + '</small></b>' + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>' + h;
     // The list is drawn again after each tick, so focus goes back to the same cut (or the first, after Start over).
     // A tick changes the project like any edit, so another open window keeps it.
     var refocus = function (k) { var c = host.querySelector('.cut[data-k' + (k ? '="' + k + '"' : '') + ']'); if (c) c.focus({ preventScroll: true }); };
@@ -1818,7 +1819,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
   }
   function renderHead() {
-    $('pname').value = P.name;
+    $('pname').value = P.name; $('pTitle').textContent = P.name || 'Kerf'; // the page's heading, for a screen reader
     $('unitNote').textContent = U === 'mm' ? 'Lengths in mm' : 'Lengths in inches — 35 3/4, 2\' 11 3/4", 910mm all work';
     var ex = $('exampleBar');
     ex.innerHTML = P.example ? '<div class="example"><span>This is an example project — change anything, or start your own.</span><button class="btn sm" type="button" id="exNew">New project</button></div>' : '';
@@ -2272,7 +2273,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   $('mats').addEventListener('focusin', onFocus);
   $('mats').addEventListener('keydown', onKey);
   $('mats').addEventListener('click', onClick);
-  $('pname').addEventListener('input', function () { P.name = this.value; if (P.example) { P.example = false; renderHead(); $('pname').focus(); } touch(); });
+  $('pname').addEventListener('input', function () { P.name = this.value; $('pTitle').textContent = P.name || 'Kerf'; if (P.example) { P.example = false; renderHead(); $('pname').focus(); } touch(); });
   $('setBtn').addEventListener('click', settingsSheet);
   $('projBtn').addEventListener('click', projectsSheet);
   $('pdfBtn').addEventListener('click', function () {

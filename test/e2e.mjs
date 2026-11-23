@@ -1149,6 +1149,21 @@ for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page
   await page.click('#pjx');
 }
 
+// The page has an outline a screen reader can move through on a phone too: the project's name as its first heading,
+// then the cut list, the plan and the saw, and the plan's diagrams named by their material and count, apart.
+{
+  await open(null);
+  const heads = () => page.$$eval('h1,h2,h3,h4', hs => hs.filter(h => !h.closest('[hidden]') && getComputedStyle(h).display !== 'none' && h.getClientRects().length).map(h => h.tagName[1] + ' ' + h.textContent));
+  assert.deepEqual(await heads(), ['1 Garage shelves (example)', '2 Plan', '3 Shopping list', '4 2×4, 8 boards', '4 ¾ plywood, 1 sheet']);
+  assert.equal(await page.getByRole('heading', { level: 4, name: /^2×4\s*,\s*8 boards$/ }).count(), 1, 'the diagram’s heading runs its words together');
+  await page.fill('#pname', 'Shelves');
+  assert.equal(await page.textContent('h1'), 'Shelves', 'the page’s heading keeps the old name');
+  await view('list');
+  assert.deepEqual(await heads(), ['1 Shelves', '2 What you need to cut']);
+  await view('saw');
+  assert.deepEqual(await heads(), ['1 Shelves', '2 At the saw']);
+}
+
 // Ticking a cut from the keyboard keeps focus on that cut, and Start over moves it to the first one.
 await view('saw');
 await page.locator('#sawOut .cut[data-k]').nth(1).focus();
@@ -1415,9 +1430,9 @@ assert.equal(await page.textContent('.perr'), 'Peg × 400: Kerf plans at most 30
 await open(saved(project('Nothing yet', [])));
 assert.match(await page.textContent('#planOut .empty'), /^Nothing to cut yet\.Add a material in the cut list, then the parts you need from it/);
 await open(saved(project('Too long', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Beam', qty: 1, len: 120 }])])));
-assert.equal(await page.textContent('#planOut'), 'Some parts are left out. 2×4 has 1 part too big for any size listed — see the cut list.');
+assert.equal((await page.textContent('#planOut')).replace(/^Plan/, ''), 'Some parts are left out. 2×4 has 1 part too big for any size listed — see the cut list.');
 await open(saved(project('Short of legs', [board('Other board', [{ len: 96, have: 2 }], [{ name: 'Leg', qty: 3, len: 72 }])])));
-assert.equal(await page.textContent('#planOut'), 'Some parts are left out. Other board: the boards you have can’t hold every part — see the cut list.');
+assert.equal((await page.textContent('#planOut')).replace(/^Plan/, ''), 'Some parts are left out. Other board: the boards you have can’t hold every part — see the cut list.');
 
 // A sheet's outline goes under its cut lines and numbers, not through them, on screen and in the PDF.
 await open(null);
