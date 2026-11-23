@@ -1597,7 +1597,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 }
 
 // At the saw on a short screen (a phone on its side, or 200% zoom), each board's heading stays in sight under the top
-// bar while its cuts scroll by, and Shift+Tab up the list never leaves the focused cut under either. Their cards don't
+// bar and the saw's own bar while its cuts scroll by, and Shift+Tab up the list never leaves the focused cut under either. Their cards don't
 // clip, so a focus ring shows whole.
 {
   await page.setViewportSize({ width: 640, height: 400 });
@@ -1606,7 +1606,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   const cover = () => page.evaluate(() => {
     // a folded board's heading is a button of its own, kept clear of the top bar
     const a = document.activeElement, r = a.getBoundingClientRect(), hd = a.matches('.stk-hd') ? { bottom: 0 } : a.closest('.stk').querySelector('.stk-hd').getBoundingClientRect();
-    return { top: Math.round(r.top), under: Math.round(Math.max(document.querySelector('.top').getBoundingClientRect().bottom, hd.bottom)) };
+    return { top: Math.round(r.top), under: Math.round(Math.max(document.querySelector('.top').getBoundingClientRect().bottom, document.querySelector('.saw-bar').getBoundingClientRect().bottom, hd.bottom)) };
   });
   await page.locator('#sawOut .cut[data-k]').last().focus();
   for (let i = 0; i < 12; i++) {
@@ -1615,7 +1615,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
     assert.ok(c.top >= c.under - 1, `Shift+Tab ${i + 1} left the focused cut under the top bar or its board's heading: ${JSON.stringify(c)}`);
   }
   const stuck = await page.evaluate(() => {
-    const bar = document.querySelector('.top').getBoundingClientRect().bottom, card = [...document.querySelectorAll('#sawOut .stk')].pop();
+    const bar = document.querySelector('.saw-bar').getBoundingClientRect().bottom, card = [...document.querySelectorAll('#sawOut .stk')].pop();
     scrollBy(0, card.getBoundingClientRect().top - bar + 90);
     return [Math.round(card.querySelector('.stk-hd').getBoundingClientRect().top), Math.round(bar), card.querySelector('.stk-hd b').textContent.replace(/\u00a0/g, ' ')];
   });
@@ -2171,6 +2171,26 @@ for (const c of sawCases) {
   if (c.note) assert.equal(shown(await page.textContent('#sawOut .cut.note')), c.note, what + ': the note at the saw');
   // a note reads as a line of text, its fractions typeset in it, not spread out like the parts of a cut's row
   assert.ok(await page.$$eval('#sawOut .cut.note', ns => ns.every(n => n.childNodes.length === 1 && n.firstChild.tagName === 'SPAN')), what + ': a note at the saw is spread out');
+}
+
+// The saw's bar, with its count, stays in sight under the top bar as the cuts scroll by, and its Next cut goes to the
+// next cut and focuses it. Once every cut is ticked there's no next cut, and no button for it.
+{
+  await open(null);
+  await view('saw');
+  await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(100);
+  const at = () => page.evaluate(() => { const b = document.querySelector('.saw-bar').getBoundingClientRect(); return [Math.round(b.top), Math.round(document.querySelector('.top').getBoundingClientRect().bottom), Math.round(b.height), parseFloat(getComputedStyle(document.querySelector('#sawOut')).getPropertyValue('--sb'))]; });
+  const [top, under, h, sb] = await at();
+  assert.ok(Math.abs(top - under) <= 1 && Math.abs(h - sb) <= 1, 'the saw’s bar scrolls away, or --sb isn’t its height: ' + [top, under, h, sb]);
+  await page.click('#sawNext');
+  await page.waitForFunction(() => document.activeElement.matches('.cut.next'));
+  await page.waitForTimeout(800); // a smooth scroll
+  assert.ok(await page.evaluate(() => { const r = document.activeElement.getBoundingClientRect(), b = document.querySelector('.saw-bar').getBoundingClientRect(); return r.top >= b.bottom && r.bottom <= innerHeight; }), 'Next cut doesn’t bring the next cut into sight');
+  await fitsPhone('saw with Next cut');
+  const left = page.locator('#sawOut .cut[data-k][aria-checked="false"]');
+  while (await left.count()) await left.first().click();
+  assert.equal(await page.$('#sawNext'), null, 'a finished job still offers Next cut');
 }
 
 // At the saw a sheet's card is headed with its material and starts with the sheet's drawing, its next cut standing out

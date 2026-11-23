@@ -248,22 +248,24 @@ div.sec{margin-top:22px}
 .empty{background:var(--surface);border:1px dashed var(--line2);border-radius:var(--r);padding:26px 18px;text-align:center;color:var(--ink2)}
 .empty .btn{display:none;margin-top:14px} /* to the cut list, shown where it's a tab of its own */
 /* at the saw */
-.saw-bar{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:12px}
-.saw-bar .prog{flex:1;height:10px;border-radius:99px;background:var(--sunk);box-shadow:inset 0 0 0 1px var(--line2);overflow:hidden}
+.saw-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:12px;position:sticky;top:var(--hd,0px);z-index:3}
+/* the bar stays in sight under the top bar while the cuts scroll by (--sb is its height, kept by the script), each
+   board's heading under it, and a cut or heading the keyboard moves to scrolls clear of both */
+.saw-bar .prog{flex:1 1 60px;height:10px;border-radius:99px;background:var(--sunk);box-shadow:inset 0 0 0 1px var(--line2);overflow:hidden}
 .saw-bar .prog i{display:block;height:100%;background:var(--good);transition:width .25s}
 .saw-bar b{font:600 15px var(--mono)}.saw-bar b small{font:500 14px var(--body);color:var(--ink2)}
 .saw-bar b.all{font:700 15px var(--body);color:var(--good)}
 /* A board's heading stays in sight under the top bar while its cuts scroll by (--hd is the bar's height), so the board
    being cut is always named. So the card can't clip to its corners: its heading and last row are rounded instead. */
 .stk{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px}
-.stk-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface2);position:sticky;top:var(--hd,0px);z-index:2;border-radius:calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0}
+.stk-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface2);position:sticky;top:calc(var(--hd,0px) + var(--sb,0px));z-index:2;scroll-margin-top:calc(var(--sb,0px) + 4px);border-radius:calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0}
 .stk>:last-child{border-radius:0 0 calc(var(--r) - 1px) calc(var(--r) - 1px)}
 .stk-hd b{font:700 16px var(--body);white-space:nowrap;flex:none}
 .stk-hd span{color:var(--ink2);font-size:13.5px;min-width:0}
 .stk-hd .n{margin-left:auto;font:600 13px var(--mono);color:var(--ink3)}
 .stk-hd b{display:flex;min-width:0;flex:0 1 auto}.stk-hd .sz{flex:none;white-space:nowrap}.stk-hd b span{font-size:inherit;color:inherit}.stk-hd .mn{overflow:hidden;text-overflow:ellipsis;min-width:0}.stk-hd .dot{flex:none}
 .sdg{border-bottom:1px solid var(--line)}
-.sdg>summary{scroll-margin-top:60px;list-style:none;display:flex;align-items:center;gap:8px;padding:6px 14px;cursor:pointer;font-size:13px;color:var(--ink3)}
+.sdg>summary{scroll-margin-top:calc(var(--sb,0px) + 60px);list-style:none;display:flex;align-items:center;gap:8px;padding:6px 14px;cursor:pointer;font-size:13px;color:var(--ink3)}
 .sdg>summary::-webkit-details-marker{display:none}
 .sdg>summary .chev{transition:transform .15s;font-size:16px;line-height:1}
 .sdg[open]>summary .chev{transform:rotate(90deg)}
@@ -280,7 +282,7 @@ button.stk-hd .n+.chev{margin-left:0}
 button.stk-hd[aria-expanded="true"] .chev{transform:rotate(90deg)}
 .stk.fold .stk-hd{border-bottom:0;border-radius:calc(var(--r) - 1px);position:static}
 .stk.done .stk-hd .n{color:var(--good);font-weight:700}
-.cut{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 14px;min-height:56px;scroll-margin-top:60px}
+.cut{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 14px;min-height:56px;scroll-margin-top:calc(var(--sb,0px) + 60px)}
 /* A row's focus ring sits inside it, clear of the rows above and below; a cut the keyboard moves to scrolls clear of
    its board's heading as well as the top bar. */
 .cut:focus-visible,.pitem:focus-visible{outline-offset:-3px}
@@ -399,7 +401,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   .sheetmat .srow>:nth-child(3){grid-area:2/1}.sheetmat .srow>:nth-child(4){grid-area:2/2}.sheetmat .srow>:nth-child(5){grid-area:2/3}
   .srow[data-sid]{padding:8px 0}.srow[data-sid]+.srow[data-sid]{border-top:1px solid var(--line)}
 }
-@media (max-width:560px){.cut .meas{font-size:24px}}
+@media (max-width:560px){.cut .meas{font-size:24px}.saw-bar{padding:9px 14px 6px;row-gap:2px}.saw-bar .prog{flex-basis:100%;margin-top:3px}.saw-bar b+.lbtn{margin-left:auto}}
 /* On the smallest phones the project's name gets a line of its own under the brand and buttons, where it had room for
    four letters; a tip's button goes under its words. */
 @media (max-width:359.98px){
@@ -2306,6 +2308,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   var SAW = { done: 0, total: 0 }; // the saw's count as last drawn
   var SAWOPEN = {}; // the folded boards opened with a tap ('material id/board'), for as long as the page is open
   var SAWDG = {}; // the sheets whose drawing is folded away at the saw, the same way
+  var SBRO = null; // keeps --sb, the saw's bar's height, as it wraps
   function sawWidth() { var w = $('sawOut').clientWidth; return Math.max(240, Math.floor(w || planWidth() + 26) - 26); }
   function renderSaw() {
     var host = $('sawOut');
@@ -2349,7 +2352,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     });
     SAW = { done: done, total: total };
     var all = total && done === total, count = all ? '<b class="all">' + (total === 1 ? 'The cut is done' : 'All ' + total + ' cuts done') + '</b>' : '<b>' + done + '<small> of </small>' + total + '<small> ' + (total === 1 ? 'cut' : 'cuts') + '</small></b>';
-    host.innerHTML = '<h2 class="sr">At the saw</h2><div class="saw-bar' + (all ? ' all' : '') + '"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div>' + count + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>' + (all ? keepLine() : '') + h;
+    host.innerHTML = '<h2 class="sr">At the saw</h2><div class="saw-bar' + (all ? ' all' : '') + '"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div>' + count + (next && !all ? '<button class="lbtn" type="button" id="sawNext">Next cut</button>' : '') + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>' + (all ? keepLine() : '') + h;
     // The list is drawn again after each tick, so focus goes back to the same cut (or the first, after Start over).
     // A tick changes the project like any edit, so another open window keeps it.
     var refocus = function (k) { var c = host.querySelector('.cut[data-k' + (k ? '="' + k + '"' : '') + ']'); if (c) c.focus({ preventScroll: true }); };
@@ -2367,6 +2370,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     host.querySelectorAll('[data-fold]').forEach(function (b) {
       b.addEventListener('click', function () { var k = b.dataset.fold; SAWOPEN[k] = !SAWOPEN[k]; renderSaw(); var f = host.querySelector('[data-fold="' + k + '"]'); if (f) f.focus({ preventScroll: true }); });
     });
+    // The bar's height, for the headings that stick under it; and its Next cut, which scrolls to the next cut and focuses it.
+    var bar = host.querySelector('.saw-bar'), sb = function () { host.style.setProperty('--sb', bar.offsetHeight + 'px'); };
+    sb(); if (window.ResizeObserver) { if (SBRO) SBRO.disconnect(); SBRO = new ResizeObserver(sb); SBRO.observe(bar); }
+    var nb = $('sawNext');
+    if (nb) nb.addEventListener('click', function () { var c = host.querySelector('.cut.next'); if (!c) return; c.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth' }); c.focus({ preventScroll: true }); });
     // Start over clears every tick in one tap, so it can be undone.
     var rs = $('sawReset');
     if (rs) rs.addEventListener('click', function () {
