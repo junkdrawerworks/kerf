@@ -108,6 +108,47 @@ await page.waitForSelector('#sawOut .cut[data-k]');
 assert.equal(await page.textContent('.saw-bar b'), '3 of 27 cuts', 'ticks survive a reload');
 assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
 
+// The screen stays on while the checklist at the saw is in sight: Kerf asks for a screen wake lock there, lets go of it
+// on another tab, and asks again when the page comes back (the browser lets go of it whenever the page is hidden).
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.addInitScript(() => {
+    window.wakeLog = [];
+    let held = null;
+    const lock = () => {
+      const l = new EventTarget();
+      l.release = async () => { if (held === l) { held = null; wakeLog.push('release'); l.dispatchEvent(new Event('release')); } };
+      return (held = l);
+    };
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async type => { wakeLog.push('request ' + type); return lock(); } } });
+    // a page that goes out of sight, the way a phone's lock button or the app switcher hides it
+    window.hide = hidden => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => hidden ? 'hidden' : 'visible' });
+      if (hidden && held) held.release();
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+  });
+  await p.goto(base);
+  await p.waitForSelector('#sawOut .cut[data-k]');
+  const log = () => p.evaluate(() => wakeLog.join(', '));
+  await p.waitForFunction(() => wakeLog.length === 1);
+  assert.equal(await log(), 'request screen', 'no wake lock at the saw');
+  await p.click('#tabs button[data-t="plan"]');
+  await p.waitForFunction(() => wakeLog.length === 2);
+  assert.equal(await log(), 'request screen, release', 'the wake lock is kept on the plan');
+  await p.click('#tabs button[data-t="list"]');
+  await p.click('#tabs button[data-t="saw"]');
+  await p.evaluate(() => hide(true));
+  await p.evaluate(() => hide(false));
+  await p.waitForFunction(() => wakeLog.length === 5);
+  assert.equal(await log(), 'request screen, release, request screen, release, request screen', 'the wake lock isn’t asked for again when the page comes back');
+  await p.click('#tabs button[data-t="list"]');
+  await p.waitForFunction(() => wakeLog.length === 6);
+  assert.equal((await log()).split(', ').pop(), 'release', 'the wake lock is kept behind the cut list');
+  await p.close();
+}
+
 // The saw counts the cuts the plan counts: a part that comes off with no cut is a note, not a cut to tick. The
 // example's tip makes each pair of rails fill an 8' board, so the second rail is what's left.
 {

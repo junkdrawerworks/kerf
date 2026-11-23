@@ -1681,6 +1681,28 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     $('planOut').hidden = DB.rtab !== 'plan'; $('sawOut').hidden = DB.rtab !== 'saw';
     reveal();
     if (keep) scrollTo(0, SCROLL[t] || 0);
+    awake();
+  }
+  // The screen stays on while the checklist at the saw is in sight, so a phone propped by the saw doesn't lock between
+  // cuts. The browser lets go of the lock when the page is hidden, so it's asked for again when the page comes back.
+  // Where there's no Screen Wake Lock, or the browser says no, the phone sleeps as it always would.
+  var WAKE = null, WAKING = false;
+  function awake() {
+    if (!navigator.wakeLock) return;
+    var want = shows('saw') && document.visibilityState === 'visible';
+    if (want && !WAKE && !WAKING) {
+      WAKING = true;
+      try {
+        navigator.wakeLock.request('screen').then(function (l) {
+          WAKING = false; WAKE = l;
+          l.addEventListener('release', function () { if (WAKE === l) WAKE = null; });
+          awake(); // let go again if the saw went out of sight while it was asked for
+        }, function () { WAKING = false; });
+      } catch (e) { WAKING = false; }
+    } else if (!want && WAKE) {
+      var l = WAKE; WAKE = null;
+      try { l.release().catch(function () { }); } catch (e) { }
+    }
   }
   function renderHead() {
     $('pname').value = P.name;
@@ -2125,10 +2147,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   document.querySelectorAll('#tabs button,#rseg button').forEach(function (b) { b.addEventListener('click', function () { setTab(b.dataset.t); }); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
   window.addEventListener('pagehide', flush);
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); awake(); });
   var rT; window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(function () { if ($('planOut').clientWidth && Math.abs(planWidth() - W.plan) > 4) renderPlan(); }, 120); });
   // A window widened past 960 px shows the plan beside the cut list: drawn before that frame, so an old plan never shows.
-  if (NARROW.addEventListener) NARROW.addEventListener('change', reveal); else NARROW.addListener(reveal);
+  var widthChange = function () { reveal(); awake(); }; // the cut list's tab shows the saw beside it, or hides it
+  if (NARROW.addEventListener) NARROW.addEventListener('change', widthChange); else NARROW.addListener(widthChange);
   if (window.ResizeObserver) new ResizeObserver(function () { document.documentElement.style.setProperty('--hd', document.querySelector('.top').offsetHeight + 'px'); }).observe(document.querySelector('.top'));
   applyProject();
   storeBar();
