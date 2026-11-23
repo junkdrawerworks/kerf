@@ -1796,8 +1796,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     W.plan = planWidth();
     // Board materials whose plan the exact search proved the cheapest, with nothing left out. Sheets are never proved,
-    // and say nothing, so nothing reads as a warning.
-    var planned = r.mats.filter(function (m) { return m.items.length; }), proved = planned.filter(function (m) { return m.kind === 'board' && m.exact && !m.errors.length; });
+    // and say nothing, so nothing reads as a warning. A material whose every part is left out counts as one not proved.
+    var planned = r.mats.filter(function (m) { return m.items.length || m.errors.length; }), proved = planned.filter(function (m) { return m.kind === 'board' && m.exact && !m.errors.length; });
     var best = !proved.length ? '' : proved.length === planned.length ? 'Cheapest possible' : esc(andList(proved.map(function (m) { return m.mat.name; }))) + ': cheapest possible';
     var h = '<h2 class="sr">Plan</h2><div class="summary"><div><div class="total"><span class="cur">' + esc(CUR) + '</span>' + (Math.round(r.cost * 100) / 100).toFixed(2) + '</div><div class="total-lbl">to buy</div>' + (best ? '<div class="proved">' + best + '</div>' : '') + '</div><div class="facts">';
     if (r.boards) h += '<div class="fact"><b>' + r.boards + '</b><span>' + (r.boards === 1 ? 'board' : 'boards') + '</span></div>';

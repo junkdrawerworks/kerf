@@ -1888,6 +1888,10 @@ await open(saved(project('Left out', [board('2×4', [{ len: 96, price: 4.28 }], 
   sheet('¾ plywood', [{ len: 96, wid: 48, have: 1 }], [{ name: 'Shelf', qty: 3, len: 90, wid: 40 }]),
   board('4×4', [{ len: 96, price: 11.98 }], [{ name: 'Post', qty: 1, len: 120 }])])));
 assert.equal(await page.textContent('#planOut .warn'), 'Some parts are left out. ¾ plywood: the sheets you have can’t hold Shelf × 2, so add a size to buy; 4×4 has 1 part too big for any size listed — see the cut list.');
+// The 2×4s are still the cheapest possible, but not the whole plan: only they are named.
+assert.equal(await page.textContent('.proved'), '2×4: cheapest possible');
+await open(saved(project('Post too long', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 4, len: 72 }]), board('4×4', [{ len: 96, price: 11.98 }], [{ name: 'Post', qty: 1, len: 120 }])])));
+assert.equal(await page.textContent('.proved'), '2×4: cheapest possible', 'a plan with every 4×4 part left out says it’s the cheapest possible');
 
 // Kerf plans at most 300 of one sheet part: past that, the plan says parts are left out and the cut list says why.
 await open(saved(project('Pegboard', [sheet('¼ plywood', [{ len: 96, wid: 48, price: 28 }], [{ name: 'Peg', qty: 400, len: 4, wid: 4, grain: false }])])));
