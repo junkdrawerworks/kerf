@@ -456,6 +456,28 @@ await page.click('#lkAdd');
     await c.close();
     if (!fails) await opens(sent.url, 'shared from a phone');
   }
+  // Save as a file goes to the share sheet too, on a phone whose share sheet takes files: the same file Kerf saves.
+  // Closed, nothing is saved; failed, or with a share sheet that can't take the file, it downloads.
+  for (const [what, takes, fails, want] of [['shared', true, null, 'shared'], ['closed', true, 'AbortError', null], ['failed', true, 'NotAllowedError', 'download'], ['no files', false, null, 'download']]) {
+    const [c, q] = await kerfWith(PHONE, ([takes, fails]) => {
+      navigator.canShare = d => takes && !!d.files;
+      navigator.share = d => { window.shared = d.files && d.files[0]; return fails ? Promise.reject(new DOMException('no', fails)) : Promise.resolve(); };
+    }, [takes, fails]);
+    let downloaded = null;
+    q.on('download', d => { downloaded = d; });
+    await q.click('#projBtn');
+    await q.click('#pjExport');
+    await q.waitForTimeout(500);
+    const file = await q.evaluate(async () => window.shared ? { name: window.shared.name, type: window.shared.type, text: await window.shared.text() } : null);
+    assert.equal(want === 'shared' ? !!file : !!downloaded, !!want, what + ': the file was shared or saved, or not');
+    if (want !== 'shared') assert.equal(!!downloaded, want === 'download', what + ': downloaded');
+    if (want === 'shared') {
+      assert.deepEqual([file.name, file.type], ['shop-cart.kerf.json', 'application/json']);
+      assert.deepEqual(bare(JSON.parse(file.text).project), bare(cart), 'the file shared isn’t the project');
+      assert.equal(downloaded, null, 'a file shared was downloaded too');
+    }
+    await c.close();
+  }
 }
 
 // The same plan saved as a .kerf.json file opens from Projects, shown first the way a link is.

@@ -2654,7 +2654,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     return Promise.resolve(true);
   }
   function fileName(ext) { return (P.name || 'kerf').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.' + ext; }
-  function exportProject() { saveFile(fileName('kerf.json'), JSON.stringify({ kerf: 1, project: P }, null, 1), 'application/json').then(function (ok) { if (ok) toast('Saved ' + fileName('kerf.json')); }, function (e) { toast(e.message || 'Couldn’t save the file — use Copy as text'); }); }
+  // On a phone or tablet whose share sheet takes the file, the file goes there (Save to Files, AirDrop, Mail);
+  // elsewhere, or if the share sheet fails, it downloads.
+  function exportProject() {
+    var name = fileName('kerf.json'), text = JSON.stringify({ kerf: 1, project: P }, null, 1), file = null;
+    var download = function () { saveFile(name, text, 'application/json').then(function (ok) { if (ok) toast('Saved ' + name); }, function (e) { toast(e.message || 'Couldn’t save the file — use Copy as text'); }); };
+    if (!CLAUDE && shareSheet() && navigator.canShare) try { file = new File([text], name, { type: 'application/json' }); if (!navigator.canShare({ files: [file] })) file = null; } catch (e) { file = null; }
+    if (!file) { download(); return; }
+    navigator.share({ files: [file], title: P.name }).catch(function (e) { if (!e || e.name !== 'AbortError') download(); }); // AbortError: closed without sending
+  }
   function showText(t) {
     openSheet('<div class="hd"><h2>Copy this</h2><button class="btn sm sec" type="button" id="txx">Done</button></div><div class="bd"><textarea id="txt" readonly></textarea><p class="note">Select it all and copy.</p></div>');
     $('txt').value = t; $('txt').focus(); $('txt').select(); $('txx').addEventListener('click', closeSheet);
