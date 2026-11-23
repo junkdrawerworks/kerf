@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<script src="carry.js"></script>
 <meta name="description" content="Kerf works out the cheapest boards and sheets to buy for a cut list, and how to cut them.">
 <meta name="theme-color" content="#F2F4F0" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121416" media="(prefers-color-scheme: dark)">
@@ -763,8 +762,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   var P = DB.projects[DB.current];
   if (!P) { var ex = freshExample(); DB.order = [ex.id].concat(DB.order.filter(function (id) { return DB.projects[id] && id !== ex.id; })); DB.current = ex.id; P = ex; }
   // Nothing is written until something really changes; which view is showing (`view`) doesn't count until
-  // this browser keeps projects. So a first visit that only looks around leaves storage empty, and carry.js
-  // can still bring projects over from junkdrawer.works/kerf/ on a later visit.
+  // this browser keeps projects. So a first visit that only looks around leaves storage empty.
   // Before writing, it takes in whatever another window has saved since (mergeDB), so two windows open at
   // once don't undo each other's new projects, edits or deletions.
   // A save that fails says so in a strip under the top bar (storeBar), until one works.

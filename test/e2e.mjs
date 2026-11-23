@@ -623,7 +623,7 @@ await page.click('#lkx');
 }
 
 // Opening Kerf writes nothing until something really changes. A first visit that only looks around leaves
-// storage empty, so carry.js can still bring projects over from junkdrawer.works/kerf/ on a later visit.
+// storage empty.
 await open(null);
 for (const t of ['list', 'saw', 'plan']) await view(t);
 await page.waitForTimeout(600);

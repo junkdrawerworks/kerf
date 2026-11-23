@@ -120,7 +120,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - `sw.js`: keeps a copy for using offline. It asks the server first, so a new version shows up as soon as you're online, but on a connection that's up and not answering (a train, a captive wifi) the page opens from the copy after four seconds. `FILES` in it is a fingerprint of every file it keeps: when one changes, `npm test` fails and gives the new value to set, so each release replaces the whole copy at once.
 - `manifest.webmanifest`, `icon.svg` and `icon-*.png`: let it install to a phone's home screen.
 - `og.png`: the link preview.
-- `CNAME` and `carry.js`: Kerf moved from junkdrawer.works/kerf/ to its own address. `CNAME` gives it kerf.junkdrawer.works, and `carry.js` brings the projects saved at the old address over the first time it opens at the new one.
+- `CNAME`: gives Kerf its own address, kerf.junkdrawer.works.
 - `skill/kerf-planner/`: the skill for Claude, above.
 - `tools/`: `screenshots.mjs` for the pictures; `make-icons.mjs`, `icon-full-bleed.svg` (for the iPhone's icon, which iOS rounds itself) and `icon-maskable.svg` for the icons. Android crops the maskable icon to a circle or another shape and keeps only the middle circle, 80% across, so `icon-maskable.svg` has the same art smaller, all of it inside that circle.
 - `test/`: `solver.test.cjs` and `e2e.mjs`.
