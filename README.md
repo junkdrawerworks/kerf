@@ -5,7 +5,7 @@
 **A cut-list optimizer for lumber and plywood.** List the parts a project needs; Kerf works out the cheapest boards and sheets to buy, draws how to cut each one, and gives you a checklist to work through at the saw. It installs as an app (from the browser's menu, or Share → Add to Home Screen on an iPhone) and works offline once it has loaded.
 
 <p align="center">
-  <img src="docs/phone-list.png" alt="The cut list for a set of garage shelves: 2×4 legs, front and back rails and side rails, and four ¾ plywood shelves with the grain locked, each with a quantity and a length, above the sizes you can buy and what they cost" width="250">
+  <img src="docs/phone-list.png" alt="The cut list for a set of garage shelves: how to type lengths, then the 2×4 legs, front and back rails and side rails, each named on one line with its quantity and length below, above the 2×4 sizes you can buy and what they cost" width="250">
   &nbsp;
   <img src="docs/phone-plan.png" alt="The plan: $100.64 to buy for 8 boards and 1 sheet in 27 cuts, a tip that making the front and back rails 47 15/16 inches instead of 48 makes the 2×4s $4.12 cheaper, and the shopping list" width="250">
   &nbsp;
