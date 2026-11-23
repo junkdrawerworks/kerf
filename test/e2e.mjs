@@ -1148,6 +1148,38 @@ assert.equal(await page.textContent('#unitNote'), 'Lengths in inches — 35 3/4,
   assert.deepEqual([await eg(0), await eg(1)], ['Example prices — tap to set yours', 'Example prices — tap to set yours'], 'the example project’s prices aren’t said to be examples');
 }
 
+// A project coming in by link, file or pasted text takes your prices for the sizes you've priced, in a material of a
+// kind on the Add material list, and the dialog names those materials; sizes you never priced keep the prices it came
+// with. A material at your prices no longer says they're examples. Opening it again still finds the copy here.
+{
+  const mats = () => stored().then(d => d.projects[d.current].materials.map(m => [m.name, m.stock.map(s => s.price), !!m.examplePrices]));
+  const priced = { ...MUDROOM.project, materials: MUDROOM.project.materials.map(m => ({ ...m, examplePrices: true })) };
+  const arrive = async (prices, how = 'link') => {
+    await open(null);
+    await page.evaluate(p => localStorage.setItem('kerf.prices', JSON.stringify(p)), prices);
+    if (how === 'link') await page.evaluate(hash => { location.hash = hash; }, linkTo({ kerf: 1, project: priced }));
+    else { await page.click('#projBtn'); await page.setInputFiles('#pjFile', { name: 'bench.kerf.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ kerf: 1, project: priced })) }); }
+    await page.waitForSelector('#lkAdd');
+    return page.$$eval('#sheet .note', ns => ns.map(n => n.textContent).join(' '));
+  };
+  assert.equal(await arrive({ 'in board 2×4': { 96: 3.98 }, 'in sheet ¾ plywood': { '96x48': 52 } }),
+    'It comes in as a new project; nothing you already have changes. 2×4 and ¾ plywood use your prices. Check the others — they’re whatever the link came with.');
+  await page.click('#lkAdd');
+  assert.deepEqual(await mats(), [['2×4', [3.98, 6.38, 0], false], ['¾ plywood', [52], false]], 'a project from a link didn’t take your prices');
+  await page.evaluate(hash => { location.hash = hash; }, linkTo({ kerf: 1, project: priced }));
+  await page.waitForSelector('#lkOpen', { timeout: 5000 }).catch(() => assert.fail('a link opened again at your prices doesn’t find the copy'));
+  assert.equal(await arrive({ 'in board 2×4': { 96: 3.98, 120: 5.97 }, 'in board 2×6': { 96: 7 } }),
+    'It comes in as a new project; nothing you already have changes. 2×4 uses your prices. Check the others — they’re whatever the link came with.');
+  assert.equal(await arrive({ 'in board 2×4': { 96: 3.98, 120: 5.97 }, 'in sheet ¾ plywood': { '96x48': 52 } }, 'file'),
+    'It comes in as a new project; nothing you already have changes. 2×4 and ¾ plywood use your prices.');
+  await page.click('#lkAdd');
+  assert.deepEqual(await mats(), [['2×4', [3.98, 5.97, 0], false], ['¾ plywood', [52], false]], 'a project from a file didn’t take your prices');
+  assert.equal(await arrive({ 'in sheet ¾ plywood': { '48x24': 30 } }, 'file'),
+    'It comes in as a new project; nothing you already have changes. Check the prices — they’re whatever the file came with.');
+  await page.click('#lkAdd');
+  assert.deepEqual(await mats(), [['2×4', [4.28, 6.38, 0], true], ['¾ plywood', [58], true]], 'a project took prices for sizes you never priced');
+}
+
 // Face-frame stock is a preset, and a material not on the list ('Other board') is named first: its name is selected.
 await open(saved(project('Bookcase', [])));
 await view('list');
