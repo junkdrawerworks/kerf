@@ -41,7 +41,7 @@ async function open(viewport, deviceScaleFactor) {
 }
 const view = (page, t) => page.click(`#tabs button[data-t="${t}"]`).then(() => page.evaluate(() => scrollTo(0, 0)));
 
-// Phone screenshots for the README: the cut list, the plan, and the first board at the saw.
+// Phone screenshots for the README: the cut list, the plan, and the first boards at the saw.
 {
   const page = await open({ width: 390, height: 844 }, 2);
   await view(page, 'list');
@@ -49,7 +49,8 @@ const view = (page, t) => page.click(`#tabs button[data-t="${t}"]`).then(() => p
   await view(page, 'plan');
   await page.screenshot({ path: join(root, 'docs/phone-plan.png') });
   await view(page, 'saw');
-  for (let i = 0; i < 4; i++) await page.locator('#sawOut .cut[data-k]').nth(i).click();
+  // board 1's three cuts (it folds once they're done) and board 2's first: the next cut not ticked, four times
+  for (let i = 0; i < 4; i++) await page.locator('#sawOut .cut[data-k][aria-checked="false"]').first().click();
   await page.evaluate(() => document.activeElement.blur());
   await page.screenshot({ path: join(root, 'docs/phone-saw.png') });
   await page.context().close();
