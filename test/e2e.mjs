@@ -81,6 +81,8 @@ const pdfKerfLines = pdf => (pdf.match(/0\.14 0\.38 0\.8 RG 1 w [\d. ]+ m [\d. ]
 // The PDF's lines of text, and how wide each is in Helvetica (the widths Kerf's own table uses, by character code).
 const pdfRuns = pdf => [...pdf.matchAll(/BT \/(F1|F2) ([\d.]+) Tf [\d. ]+ rg ([\d.-]+) ([\d.-]+) Td \(((?:\\.|[^\\)])*)\) Tj ET/g)]
   .map(m => ({ bold: m[1] === 'F1', size: +m[2], x: +m[3], y: +m[4], text: m[5].replace(/\\(.)/g, '$1') }));
+// The same, page by page: each page of Kerf's PDF is one content stream, in order.
+const pdfPages = pdf => [...pdf.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(m => pdfRuns(m[1]));
 const kerfSource = await readFile(join(root, 'index.html'), 'utf8');
 const HELVETICA = { true: kerfSource.match(/HB: '([\d,]+)'/)[1].split(',').map(Number), false: kerfSource.match(/\bH: '([\d,]+)'/)[1].split(',').map(Number) };
 const pdfWidth = r => [...r.text].reduce((w, ch) => { const c = ch.charCodeAt(0); return w + (c >= 32 && c <= 126 ? HELVETICA[r.bold][c - 32] : { 128: 556, 133: 1000, 151: 1000, 215: 584, 183: 278 }[c] || 1000); }, 0) * r.size / 1000;
@@ -652,6 +654,22 @@ await page.click('#projBtn');
 assert.deepEqual(await page.$$eval('#sheet .btn', bs => [...new Set(bs.map(b => getComputedStyle(b).marginTop))]), ['0px'], 'buttons in Projects');
 await page.click('#pjx');
 assert.equal(await page.$eval('#planOut div.sec', d => getComputedStyle(d).marginTop), '22px');
+
+// A sheet with many steps keeps its heading and the parts legend company. Thirty drawer parts on one sheet of ½ plywood
+// take 36 steps; the heading used to sit alone at the foot of the first page and the legend alone on a third.
+{
+  await open(saved(project('Drawer boxes', [sheet('½ plywood', [{ len: 96, wid: 48, price: 44 }, { len: 48, wid: 48, price: 26 }],
+    [{ name: 'Drawer side', qty: 12, len: 20, wid: 5 }, { name: 'Drawer front/back', qty: 12, len: 14, wid: 5 }, { name: 'Drawer bottom', qty: 6, len: 19.5, wid: 13.5, grain: false }])])));
+  assert.match(await page.textContent('#planOut .mdiag'), /1 sheet/);
+  const pages = pdfPages(await shopPdf());
+  const heading = r => r.bold && r.size === 12, legend = r => r.size === 8 && /^[A-Z] Drawer/.test(r.text);
+  assert.ok(pages.some(p => p.some(legend)), 'no legend in the PDF');
+  for (const [i, runs] of pages.entries()) {
+    assert.ok(!heading(runs[runs.length - 1]), `page ${i + 1} ends with the heading "${runs[runs.length - 1].text}"`);
+    assert.ok(!runs.every(legend), `page ${i + 1} holds only the legend`);
+  }
+  assert.match(pages[0].find(r => r.size === 9).text, /^Saw kerf 1\/8" · /, 'the header names the saw kerf');
+}
 
 // A board you already have is labelled "yours" inside its drawing, not cut off past the edge.
 await open(saved(project('Yours', [board('2×4', [{ len: 96, price: 4.28 }, { len: 96, have: 1 }], [{ name: 'Leg', qty: 3, len: 72 }])])));

@@ -1840,7 +1840,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var tot = money(RES.cost), totW = textW('HB', 22, tot);
     rect(M, y, 58, 22, '#F2C200'); text('HB', 15, M + 8, y + 16, 'KERF');
     text('HB', 16, M + 70, y + 16, fitText('HB', 16, P.name, PW - M - totW - 16 - (M + 70))); // stops short of the total
-    text('H', 9, M + 70, y + 29, 'Kerf ' + fmt(P.kerf) + (P.trim ? ' · trim ' + fmt(P.trim) + ' per end' : '') + ' · ' + new Date().toLocaleDateString());
+    text('H', 9, M + 70, y + 29, 'Saw kerf ' + fmt(P.kerf) + (P.trim ? ' · trim ' + fmt(P.trim) + ' per end' : '') + ' · ' + new Date().toLocaleDateString());
     text('HB', 22, PW - M - totW, y + 18, tot); text('H', 8, PW - M - textW('H', 8, 'TO BUY'), y + 29, 'TO BUY', '#686D73');
     y += 46;
     text('HB', 10, M, y, 'SHOPPING LIST', '#686D73'); y += 8;
@@ -1853,13 +1853,30 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     RES.mats.forEach(function (m) {
       if (!m.items.length) return;
       var width = PW - 2 * M;
-      // keep the heading with the first diagram
-      var first = m.kind === 'sheet' ? Math.min(width / m.items[0].L, 250 / m.items[0].W) * m.items[0].W + 60 : 50;
-      need(24 + Math.min(first, PH - 2 * M - 24)); y += 18; text('HB', 12, M, y, fitText('HB', 12, m.mat.name, width - textW('HB', 12, ' — sheets')) + (m.kind === 'sheet' ? ' — sheets' : ' — boards')); y += 6;
+      // The parts legend comes last, and stays on the page with the end of the last diagram.
+      var legend = pdfLines('H', 8, m.mat.parts.map(function (p, i) { return letter(i) + ' ' + (p.name || 'Part') + ' ' + (m.kind === 'sheet' ? fmt(p.len) + ' × ' + fmt(p.wid) : fmt(p.len)) + '  ×' + p.qty; }), '    ', width);
+      var legendH = 16 + (legend.length - 1) * 11;
+      // A sheet's steps, line by line: each step's first line 12 points below the last, a line it wraps onto 11.
+      var stepLines = function (sh) {
+        var lines = [];
+        sh.steps.filter(function (s) { return s.type !== 'none'; }).forEach(function (st, k) {
+          var part = st.gives ? m.mat.parts[st.gives.it.pi] : null, no = (k + 1) + '.  ', ind = textW('H', 9, no);
+          var s = (st.type === 'rip' ? 'Rip ' : 'Crosscut ') + st.on + ' at ' + fmt(st.at) + (st.gives ? '  »  ' + letter(st.gives.it.pi) + (part && part.name ? ' ' + part.name : '') : '');
+          pdfLines('H', 9, s.split(' '), ' ', width - ind).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: M + (i ? ind : 0), text: i ? l : no + l }); });
+        });
+        return lines;
+      };
+      var sheetPx = function (sh) { return Math.min(width / sh.L, 250 / sh.W); };
+      // A sheet's block: its title and drawing with the first few lines of its steps, kept together on one page.
+      var sheetBlock = function (sh, lines) { return 20 + sh.W * sheetPx(sh) + 4 + lines.slice(0, 3).reduce(function (a, l) { return a + l.gap; }, 0); };
+      // The heading stays with the first diagram.
+      need(24 + (m.kind === 'sheet' ? sheetBlock(m.items[0], stepLines(m.items[0])) : 46)); y += 18; text('HB', 12, M, y, fitText('HB', 12, m.mat.name, width - textW('HB', 12, ' — sheets')) + (m.kind === 'sheet' ? ' — sheets' : ' — boards')); y += 6;
       if (m.kind === 'board') {
         var maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; })), lw = 44, px = (width - lw) / maxLen;
         m.items.forEach(function (b, bi) {
-          need(50); y += 12;
+          var parts = b.pieces.map(function (p) { var q = m.mat.parts[p.pi]; return letter(p.pi) + ' ' + (q && q.name ? q.name + ' ' : '') + fmt(p.len); });
+          var lines = pdfLines('H', 8, parts, '   ·   ', width - lw);
+          need(46 + (lines.length - 1) * 10 + (bi === m.items.length - 1 ? legendH : 0)); y += 12;
           text('HB', 10, M, y + 10, String(bi + 1)); text('H', 8.5, M, y + 22, fmt(b.stock.len, { ft: true }) + (b.stock.have ? ' yours' : ''));
           var x = M + lw; rect(x, y, b.stock.len * px, 24, '#EBD3A6', '#B08447', 0.8);
           var cx = x + b.trim * px;
@@ -1871,14 +1888,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           });
           var rest = x + b.stock.len * px - cx - b.trim * px; if (rest > 0.5) { rect(cx, y, rest, 24, '#CDD2CA'); var t = fmt(b.offcut); if (textW('H', 7.5, t) < rest - 4) text('H', 7.5, cx + (rest - textW('H', 7.5, t)) / 2, y + 15, t, '#50575E'); }
           y += 34;
-          var parts = b.pieces.map(function (p) { var q = m.mat.parts[p.pi]; return letter(p.pi) + ' ' + (q && q.name ? q.name + ' ' : '') + fmt(p.len); });
-          pdfLines('H', 8, parts, '   ·   ', width - lw).forEach(function (l, i) { if (i) { need(10); y += 10; } text('H', 8, M + lw, y, l, '#50575E'); });
+          lines.forEach(function (l, i) { if (i) { need(10); y += 10; } text('H', 8, M + lw, y, l, '#50575E'); });
         });
       } else {
         m.items.forEach(function (sh, si) {
-          var px = Math.min(width / sh.L, 250 / sh.W), H = sh.W * px;
-          var steps = sh.steps.filter(function (s) { return s.type !== 'none'; });
-          need(Math.min(H + 36 + steps.length * 12, PH - 2 * M)); y += 14;
+          var px = sheetPx(sh), H = sh.W * px, lines = stepLines(sh), last = si === m.items.length - 1;
+          need(sheetBlock(sh, lines) + (last && lines.length < 3 ? legendH : 0)); y += 14;
           text('HB', 10, M, y, 'Sheet ' + (si + 1)); text('H', 9, M + 50, y, fmt(sh.W) + ' × ' + fmt(sh.L) + (sh.stock.have ? '  (yours)' : '')); y += 6;
           rect(M, y, sh.L * px, H, '#CDD2CA');
           sh.placed.forEach(function (p) {
@@ -1896,16 +1911,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             rect(cx - 6, cy - 6, 12, 12, '#2361CC'); text('HB', 7.5, cx - textW('HB', 7.5, t) / 2, cy + 2.7, t, '#FFFFFF');
           });
           y += H + 4;
-          steps.forEach(function (st, k) {
-            var part = st.gives ? m.mat.parts[st.gives.it.pi] : null, no = (k + 1) + '.  ', ind = textW('H', 9, no);
-            var s = (st.type === 'rip' ? 'Rip ' : 'Crosscut ') + st.on + ' at ' + fmt(st.at) + (st.gives ? '  »  ' + letter(st.gives.it.pi) + (part && part.name ? ' ' + part.name : '') : '');
-            pdfLines('H', 9, s.split(' '), ' ', width - ind).forEach(function (l, i) { need(12); y += i ? 11 : 12; text('H', 9, M + (i ? ind : 0), y, i ? l : no + l); });
+          // The steps flow on from page to page a line at a time; the last sheet's final two lines stay with the legend.
+          lines.forEach(function (l, i) {
+            if (last && i === Math.max(0, lines.length - 2)) need(lines.slice(i).reduce(function (a, x) { return a + x.gap; }, 0) + legendH);
+            need(l.gap); y += l.gap; text('H', 9, l.x, y, l.text);
           });
         });
       }
       need(16); y += 16;
-      var legend = m.mat.parts.map(function (p, i) { return letter(i) + ' ' + (p.name || 'Part') + ' ' + (m.kind === 'sheet' ? fmt(p.len) + ' × ' + fmt(p.wid) : fmt(p.len)) + '  ×' + p.qty; });
-      pdfLines('H', 8, legend, '    ', width).forEach(function (l, i) { if (i) { need(11); y += 11; } text('H', 8, M, y, l, '#50575E'); });
+      legend.forEach(function (l, i) { if (i) { need(11); y += 11; } text('H', 8, M, y, l, '#50575E'); });
     });
     // assemble
     var objs = [], kids = [];
