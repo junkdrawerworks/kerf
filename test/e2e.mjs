@@ -239,10 +239,14 @@ assert.equal(await page.inputValue('#pname'), 'Mudroom bench');
 assert.equal(await page.textContent('.total'), '$70.76');
 assert.deepEqual(Object.values((await stored()).projects).map(p => p.name).sort(), ['Garage shelves (example)', 'Mudroom bench']);
 
-// The same plan saved as a .kerf.json file opens from Projects.
+// The same plan saved as a .kerf.json file opens from Projects, shown first the way a link is.
 const file = { kerf: 1, project: { ...MUDROOM.project, name: 'Garage bench' } };
 await page.click('#projBtn');
 await page.setInputFiles('#pjFile', { name: 'garage-bench.kerf.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file, null, 1)) });
+await page.waitForSelector('#lkAdd');
+assert.equal(await page.textContent('#sheet h2'), 'Open a project file');
+assert.match(await page.textContent('#sheet .lk'), /^Garage bench\s*2×4 — 8 pieces/);
+await page.click('#lkAdd');
 await page.waitForFunction(() => document.getElementById('pname').value === 'Garage bench');
 assert.ok(await page.isHidden('#sheet'), 'Projects closes once the file is open');
 assert.equal(await page.textContent('.total'), '$70.76');
@@ -304,6 +308,58 @@ await page.click('#lkx');
   assert.equal(await toastSays(), 'That link doesn’t hold a Kerf project');
   await paste('a bench, about four feet long');
   assert.equal(await toastSays(), 'That isn’t a Kerf project');
+  await page.click('#pjx');
+}
+
+// Opening the same plan again offers the copy you have, whether it comes as a link, a file (as the skill writes it, or as
+// Kerf saves it) or pasted text: they all carry the same project, so they match. A duplicate isn't that copy, and
+// Projects tells copies made today apart by the time.
+{
+  const pasteIn = text => page.evaluate(t => {
+    const data = new DataTransfer(); data.setData('text/plain', t);
+    document.getElementById('pjPaste').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, text);
+  const count = async () => (await stored()).order.length;
+  const again = async title => {
+    await page.waitForSelector('#lkOpen', { timeout: 5000 }).catch(() => assert.fail(title + ': no offer of the copy already opened'));
+    assert.equal(await page.textContent('#sheet h2'), title);
+    assert.match(await page.textContent('#sheet .note'), /^You opened this project before; your copy is still in Projects\./);
+    await page.click('#lkOpen');
+    assert.equal(await page.inputValue('#pname'), 'Mudroom bench');
+  };
+  await open(null, linkTo(MUDROOM));
+  await page.click('#lkAdd');
+  assert.equal(await count(), 2);
+  await page.click('#projBtn');
+  await page.setInputFiles('#pjFile', { name: 'mudroom-bench.kerf.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(MUDROOM, null, 1)) });
+  await again('Open a project file');
+  await page.click('#projBtn');
+  await pasteIn(JSON.stringify(MUDROOM));
+  await again('Open pasted project');
+  await page.click('#projBtn');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#pjExport')]);
+  await page.setInputFiles('#pjFile', await dl.path());
+  await again('Open a project file');
+  assert.equal(await count(), 2, 'opening the same plan again added a copy');
+  // Duplicate this one makes a copy that didn't come from the link: opening the link again opens the original.
+  await page.click('#projBtn');
+  await page.click('#pjDup');
+  assert.equal(await page.inputValue('#pname'), 'Mudroom bench copy');
+  await page.evaluate(hash => { location.hash = hash; }, linkTo(MUDROOM));
+  await again('Open a project from a link');
+  // Add another copy still adds one.
+  await page.click('#projBtn');
+  await pasteIn(JSON.stringify(MUDROOM));
+  await page.waitForSelector('#lkOpen');
+  await page.click('#lkAdd');
+  assert.equal(await count(), 4);
+  // Updated today: the time, so two copies of one name can be told apart; on another day, the date.
+  const db = await stored();
+  await open({ ...db, projects: { ...db.projects, [db.order[3]]: { ...db.projects[db.order[3]], updated: Date.now() - 3 * 86400000 } } });
+  await page.click('#projBtn');
+  const rows = await page.$$eval('#pjList .pitem span', s => s.map(x => x.textContent));
+  assert.ok(rows.slice(0, 3).every(r => / · \d{1,2}:\d\d/.test(r)), 'a project changed today shows its date, not the time: ' + rows.join(', '));
+  assert.ok(!/:/.test(rows[3]), 'a project changed days ago shows a time: ' + rows[3]);
   await page.click('#pjx');
 }
 

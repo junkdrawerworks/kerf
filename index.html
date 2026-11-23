@@ -1778,12 +1778,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       '<textarea id="pjPaste" placeholder="…or paste a project’s text or a Kerf link here"></textarea></div>' +
       '<p class="note" id="pjNote">' + projectsNote() + '</p></div>');
     $('pjNew').addEventListener('click', function () { newProject(); });
-    $('pjDup').addEventListener('click', function () { var c = JSON.parse(JSON.stringify(P)); c.id = uid(); c.name = P.name.replace(/ \(example\)$/, '') + ' copy'; c.example = false; c.updated = Date.now(); DB.projects[c.id] = c; DB.order.unshift(c.id); DB.current = c.id; P = c; save(true); closeSheet(); applyProject(); toast('Duplicated'); });
+    $('pjDup').addEventListener('click', function () { var c = JSON.parse(JSON.stringify(P)); c.id = uid(); c.name = P.name.replace(/ \(example\)$/, '') + ' copy'; c.example = false; delete c.from; c.updated = Date.now(); DB.projects[c.id] = c; DB.order.unshift(c.id); DB.current = c.id; P = c; save(true); closeSheet(); applyProject(); toast('Duplicated'); });
     $('pjExport').addEventListener('click', exportProject);
     $('pjCopy').addEventListener('click', function () { var t = JSON.stringify({ kerf: 1, project: P }); try { navigator.clipboard.writeText(t).then(function () { toast('Project copied — paste it into Kerf on the other device'); }, function () { showText(t); }); } catch (e) { showText(t); } });
-    $('pjFile').addEventListener('change', function () { var f = this.files && this.files[0]; if (!f) return; var r = new FileReader(); r.onload = function () { importText(String(r.result)); }; r.readAsText(f); });
-    $('pjPaste').addEventListener('paste', function (e) { var t = (e.clipboardData || window.clipboardData).getData('text'); if (t) { e.preventDefault(); importText(t); } });
-    $('pjPaste').addEventListener('change', function () { if (this.value.trim()) importText(this.value); });
+    $('pjFile').addEventListener('change', function () { var f = this.files && this.files[0]; if (!f) return; var r = new FileReader(); r.onload = function () { importText(String(r.result), 'file'); }; r.readAsText(f); });
+    $('pjPaste').addEventListener('paste', function (e) { var t = (e.clipboardData || window.clipboardData).getData('text'); if (t) { e.preventDefault(); importText(t, 'text'); } });
+    $('pjPaste').addEventListener('change', function () { if (this.value.trim()) importText(this.value, 'text'); });
     $('pjx').addEventListener('click', closeSheet);
     // delete, two taps
     var del = document.createElement('button'), delAt = 0; del.className = 'btn sec danger sm'; del.type = 'button'; del.textContent = 'Delete this project';
@@ -1804,7 +1804,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     host.innerHTML = DB.order.map(function (id) {
       var p = DB.projects[id]; if (!p) return '';
       var n = p.materials.reduce(function (a, m) { return a + m.parts.length; }, 0);
-      return '<button class="pitem' + (id === P.id ? ' on' : '') + '" type="button" data-id="' + id + '"><b>' + esc(p.name) + '</b><span>' + plural(n, 'part') + ' · ' + new Date(p.updated).toLocaleDateString() + '</span></button>';
+      var d = new Date(p.updated), today = d.toDateString() === new Date().toDateString(); // today, the time tells copies apart
+      return '<button class="pitem' + (id === P.id ? ' on' : '') + '" type="button" data-id="' + id + '"><b>' + esc(p.name) + '</b><span>' + plural(n, 'part') + ' · ' + (today ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString()) + '</span></button>';
     }).join('');
     host.querySelectorAll('.pitem').forEach(function (b) { b.addEventListener('click', function () { DB.current = b.dataset.id; P = DB.projects[DB.current]; save(true); closeSheet(); applyProject(); }); });
   }
@@ -1825,17 +1826,37 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         stock: (Array.isArray(m && m.stock) ? m.stock : []).slice(0, 20).map(function (s) { var o = { id: uid(), len: num(s && s.len, 0, 1200), price: Math.round(num(s && s.price, -1, 1e5) * 100) / 100, have: Math.min(10, Math.max(0, (s && s.have) | 0)) }; if (sheet) o.wid = num(s && s.wid, 0, 1200); return o; }).filter(function (s) { return s.len > 0 && (!sheet || s.wid > 0); }),
         parts: (Array.isArray(m && m.parts) ? m.parts : []).slice(0, 200).map(function (r) { return part(str(r && r.name, 60), Math.min(500, Math.max(0, (r && r.qty) | 0)), num(r && r.len, 0, 1200), sheet ? num(r && r.wid, 0, 1200) : null, sheet ? !!(r && r.grain) : null); }) };
     }).filter(function (m) { return m.stock.length; });
+    q.from = sigOf(q);
     return q;
   }
+  // What a project holds, leaving out its ids, when it was changed and its ticks: the same plan signs the same whether
+  // it came as a link, a file or pasted text, so opening it again can offer the copy already here.
+  function sigOf(p) { return linkSig(JSON.stringify(p, function (k, v) { return k === 'id' || k === 'updated' || k === 'done' || k === 'from' ? undefined : v; })); }
   function addProject(p) { DB.projects[p.id] = p; DB.order.unshift(p.id); DB.current = p.id; P = p; save(true); closeSheet(); applyProject(); toast('Opened “' + P.name + '”'); }
-  function importText(t) {
+  function importText(t, how) {
     var p; try { p = cleanProject(JSON.parse(t)); } catch (e) {
       // A link pasted here opens as it would from the address bar: on an iPhone a tapped link opens in Safari,
       // not in Kerf on the home screen, so copying it across is the way in.
       if (/k1[zj]|project(=|%3D)/i.test(t)) openLink(t); else toast('That isn’t a Kerf project');
       return;
     }
-    addProject(p);
+    showImport(p, how);
+  }
+  // Shows what's coming in and asks before adding it, or offers the copy opened before, if it's still here.
+  function showImport(p, how) {
+    var had = DB.order.filter(function (id) { return DB.projects[id] && DB.projects[id].from === p.from; })[0];
+    var pieces = function (m) { return m.parts.reduce(function (a, q) { return a + (q.qty || 0); }, 0); };
+    var title = { link: 'Open a project from a link', file: 'Open a project file', text: 'Open pasted project' }[how];
+    openSheet('<div class="hd"><h2>' + title + '</h2><button class="btn sm sec" type="button" id="lkx">Not now</button></div><div class="bd">' +
+      '<div class="lk"><b>' + esc(p.name) + '</b><ul>' + p.materials.map(function (m) { return '<li>' + esc(m.name) + ' — ' + plural(pieces(m), 'piece') + '</li>'; }).join('') + '</ul></div>' +
+      (had ? '<p class="note">You opened this project before; your copy is still in Projects.</p><div class="row"><button class="btn tape" type="button" id="lkOpen">Open my copy</button><button class="btn sec" type="button" id="lkAdd">Add another copy</button></div>'
+        : '<div class="row"><button class="btn tape" type="button" id="lkAdd">Add to my projects</button></div><p class="note">It comes in as a new project; nothing you already have changes. Check the prices — they’re whatever the ' + { link: 'link', file: 'file', text: 'text' }[how] + ' came with.</p>') + '</div>');
+    $('lkx').addEventListener('click', closeSheet);
+    $('lkAdd').addEventListener('click', function () { addProject(p); });
+    if (had) $('lkOpen').addEventListener('click', function () {
+      if (!DB.projects[had]) { addProject(p); return; } // deleted in another window meanwhile
+      DB.current = had; P = DB.projects[had]; save(true); closeSheet(); applyProject();
+    });
   }
 
   // ---------- opening a project from a link ----------
@@ -1884,27 +1905,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   // Shows what a link holds and asks before adding it, whether it came in the address or was pasted into Projects.
   function openLink(text) {
-    var tries = linkHashes(text), hash;
+    var tries = linkHashes(text);
     // linkText inside the chain, so a link cut short or badly escaped ends in the toast below too
     (function next(i) {
       if (i >= tries.length) return Promise.reject(new Error('no project'));
-      return Promise.resolve(tries[i]).then(linkText).then(function (t) { var p = cleanProject(JSON.parse(t)); hash = tries[i]; return p; })
+      return Promise.resolve(tries[i]).then(linkText).then(function (t) { return cleanProject(JSON.parse(t)); })
         .catch(function (e) { if (e && /browser/.test(e.message)) throw e; return next(i + 1); });
-    })(0).then(function (p) {
-      p.from = linkSig(hash);
-      var had = DB.order.filter(function (id) { return DB.projects[id] && DB.projects[id].from === p.from; })[0];
-      var pieces = function (m) { return m.parts.reduce(function (a, q) { return a + (q.qty || 0); }, 0); };
-      openSheet('<div class="hd"><h2>Open a project from a link</h2><button class="btn sm sec" type="button" id="lkx">Not now</button></div><div class="bd">' +
-        '<div class="lk"><b>' + esc(p.name) + '</b><ul>' + p.materials.map(function (m) { return '<li>' + esc(m.name) + ' — ' + plural(pieces(m), 'piece') + '</li>'; }).join('') + '</ul></div>' +
-        (had ? '<p class="note">You opened this link before; your copy is still in Projects.</p><div class="row"><button class="btn tape" type="button" id="lkOpen">Open my copy</button><button class="btn sec" type="button" id="lkAdd">Add another copy</button></div>'
-          : '<div class="row"><button class="btn tape" type="button" id="lkAdd">Add to my projects</button></div><p class="note">It comes in as a new project; nothing you already have changes. Check the prices — they’re whatever the link came with.</p>') + '</div>');
-      $('lkx').addEventListener('click', closeSheet);
-      $('lkAdd').addEventListener('click', function () { addProject(p); });
-      if (had) $('lkOpen').addEventListener('click', function () {
-        if (!DB.projects[had]) { addProject(p); return; } // deleted in another window meanwhile
-        DB.current = had; P = DB.projects[had]; save(true); closeSheet(); applyProject();
-      });
-    }).catch(function (e) { toast(e && /browser/.test(e.message) ? e.message : 'That link doesn’t hold a Kerf project'); });
+    })(0).then(function (p) { showImport(p, 'link'); }).catch(function (e) { toast(e && /browser/.test(e.message) ? e.message : 'That link doesn’t hold a Kerf project'); });
   }
 
   // ---------- shop PDF ----------
