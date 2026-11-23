@@ -22,7 +22,7 @@ function line(start) { const i = src.indexOf(start); return src.slice(i, src.ind
 const SOLVER = [
   "var U = 'in';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
-  ...['esc', 'sixteenths', 'mmOf', 'fmt', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'solveBoards', 'orientations', 'newSheet',
+  ...['esc', 'sixteenths', 'mmOf', 'fmt', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'orientations', 'newSheet',
     'placeIn', 'fitsStock', 'packRun', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
 ];
 const K = new Function([
@@ -91,7 +91,7 @@ console.log('boards: on-hand boards that run short');
   // Only two boards on hand and nothing to buy: three legs can't all be cut, and the plan has to say so.
   let r = null;
   try { r = K.solveBoards({ stock: [{ len: 96, price: 0, have: 2 }], parts: [{ len: 72, qty: 3 }] }, { kerf: 0.125, trim: 0 }); } catch (e) { check(false, 'have 2 for 3 legs threw: ' + e.message); }
-  if (r) check(r.items.length === 0 && r.errors.length === 1 && r.errors[0].pi === -1, 'have 2 for 3 legs: ' + JSON.stringify(r.errors));
+  if (r) check(r.items.length === 0 && r.errors.length === 1 && r.errors[0].pi === -1 && r.errors[0].only === 0, 'have 2 for 3 legs: ' + JSON.stringify(r.errors));
   r = K.solveBoards({ stock: [{ len: 96, price: 0, have: 3 }], parts: [{ len: 72, qty: 3 }] }, { kerf: 0.125, trim: 0 });
   check(r.items.length === 3 && r.cost === 0 && !r.errors.length, 'have 3 for 3 legs uses all three, free');
 }
@@ -144,6 +144,17 @@ console.log('sheets: two half sheets beat one full sheet');
   const parts = [{ len: 48, wid: 16, qty: 1, grain: true }, { len: 44.75, wid: 12.75, qty: 1, grain: true }];
   const r = K.solveSheets({ stock, parts }, { kerf: 0.125 });
   check(Math.abs(r.cost - 48) < 1e-6, `bench seat and shelf cost $${r.cost}, want $48 (two half sheets)`);
+}
+
+console.log('sheets: one on hand and more to buy');
+{
+  // "Have 1" on the 4×8 keeps a 4×8 to buy as well: six 72" sides need two sheets, one yours and one bought.
+  const parts = [{ len: 72, wid: 11.25, qty: 6, grain: true }], ply = [{ len: 48, wid: 48, price: 34, have: 0 }, { len: 48, wid: 24, price: 21, have: 0 }];
+  let r = K.solveSheets({ kind: 'sheet', stock: [{ len: 96, wid: 48, price: 58, have: 1 }, { len: 96, wid: 48, price: 58, have: 0 }, ...ply], parts }, { kerf: 0.125 });
+  check(r.cost === 58 && r.items.length === 2 && r.items.filter(it => it.stock.have).length === 1 && !r.errors.length, `two sheets with one on hand: $${r.cost}, ${r.items.length} sheets, ${JSON.stringify(r.errors)}`);
+  // With no 4×8 left to buy, the plan can't be made, and it says which part only the sheet on hand could hold.
+  r = K.solveSheets({ kind: 'sheet', stock: [{ len: 96, wid: 48, price: 58, have: 1 }, ...ply], parts: [{ len: 20, wid: 10, qty: 2, grain: true }, ...parts] }, { kerf: 0.125 });
+  check(r.items.length === 0 && r.errors.length === 1 && r.errors[0].pi === -1 && r.errors[0].only === 1, 'one 4×8 on hand for two sheets of sides: ' + JSON.stringify(r.errors));
 }
 
 console.log('sheets: more than 300 of one part');
@@ -249,7 +260,7 @@ console.log('plans kept between edits');
   const own = (yes, id) => (yes ? id : 'another copy of ' + id);
   const shown = (res, proj) => JSON.stringify([res.cost, res.boards, res.sheets, res.cuts, res.boardYield, res.boardKerf, res.sheetYield, res.mats.map((r, mi) => {
     const m = proj.materials[mi];
-    return [own(r.mat === m, m.id), r.cost, r.errors.map(e => [e.pi, e.max, e.pi < 0 || own(e.part === m.parts[e.pi], m.parts[e.pi].id)]),
+    return [own(r.mat === m, m.id), r.cost, r.errors.map(e => [e.pi, e.max, e.only, e.pi < 0 || own(e.part === m.parts[e.pi], m.parts[e.pi].id)]),
       r.items.map(it => [own(m.stock.includes(it.stock), it.stock.id), it.price, it.cap, it.trim, it.need, it.offcut, it.pieces, it.L, it.W, it.placed, it.spare,
         it.steps && it.steps.map(s => [s.type, s.at, s.on, s.line, s.gives && [s.gives.it.pi, s.gives.l, s.gives.w, s.gives.rot]])])];
   })]);

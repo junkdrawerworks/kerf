@@ -772,8 +772,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var lf = fresh(), b = greedy(C0.slice(), lf, [], 0.35, 0.5);
       consider(b && settle(b, lf));
     }
-    // Nothing worked: the boards on hand run out and there's no size to buy.
-    if (!best) { out.errors.push({ pi: -1 }); return out; }
+    // Nothing worked: the boards on hand run out, and some part fits on no size to buy (`only`, the first one listed).
+    if (!best) { out.errors.push({ pi: -1, only: onlyHave(mat, function (p) { return stocks.some(function (st) { return !isFinite(st.left) && st.cap + 1e-9 >= p.len; }); }) }); return out; }
     var queues = lens.map(function (g) { return g.q.slice(); });
     out.cost = best.cost;
     out.items = best.boards.map(function (b) {
@@ -783,6 +783,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       return { stock: st.s, price: st.price, cap: st.cap, trim: trim, pieces: pieces, need: b.need, offcut: off };
     }).sort(function (a, b) { return (a.stock.have ? 1 : 0) - (b.stock.have ? 1 : 0) || b.stock.len - a.stock.len || b.need - a.need; });
     return out;
+  }
+  // When the stock on hand runs out: the first part planned that no size to buy can hold (`buys` says whether one can), or -1.
+  function onlyHave(mat, buys) {
+    for (var pi = 0; pi < mat.parts.length; pi++) { var p = mat.parts[pi]; if (p.len > 0 && p.qty > 0 && (mat.kind !== 'sheet' || p.wid > 0) && !buys(p)) return pi; }
+    return -1;
   }
   // A board's last part comes off with no cut only when it's all that's left: nothing past it (a sliver
   // thinner than the kerf still has to be cut away) and no far end to square up.
@@ -917,7 +922,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         keep(same, FITS[it % 3], SPLITS[(it >> 2) % 4], prefs[it % prefs.length], keyed.map(function (e) { return e.x; }));
       }
     }
-    if (!best) { out.errors.push({ pi: -1 }); return out; }
+    if (!best) { out.errors.push({ pi: -1, only: onlyHave(mat, function (p) { return stocks.some(function (st) { return !isFinite(st.left) && fitsStock({ l: p.len, w: p.wid, rot: !p.grain }, st); }); }) }); return out; }
     out.cost = best.cost;
     out.items = best.sheets.map(function (sh) {
       return { stock: sh.st.s, price: sh.st.price, L: sh.st.L, W: sh.st.W, placed: sh.placed, root: sh.root, steps: sheetSteps(sh.root), spare: sh.free.filter(function (f) { return f.w >= 3 && f.h >= 3; }) };
@@ -1110,7 +1115,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     RES.mats.forEach(function (r) {
       var el = document.querySelector('[data-err="' + r.mat.id + '"]'); if (!el) return;
       var msgs = r.errors.map(function (e) {
-        if (e.pi < 0) return 'These parts don’t fit together on any stock listed.';
+        if (e.pi < 0) {
+          // only the stock on hand can hold some part, and it has run out
+          var q = r.mat.parts[e.only], have = r.kind === 'sheet' ? 'sheets' : 'boards';
+          return 'The ' + have + ' you have can’t hold every part' + (q ? ', and ' + (q.name || 'part ' + letter(e.only)) + ' (' + (r.kind === 'sheet' ? fmt(q.len) + ' × ' + fmt(q.wid) : fmt(q.len)) + ') fits only those. Add a size to buy that fits it.' : '. Add a size to buy.');
+        }
         if (e.max) return (e.part.name || 'A part') + ' × ' + e.part.qty + ': Kerf plans at most ' + e.max + ' of one sheet part — split it into two rows.';
         var p = e.part, dims = r.kind === 'sheet' ? fmt(p.len) + ' × ' + fmt(p.wid) : fmt(p.len);
         return (p.name || 'A part') + ' (' + dims + ') won’t fit on any ' + (r.kind === 'sheet' ? 'sheet' : 'board') + ' listed below' + (r.kind === 'sheet' && p.grain ? ' with the grain along its length' : '') + '. Add a bigger size' + (r.kind === 'sheet' && p.grain ? ' or let it turn' : '') + '.';
@@ -1139,7 +1148,18 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         var n = t.replace(/[^\d.]/g, ''), bad = !!t && (n.split('.').length > 2 || !(parseFloat(n) >= 0));
         v = parseFloat(n); el.classList.toggle('bad', bad); if (!bad) s.price = v >= 0 ? Math.round(v * 100) / 100 : 0; // to the cent, so the shopping list adds up to its total
       }
-      else if (f === 'have') { s.have = +el.value || 0; renderList(); }
+      else if (f === 'have') {
+        // "Have 1" on a size you buy means you own one of them, not that it's all there is: the size stays on the list to
+        // buy as well, so Kerf uses yours first and buys more if it needs them.
+        var was = s.have, sheet = m.kind === 'sheet', same = function (o) { return o !== s && !o.have && (sheet ? (o.len === s.len && o.wid === s.wid) || (o.len === s.wid && o.wid === s.len) : o.len === s.len); };
+        s.have = +el.value || 0;
+        if (!was && s.have) {
+          if (!m.stock.some(same)) { var copy = { id: uid(), len: s.len, price: s.price, have: 0 }; if (sheet) copy.wid = s.wid; m.stock.splice(m.stock.indexOf(s) + 1, 0, copy); }
+          var size = function (x) { return fmt(x, { ft: true }).replace(/'/g, '′').replace(/"/g, '″'); };
+          toast('Kerf will use your ' + s.have + ' and buy more ' + (sheet ? size(s.wid) + ' × ' + size(s.len) : size(s.len)) + ' if it needs them');
+        }
+        renderList();
+      }
       if (f !== 'have') refreshChips(m);
     }
     touch(); resolve(true);
@@ -1286,7 +1306,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var rest = m.errors.some(function (e) { return e.pi < 0; }), has = [];
       if (big) has.push(plural(big, 'part') + ' too big for any size listed');
       if (many.length) has.push(plural(many.length, 'part') + ' with more than ' + many[0].max + ' pieces');
-      return esc(m.mat.name) + (has.length ? ' has ' + has.join(' and ') + (rest ? ', and the rest don’t fit together on the stock listed' : '') : ': these parts don’t fit together on any stock listed');
+      var short = 'the ' + (m.kind === 'sheet' ? 'sheets' : 'boards') + ' you have can’t hold ';
+      return esc(m.mat.name) + (has.length ? ' has ' + has.join(' and ') + (rest ? ', and ' + short + 'the rest' : '') : ': ' + short + 'every part');
     }).join('; ') + ' — see the cut list.</div>' : '';
   }
   function shopLines(m) {
