@@ -75,10 +75,16 @@ function brute(pieces, stocks, kerf) {
 }
 
 console.log('lengths');
-const inches = { '35 3/4': 35.75, '35-3/4': 35.75, '2\' 11 3/4"': 35.75, '8\'': 96, '8 ft': 96, '3/4': 0.75, '¾': 0.75, '1½"': 1.5, '910mm': 910 / 25.4, '2.4 m': 2400 / 25.4, 'abc': NaN, '1/0': NaN };
-for (const [s, want] of Object.entries(inches)) {
-  const got = K.parseLen(s);
-  check(Number.isNaN(want) ? Number.isNaN(got) : Math.abs(got - want) < 1e-9, `parseLen(${JSON.stringify(s)}) = ${got}, want ${want}`);
+// [units, text, inches]. A comma before three digits is a thousands comma; before one or two, a decimal point.
+const LENGTHS = [
+  ...Object.entries({ '35 3/4': 35.75, '35-3/4': 35.75, '2\' 11 3/4"': 35.75, '8\'': 96, '8 ft': 96, '3/4': 0.75, '¾': 0.75, '1½"': 1.5, '910mm': 910 / 25.4, '2.4 m': 2400 / 25.4,
+    '35,75': 35.75, '2,4 m': 2400 / 25.4, '1,220 mm': 1220 / 25.4, 'abc': NaN, '1/0': NaN }).map(([s, x]) => ['in', s, x]),
+  ...Object.entries({ '600': 600, '2,440': 2440, '1,220 mm': 1220, '2,440mm': 2440, '2,5': 2.5, '2,5 mm': 2.5, '12,25': 12.25, '1,000,000': 1e6, '2,44 m': 2440, '2,4400': 2.44, ',440': 0.44 })
+    .map(([s, mm]) => ['mm', s, mm / 25.4]),
+];
+for (const [u, s, want] of LENGTHS) {
+  K.units(u); const got = K.parseLen(s); K.units('in');
+  check(Number.isNaN(want) ? Number.isNaN(got) : Math.abs(got - want) < 1e-9, `parseLen(${JSON.stringify(s)}) in ${u} = ${got}, want ${want}`);
 }
 check(K.fmt(35.75) === '35 3/4"' && K.fmt(96, { ft: true }) === "8'" && K.fmt(102.5, { ft: true }) === "8' 6 1/2\"", 'fmt in inches');
 // Just under a whole foot rounds up to it, not to 12": 2438 mm is 8', not 7' 12".

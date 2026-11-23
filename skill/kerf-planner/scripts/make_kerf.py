@@ -4,7 +4,7 @@
     python3 make_kerf.py plan.json [--out DIR] [--base URL] [--no-paste]
 
 plan.json (lengths may be numbers in the plan's units, or strings the way a tape reads:
-"35 3/4", "35-3/4", "2' 11 3/4\"", "8'", "¾", "910mm", "2.4 m"):
+"35 3/4", "35-3/4", "2' 11 3/4\"", "8'", "¾", "910mm", "2,440 mm", "2.4 m"):
 
 {
   "name": "Mudroom bench",
@@ -42,6 +42,9 @@ def parse_len(v, units):
     if isinstance(v, (int, float)):
         return v / 25.4 if units == 'mm' else float(v)
     s = str(v).strip().lower()
+    # A comma before three digits is a thousands comma (2,440 mm); before one or two it's a decimal point (2,5 mm).
+    if re.fullmatch(r'\d{1,3}(,\d{3})+(\s*(mm|cm|m))?', s):
+        s = s.replace(',', '')
     for k, r in VULGAR.items():
         s = s.replace(k, r)
     s = re.sub(r"[′’‘`]", "'", s)
