@@ -86,6 +86,20 @@ for (const [u, s, want] of LENGTHS) {
   K.units(u); const got = K.parseLen(s); K.units('in');
   check(Number.isNaN(want) ? Number.isNaN(got) : Math.abs(got - want) < 1e-9, `parseLen(${JSON.stringify(s)}) in ${u} = ${got}, want ${want}`);
 }
+// The kerf-planner skill's make_kerf.py reads lengths with a copy of parseLen in Python: the same text, the same inches.
+{
+  const code = 'import sys, json; sys.path.insert(0, sys.argv[1]); import make_kerf as m; print(json.dumps([m.parse_len(s, u) for u, s in json.loads(sys.argv[2])]))';
+  const run = require('child_process').spawnSync('python3', ['-I', '-B', '-c', code, path.join(__dirname, '..', 'skill', 'kerf-planner', 'scripts'), JSON.stringify(LENGTHS.map(([u, s]) => [u, s]))], { encoding: 'utf8' });
+  if (run.error && run.error.code === 'ENOENT') console.log('  (no python3 here, so make_kerf.py’s lengths were not checked)');
+  else {
+    check(run.status === 0, 'make_kerf.py’s parse_len didn’t run: ' + run.stderr);
+    const got = run.status === 0 ? JSON.parse(run.stdout) : [];
+    LENGTHS.forEach(([u, s, want], i) => {
+      const py = got[i] == null ? NaN : got[i];
+      check(Number.isNaN(want) ? Number.isNaN(py) : Math.abs(py - want) < 1e-9, `make_kerf.py reads ${JSON.stringify(s)} in ${u} as ${py} inches, Kerf as ${want}`);
+    });
+  }
+}
 check(K.fmt(35.75) === '35 3/4"' && K.fmt(96, { ft: true }) === "8'" && K.fmt(102.5, { ft: true }) === "8' 6 1/2\"", 'fmt in inches');
 // Just under a whole foot rounds up to it, not to 12": 2438 mm is 8', not 7' 12".
 for (const [x, want, wantH] of [[95.98, "8'", '8′'], [2438 / 25.4, "8'", '8′'], [107.97, "9'", '9′'], [191.975, "16'", '16′'], [95.96, "7' 11 15/16\"", '7′ 11 <span class="fr"><span class="sr">15/16</span><span aria-hidden="true"><sup>15</sup>⁄<sub>16</sub></span></span>″']]) {

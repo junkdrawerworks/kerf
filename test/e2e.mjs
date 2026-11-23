@@ -2,9 +2,11 @@
 // Opens the example project, a link and a project file from the kerf-planner skill, works through cuts
 // at the saw, and checks it all on a phone with nothing loaded from elsewhere, then once more offline.
 import { createRequire } from 'node:module';
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { deflateRawSync } from 'node:zlib';
 import { join, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -344,6 +346,43 @@ await page.waitForFunction(() => document.getElementById('pname').value === 'Gar
 assert.ok(await page.isHidden('#sheet'), 'Projects closes once the file is open');
 assert.equal(await page.textContent('.total'), '$70.76');
 assert.equal((await stored()).order.length, 3);
+
+// make_kerf.py itself, run on the plan in its own instructions: the link and the file it writes open in Kerf with the
+// plan's names, counts and lengths. It writes into a folder of its own in the system's temporary folder, removed after.
+{
+  const script = join(root, 'skill', 'kerf-planner', 'scripts', 'make_kerf.py');
+  const doc = (await readFile(script, 'utf8')).match(/\n(\{\n[\s\S]*?\n\})\n/)[1].replace(/\s+#.*$/gm, '');
+  const tmp = mkdtempSync(join(tmpdir(), 'kerf-make-'));
+  try {
+    writeFileSync(join(tmp, 'plan.json'), doc);
+    const run = spawnSync('python3', ['-I', '-B', script, join(tmp, 'plan.json'), '--out', tmp, '--base', base], { encoding: 'utf8' });
+    if (run.error && run.error.code === 'ENOENT') console.log('  (no python3 here, so make_kerf.py was not run)');
+    else {
+      assert.equal(run.status, 0, 'make_kerf.py failed on its own plan:\n' + run.stdout + run.stderr);
+      const link = /^Link: (\S+)$/m.exec(run.stdout)[1], path = /^File: (.+)$/m.exec(run.stdout)[1];
+      assert.ok(link.startsWith(base + '#k1z') && path.startsWith(tmp), 'make_kerf.py’s link and file: ' + link.slice(0, 60) + ' ' + path);
+      // What the cut list shows: each material's name, sizes to buy and parts (name, count, length and width).
+      const cutList = () => page.$$eval('#mats .mat', ms => ms.map(m => [m.querySelector('[data-f="mname"]').value,
+        [...m.querySelectorAll('.srow[data-sid]')].map(r => [...r.querySelectorAll('[data-f="slen"], [data-f="swid"]')].map(i => i.value).join(' × ')),
+        [...m.querySelectorAll('.prow[data-pid]')].map(r => [...r.querySelectorAll('[data-f="pname"], [data-f="qty"], [data-f="len"], [data-f="wid"]')].map(i => i.value).join(' / '))]));
+      const want = [['2×4', ["8'", "10'", "2' 6\""], ['Leg / 4 / 17 1/4"']], ['¾ plywood', ['96" × 48"'], ['Seat / 1 / 48" / 16"']]];
+      await open(null, link.slice(base.length));
+      await page.waitForSelector('#lkAdd');
+      assert.match(await page.textContent('#sheet .lk'), /^Mudroom bench\s*2×4 — 4 pieces\s*¾ plywood — 1 piece$/, 'make_kerf.py’s link');
+      await page.click('#lkAdd');
+      await view('list');
+      assert.deepEqual(await cutList(), want, 'make_kerf.py’s link in the cut list');
+      await page.click('#projBtn');
+      await page.setInputFiles('#pjFile', path);
+      await page.waitForSelector('#lkAdd');
+      assert.match(await page.textContent('#sheet .lk'), /^Mudroom bench\s*2×4 — 4 pieces\s*¾ plywood — 1 piece$/, 'make_kerf.py’s file');
+      await page.click('#lkAdd');
+      await page.waitForFunction(() => document.getElementById('sheet').hidden);
+      assert.deepEqual(await cutList(), want, 'make_kerf.py’s file in the cut list');
+      assert.equal((await stored()).projects[(await stored()).current].kerf, 0.125, 'make_kerf.py’s kerf');
+    }
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+}
 
 // A link copied with a bit more or less than it should still opens: a full stop or bracket from the sentence around it,
 // or %20 where a line wrapped (the address bar keeps the link, so it's the page that has to cope).
