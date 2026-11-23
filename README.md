@@ -19,7 +19,7 @@
 - **Tips.** After each change Kerf checks whether shaving a part by a sixteenth or two (or a few mm) would let you buy less wood. It says so — *“Make the rail 47 15/16″ instead of 48″ and the 2×4s cost $4.12 less”* — with a button to apply it. It checks while the page is idle, so typing never waits for it; a material of more than 60 sheet pieces or 500 board pieces is too big to check quickly and gets no tips.
 - **Offcuts you already have** are used whenever they save buying, for free, and never more of them than you say you have.
 - **Grain.** Sheet parts can be locked so the grain runs along their length; unlocked parts may be turned to fit better.
-- **At the saw.** Each board and sheet becomes a checklist in cutting order, with where to measure from. Ticks are saved as you go.
+- **At the saw.** Each board and sheet becomes a checklist in cutting order, with where to measure from. A part that comes off without a cut (the last of a board, or a whole sheet) is noted but not counted, so the saw counts the same cuts as the plan. Ticks are saved as you go.
 - **Shop PDF.** A printable sheet with the shopping list and every diagram.
 - **Projects** are kept in the browser's local storage, with no account and no server. To move one to another device, save it as a file or copy it as text, then open or paste it there. With Kerf open in two windows, a project added, changed or deleted in one shows up in the other.
 

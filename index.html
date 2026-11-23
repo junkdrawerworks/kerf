@@ -216,7 +216,7 @@ div.sec{margin-top:22px}
 .saw-bar{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:12px}
 .saw-bar .prog{flex:1;height:10px;border-radius:99px;background:var(--sunk);overflow:hidden}
 .saw-bar .prog i{display:block;height:100%;background:var(--good);transition:width .25s}
-.saw-bar b{font:600 15px var(--mono)}
+.saw-bar b{font:600 15px var(--mono)}.saw-bar b small{font:500 14px var(--body);color:var(--ink2)}
 .stk{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px;overflow:hidden}
 .stk.done{opacity:.62}
 .stk-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface2)}
@@ -1307,6 +1307,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function planKey() {
     return RES.mats.map(function (m) { return m.mat.id + ':' + m.items.map(function (it) { return it.stock.id + '[' + (it.pieces ? it.pieces.map(function (p) { return p.pi + '@' + p.len.toFixed(3); }).join(',') : it.placed.map(function (p) { return p.pi + '@' + p.x.toFixed(2) + ',' + p.y.toFixed(2); }).join(',')) + ']'; }).join('|'); }).join('#');
   }
+  // A part that needs no cut (a board's last part with nothing left past it, a sheet that is all one part) keeps
+  // its place in the list, so the cuts after it keep their numbers, but it's a note, not a cut to tick.
   function sawTasks() {
     var tasks = [];
     RES.mats.forEach(function (m) {
@@ -1316,7 +1318,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           if (it.trim > 0) t.cuts.push({ meas: fmtH(it.trim), what: 'Square up one end', sub: 'Trim off ' + fmt(it.trim) + ' and measure every part from this fresh end' });
           it.pieces.forEach(function (p, k) {
             var part = m.mat.parts[p.pi], last = k === it.pieces.length - 1, sub;
-            if (last && lastIsLeft(it)) sub = 'What’s left is this part — no cut needed';
+            if (last && lastIsLeft(it)) { t.cuts.push({ noCut: true, note: 'What’s left is <b>' + letter(p.pi) + '</b> ' + esc(part && part.name || 'Part') + ' — no cut needed' }); return; }
             else {
               sub = k === 0 ? 'Measure from the end, cut on the waste side of the mark' : 'Measure from the fresh end';
               if (last && it.trim > 0 && it.offcut <= 0) sub += ' — this cut squares up the far end too';
@@ -1327,7 +1329,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         } else {
           it.steps.forEach(function (st, k) {
             var part = st.gives ? m.mat.parts[st.gives.it.pi] : null;
-            if (st.type === 'none') { t.cuts.push({ meas: '—', what: '<b>' + letter(st.gives.it.pi) + '</b> ' + esc(part && part.name || 'Part'), sub: 'The whole sheet is this part' }); return; }
+            if (st.type === 'none') { t.cuts.push({ noCut: true, note: 'The whole sheet is <b>' + letter(st.gives.it.pi) + '</b> ' + esc(part && part.name || 'Part') + ' — no cut needed' }); return; }
             t.cuts.push({ meas: fmtH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + esc(st.on) + (st.gives ? ' → <b>' + letter(st.gives.it.pi) + '</b> ' + esc(part && part.name || '') : ''), sub: (st.type === 'rip' ? 'Along the grain, ' : 'Across the grain, ') + 'measured from the edge' });
           });
         }
@@ -1342,12 +1344,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var key = planKey();
     if (!P.done || P.doneKey !== key) { P.done = {}; P.doneKey = key; }
     var tasks = sawTasks(), total = 0, done = 0;
-    tasks.forEach(function (t, ti) { t.cuts.forEach(function (c, ci) { total++; if (P.done[ti + '.' + ci]) done++; }); });
-    var h = '<div class="saw-bar"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div><b>' + done + ' / ' + total + '</b>' + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>';
+    tasks.forEach(function (t, ti) { t.cuts.forEach(function (c, ci) { if (!c.noCut) { total++; if (P.done[ti + '.' + ci]) done++; } }); });
+    var h = '<div class="saw-bar"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div><b>' + done + '<small> of </small>' + total + '<small> ' + (total === 1 ? 'cut' : 'cuts') + '</small></b>' + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>';
     tasks.forEach(function (t, ti) {
-      var n = t.cuts.length, d = t.cuts.filter(function (c, ci) { return P.done[ti + '.' + ci]; }).length;
-      h += '<div class="stk' + (n && d === n ? ' done' : '') + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span><span class="n">' + d + '/' + n + '</span></div>';
+      var real = t.cuts.filter(function (c) { return !c.noCut; }), n = real.length, d = t.cuts.filter(function (c, ci) { return !c.noCut && P.done[ti + '.' + ci]; }).length;
+      h += '<div class="stk' + (n && d === n ? ' done' : '') + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span>' + (n ? '<span class="n">' + d + '/' + n + '</span>' : '') + '</div>';
       t.cuts.forEach(function (c, ci) {
+        if (c.noCut) { h += '<div class="cut note">' + c.note + '</div>'; return; }
         var on = !!P.done[ti + '.' + ci];
         h += '<button class="cut" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + ti + '.' + ci + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + c.what + '<small>' + c.sub + '</small></span></button>';
       });

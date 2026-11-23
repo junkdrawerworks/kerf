@@ -99,12 +99,26 @@ await fitsPhone('saw checklist');
 // Ticks at the saw are kept: three cuts done, a reload, and they're still done.
 const cuts = page.locator('#sawOut .cut[data-k]');
 for (let i = 0; i < 3; i++) await cuts.nth(i).click();
-assert.equal(await page.textContent('.saw-bar b'), '3 / 27');
+assert.equal(await page.textContent('.saw-bar b'), '3 of 27 cuts');
 await page.waitForTimeout(600);
 await page.reload();
 await page.waitForSelector('#sawOut .cut[data-k]');
-assert.equal(await page.textContent('.saw-bar b'), '3 / 27', 'ticks survive a reload');
+assert.equal(await page.textContent('.saw-bar b'), '3 of 27 cuts', 'ticks survive a reload');
 assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
+
+// The saw counts the cuts the plan counts: a part that comes off with no cut is a note, not a cut to tick. The
+// example's tip makes each pair of rails fill an 8' board, so the second rail is what's left.
+{
+  const sawTotal = async () => +(await page.textContent('.saw-bar b')).match(/of (\d+)/)[1];
+  await open(null);
+  assert.equal(await sawTotal(), parseInt(await cutsFact()), 'the saw counts more cuts than the plan');
+  await page.waitForSelector('[data-tip]', { timeout: 30000 });
+  await page.click('[data-tip]');
+  await page.waitForTimeout(600);
+  assert.equal(parseInt(await cutsFact()), 23);
+  assert.equal(await sawTotal(), 23, 'after the tip, the saw counts more cuts than the plan');
+  assert.ok((await page.textContent('#sawOut')).includes('What’s left is B Front & back rail — no cut needed'), 'no note for a rail that needs no cut');
+}
 
 // A link from the kerf-planner skill shows what's in it and comes in as a new project once you say so.
 await open(null, linkTo(MUDROOM));
@@ -208,7 +222,7 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   assert.equal(await page.textContent('.total'), '$4.28');
   await view('saw');
   await page.locator('#sawOut .cut[data-k]').first().click();
-  assert.equal(await page.textContent('.saw-bar b'), '1 / 2');
+  assert.equal(await page.textContent('.saw-bar b'), '1 of 2 cuts');
   await view('list');
   assert.deepEqual([await page.inputValue('.prow[data-pid] input[data-f="pname"]'), await page.inputValue('.prow[data-pid] input[data-f="qty"]')], ['7', '2']);
   assert.equal(await badCopy(), raw, 'what was stored before the repair isn’t kept');
@@ -263,7 +277,7 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   await view('saw');
   await other.click('#tabs button[data-t="saw"]');
   await other.locator('#sawOut .cut[data-k]').first().click();
-  await page.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '1 / 2', null, { timeout: 5000 })
+  await page.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '1 of 2 cuts', null, { timeout: 5000 })
     .catch(() => assert.fail('a tick in one window doesn’t show in the other'));
   await page.fill('#pname', 'Garage shelves 3');
   await storedHas(page, 'Garage shelves 3');
@@ -368,7 +382,7 @@ assert.deepEqual(await page.evaluate(() => [document.activeElement.dataset.k, do
 await page.focus('#sawReset');
 await page.keyboard.press('Enter');
 assert.equal(await page.evaluate(() => document.activeElement.dataset.k), '0.0', 'focus after Start over');
-assert.match(await page.textContent('.saw-bar b'), /^0 \//);
+assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
 // A tip does what it says even when it's tapped while Kerf is still looking for new tips after an edit (a slow
 // sheet job keeps it looking for a while). Side by side on a wide screen, so the edit and the tap are quick.
@@ -571,7 +585,7 @@ const sawCases = [
   { trim: 0, parts: [{ name: 'Rail', qty: 2, len: 47.875 }], steps: [RAIL, FRESH], cuts: 2, lines: 2 },
   { trim: 0.25, parts: [{ name: 'Rail', qty: 2, len: 47 + 11 / 16 }], steps: ['Trim off 1/4" and measure every part from this fresh end', RAIL, FRESH + ' — this cut squares up the far end too'], cuts: 3, lines: 2 },
   { trim: 0.25, parts: [{ name: 'Top', qty: 1, len: 95.5 }], steps: ['Trim off 1/4" and measure every part from this fresh end', RAIL + ' — this cut squares up the far end too'], cuts: 2, lines: 1 },
-  { trim: 0, parts: [{ name: 'Top', qty: 1, len: 96 }], steps: ['What’s left is this part — no cut needed'], cuts: 0, lines: 0 },
+  { trim: 0, parts: [{ name: 'Top', qty: 1, len: 96 }], steps: [], note: 'What’s left is A Top — no cut needed', cuts: 0, lines: 0 },
   { trim: 0, parts: [{ name: 'Leg', qty: 1, len: 72 }], steps: [RAIL], cuts: 1, lines: 1 },
 ];
 for (const c of sawCases) {
@@ -582,6 +596,8 @@ for (const c of sawCases) {
   assert.equal(pdfKerfLines(await shopPdf()), c.lines, what + ': saw cuts in the PDF');
   await view('saw');
   assert.deepEqual(await sawSteps(), c.steps, what + ': steps at the saw');
+  assert.equal(await page.textContent('.saw-bar b'), `0 of ${c.cuts} ${c.cuts === 1 ? 'cut' : 'cuts'}`, what + ': cuts at the saw');
+  if (c.note) assert.equal(await page.textContent('#sawOut .cut.note'), c.note, what + ': the note at the saw');
 }
 
 // Boards on hand that run short say so in the cut list, instead of stopping the page.
