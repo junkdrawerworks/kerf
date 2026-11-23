@@ -1412,7 +1412,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       total += n; done += d;
       h += '<div class="stk' + (n && d === n ? ' done' : '') + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span>' + (n ? '<span class="n">' + d + '/' + n + '</span>' : '') + '</div>';
       t.cuts.forEach(function (c, ci) {
-        if (c.noCut) { h += '<div class="cut note">' + c.note + '</div>'; return; }
+        if (c.noCut) { h += '<div class="cut note"><span>' + c.note + '</span></div>'; return; }
         var on = ticked(t, ci);
         h += '<button class="cut" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + t.mid + '/' + t.ii + '.' + ci + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + c.what + '<small>' + c.sub + '</small></span></button>';
       });

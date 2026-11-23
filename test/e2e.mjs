@@ -118,6 +118,9 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   assert.equal(parseInt(await cutsFact()), 23);
   assert.equal(await sawTotal(), 23, 'after the tip, the saw counts more cuts than the plan');
   assert.ok((await page.textContent('#sawOut')).includes('What’s left is B Front & back rail — no cut needed'), 'no note for a rail that needs no cut');
+  // It reads as a line of text: the letter sits a space after "is", not spread out like the parts of a cut's row.
+  await view('saw');
+  assert.ok(await page.$eval('#sawOut .cut.note b', b => { const r = document.createRange(); r.selectNodeContents(b.previousSibling); return b.getBoundingClientRect().left - r.getBoundingClientRect().right < 6; }), 'the no-cut note is spread out');
 }
 
 // Ticks stay on the cut they were made on. Each material keeps its own, keyed to what its cuts are, so an edit to
