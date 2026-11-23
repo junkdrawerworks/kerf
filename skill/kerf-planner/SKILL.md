@@ -97,11 +97,12 @@ In `plan.json`, lengths are written the way a tape reads — `"35 3/4"`, `"8'"`,
 
 Optional top-level settings: `"kerf"` (default ⅛″, or 3 mm in a metric plan), `"trim"` (squaring each board end, default 0), `"keep"` (the smallest offcut worth keeping, default 12″ or 300 mm), and `"currency"`. For a metric plan, use `"units": "mm"`; bare numbers are then millimetres. Set `"currency"` for the region, such as `"£"` or `"€"`.
 
-The script does four things:
+The script does five things:
 - converts everything to inches, which is how Kerf stores lengths;
 - checks every part fits some stock (a grain-locked sheet part must fit with its length along the sheet's long side);
+- checks the plan is within what Kerf opens: names up to 200 characters, 100 materials, 50 sizes and 1000 parts per material, lengths up to 1200″, and at most 300 of one sheet part;
 - warns about likely slips, such as a grain-locked part whose length is shorter than its width;
-- prints a summary, a **link**, the **paste text**, and writes a `.kerf.json` file.
+- prints a summary, a **link** and its length, the **paste text**, and writes a `.kerf.json` file.
 
 If it reports errors, fix the plan, not the script, and run it again. The summary's "no fewer than" lines are floors from length and area alone; real layouts usually need more. Don't quote them as what to buy. If a part doesn't fit, that's a design conversation: add a longer board, a bigger sheet, or a glue-up.
 
@@ -114,7 +115,7 @@ Keep the final message tidy:
 2. The cut list, grouped by material: quantity, part, size, and grain where it matters.
 3. Notes Kerf won't cover: hardware, glue-ups, finish, the spare board.
 4. The Kerf link, presented as a link. Tapping it opens Kerf and offers to add the project.
-5. The fallback: offer the `.kerf.json` file (**Projects** → **Open a project file** in Kerf). Only put paste text in the reply if you can't offer the file. Copy the link and the paste text character for character from the script's output; they are encoded data, and one retyped digit breaks them.
+5. The fallback: offer the `.kerf.json` file (**Projects** → **Open a project file** in Kerf). If the script says `Long link: offer the file first` (past about 2,000 characters), put the file before the link: some apps cut a long link short. Only put paste text in the reply if you can't offer the file. Copy the link and the paste text character for character from the script's output; they are encoded data, and one retyped digit breaks them.
 6. One line saying prices are examples, and that Kerf will show exactly what to buy and how to cut it. Leave the buying arithmetic to Kerf; hand-worked totals are easy to get wrong. If you mention one, call it rough.
 
 If they change the design afterwards, update the plan and run the script again. The new link comes in as a separate project, so their old one isn't overwritten.

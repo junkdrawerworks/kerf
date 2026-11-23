@@ -363,6 +363,71 @@ await page.click('#lkx');
   await page.click('#pjx');
 }
 
+// What Kerf saves opens again whole: a project with a long name, 201 parts of one material (one with a long name) and
+// 25 sizes of another goes out as a file and back in with every field as it was, ids and ticks aside. Past the limits
+// (well past what anyone makes) what's left out is said before it's added, a material with parts and no size gets the
+// usual one, and a part written by hand with no count or grain comes in as one, grain-locked, as in the cut list.
+{
+  const pasteIn = text => page.evaluate(t => {
+    document.getElementById('toast').classList.remove('show');
+    const data = new DataTransfer(); data.setData('text/plain', t);
+    document.getElementById('pjPaste').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, text);
+  const bare = o => JSON.parse(JSON.stringify(o, (k, v) => ['id', 'updated', 'done', 'from', 'example'].includes(k) ? undefined : v));
+  const parts = Array.from({ length: 201 }, (_, i) => ({ name: i === 7 ? 'Upper cabinet left side panel with dado for adjustable shelf pins, 32 mm apart' : 'Part ' + i, qty: i % 4, len: 10 + i / 8 }));
+  const sizes = Array.from({ length: 25 }, (_, i) => ({ len: 24 + i * 3, wid: 24 + i, price: 10.25 + i, have: i % 3 }));
+  const big = project('A long name for a kitchen: base cabinets, uppers, the pantry and the island, all of it in maple', [
+    board('Maple 4/4', [{ len: 96, price: 12.5 }, { len: 120, price: 15.75, have: 2 }], parts),
+    sheet('¾ maple plywood', sizes, [{ name: 'Side', qty: 4, len: 30, wid: 23.25, grain: false }, { name: 'Shelf', qty: 6, len: 22.5, wid: 11.25 }]),
+  ], { units: 'mm', kerf: 0.09375, trim: 0.5, keep: 18, cur: '€' });
+  big.materials[1].note = 'A1 grade';
+  await open(saved(big));
+  await page.click('#projBtn');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#pjExport')]);
+  await page.setInputFiles('#pjFile', await dl.path());
+  await page.waitForSelector('#lkAdd');
+  assert.deepEqual(await page.$$eval('#sheet .note', ns => ns.map(n => n.textContent)), ['It comes in as a new project; nothing you already have changes. Check the prices — they’re whatever the file came with.'], 'a project Kerf saved doesn’t open whole');
+  await page.click('#lkAdd');
+  const back = await stored();
+  assert.equal(back.order.length, 2);
+  assert.deepEqual(bare(back.projects[back.order[0]]), bare(big), 'a project saved as a file comes back different');
+
+  const many = Array.from({ length: 1005 }, (_, i) => ({ name: 'Slat ' + i, qty: 0, len: 20 }));
+  many[3] = { name: 'A long name '.repeat(21), qty: 2, len: 30 }; // 252 characters
+  await page.click('#projBtn');
+  await pasteIn(JSON.stringify({ kerf: 1, project: { name: 'Over the limits', materials: [
+    { kind: 'board', name: '2×4', parts: many },
+    { kind: 'sheet', name: 'Ply', stock: Array.from({ length: 52 }, () => ({ len: 96, wid: 48, price: 58 })), parts: [{ name: 'Side', len: 30, wid: 12 }, { name: 'Back', qty: null, len: 30, wid: 20, grain: false }, { name: 'Spare', qty: 0, len: 10, wid: 10 }, { name: 'Top', qty: '', len: 30, wid: 20 }] },
+  ] } }));
+  await page.waitForSelector('#lkAdd', { timeout: 5000 });
+  assert.equal(await page.textContent('#sheet h2'), 'Open pasted project');
+  assert.deepEqual((await page.$$eval('#sheet .note', ns => ns.map(n => n.textContent))).slice(0, 4), [
+    'Kept the first 1000 parts of 2×4; 5 more were left out.',
+    '2×4 came with no size to buy, so it has Kerf’s usual board. Check the sizes.',
+    'Kept the first 50 sizes of Ply; 2 more were left out.',
+    '1 name was cut short at 200 characters.']);
+  await page.click('#lkAdd');
+  const over = (await stored()).projects[(await stored()).current];
+  assert.equal(over.materials[0].parts.length, 1000);
+  assert.deepEqual(over.materials[0].stock.map(s => [s.len, s.price, s.have]), [[96, 5, 0]]);
+  assert.equal(over.materials[0].parts[3].name, 'A long name '.repeat(21).slice(0, 200));
+  assert.equal(over.materials[1].stock.length, 50);
+  assert.deepEqual(over.materials[1].parts.map(p => [p.name, p.qty, p.grain]), [['Side', 1, true], ['Back', 1, false], ['Spare', 0, true], ['Top', 1, true]], 'a part with no count or grain');
+  // Nothing in it that can be read: said, not added as an empty project. An empty project, as Kerf saves one, opens.
+  await page.click('#projBtn');
+  await pasteIn('{"kerf":1,"project":{"name":"Nothing","materials":[null,"board",{"kind":"board"}]}}');
+  await page.waitForFunction(() => document.getElementById('toast').classList.contains('show'), null, { timeout: 3000 });
+  assert.equal(await page.textContent('#toast'), 'That isn’t a Kerf project');
+  await pasteIn('https://kerf.junkdrawer.works/#project=' + encodeURIComponent('{"name":"Nothing","materials":[{"kind":"sheet"}]}'));
+  await page.waitForFunction(() => document.getElementById('toast').classList.contains('show'), null, { timeout: 3000 });
+  assert.equal(await page.textContent('#toast'), 'That link doesn’t hold a Kerf project');
+  await pasteIn('{"kerf":1,"project":{"name":"Empty","materials":[]}}');
+  await page.waitForSelector('#lkAdd', { timeout: 5000 });
+  assert.equal(await page.textContent('#sheet .lk b'), 'Empty');
+  await page.click('#lkx');
+  assert.equal((await stored()).order.length, 3, 'something unreadable was added');
+}
+
 // Opening Kerf writes nothing until something really changes. A first visit that only looks around leaves
 // storage empty, so carry.js can still bring projects over from junkdrawer.works/kerf/ on a later visit.
 await open(null);

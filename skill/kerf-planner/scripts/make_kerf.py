@@ -21,12 +21,17 @@ plan.json (lengths may be numbers in the plan's units, or strings the way a tape
 }
 
 Kerf stores every length in inches whatever the display units; this script does that conversion,
-checks that every part fits some stock, and exits 1 (printing why) if anything is wrong.
+checks that every part fits some stock and that the plan is within what Kerf opens (LIMITS), and exits 1
+(printing why) if anything is wrong.
 """
 import argparse, base64, json, math, re, sys, zlib
 from pathlib import Path
 
 DEFAULT_BASE = 'https://kerf.junkdrawer.works/'
+# What Kerf opens from a link or a file; past these it keeps the first and leaves the rest out (references/kerf-format.md).
+LIMITS = {'materials': 100, 'sizes': 50, 'parts': 1000, 'name': 200, 'len': 1200}
+SHEET_QTY = 300     # Kerf plans at most this many of one sheet part
+LONG_LINK = 2000    # characters; past this, offer the file before the link
 VULGAR = {'½': ' 1/2', '¼': ' 1/4', '¾': ' 3/4', '⅛': ' 1/8', '⅜': ' 3/8', '⅝': ' 5/8', '⅞': ' 7/8'}
 
 
@@ -91,8 +96,16 @@ def build(plan):
             return default
         return v
 
+    def name_ok(what, text):
+        if len(text) > LIMITS['name']:
+            errors.append(f'{what}: {len(text)} characters; Kerf keeps names and notes up to {LIMITS["name"]}')
+
+    def len_ok(what, v):
+        if v is not None and v > LIMITS['len'] + 1e-9:
+            errors.append(f'{what}: {show(v, units)} is longer than Kerf takes ({show(LIMITS["len"], units)})')
+
     project = {
-        'name': str(plan.get('name') or 'Untitled project')[:80],
+        'name': str(plan.get('name') or 'Untitled project'),
         'units': units,
         'kerf': setting('kerf', 3 / 25.4 if units == 'mm' else 0.125, 0, 1),
         'trim': setting('trim', 0, 0, 6),
@@ -100,10 +113,13 @@ def build(plan):
         'cur': str(plan.get('currency') or '$')[:3],
         'materials': [],
     }
+    name_ok('the project name', project['name'])
     mats = plan.get('materials')
     if not isinstance(mats, list) or not mats:
         errors.append('the plan has no materials')
         return project, errors, warnings
+    if len(mats) > LIMITS['materials']:
+        errors.append(f'{len(mats)} materials; Kerf opens up to {LIMITS["materials"]}')
 
     for mi, m in enumerate(mats):
         kind = m.get('kind')
@@ -111,8 +127,14 @@ def build(plan):
             errors.append(f'material {mi + 1}: kind must be "board" or "sheet", not {kind!r}')
             continue
         sheet = kind == 'sheet'
-        mname = str(m.get('name') or ('Sheet' if sheet else 'Board'))[:60]
-        out = {'kind': kind, 'name': mname, 'note': str(m.get('note') or '')[:80], 'stock': [], 'parts': []}
+        mname = str(m.get('name') or ('Sheet' if sheet else 'Board'))
+        out = {'kind': kind, 'name': mname, 'note': str(m.get('note') or ''), 'stock': [], 'parts': []}
+        name_ok(f'material {mi + 1} name', mname)
+        name_ok(f'{mname}: the note', out['note'])
+        if len(m.get('stock') or []) > LIMITS['sizes']:
+            errors.append(f'{mname}: {len(m["stock"])} sizes; Kerf opens up to {LIMITS["sizes"]} per material')
+        if len(m.get('parts') or []) > LIMITS['parts']:
+            errors.append(f'{mname}: {len(m["parts"])} parts; Kerf opens up to {LIMITS["parts"]} per material — split it into two materials')
 
         for si, s in enumerate(m.get('stock') or []):
             ln = L(s.get('len'))
@@ -128,6 +150,7 @@ def build(plan):
             if not have and (price is None or not isinstance(price, (int, float)) or price < 0):
                 errors.append(f'{mname}: stock {show(ln, units)} needs a price (a number), or "have": N if it\'s on hand')
                 continue
+            len_ok(f'{mname}: stock size {si + 1}', max(ln, wd or 0))
             st = {'len': ln, 'price': float(price or 0), 'have': have}
             if sheet:
                 st['wid'] = wd
@@ -137,8 +160,9 @@ def build(plan):
 
         trim = project['trim']
         for pi, p in enumerate(m.get('parts') or []):
-            pname = str(p.get('name') or '').strip()[:60]
+            pname = str(p.get('name') or '').strip()
             label = pname or f'part {pi + 1}'
+            name_ok(f'{mname} / part {pi + 1} name', pname)
             qty = p.get('qty', 1)
             if isinstance(qty, str) and qty.strip().isdigit():
                 qty = int(qty)
@@ -149,12 +173,16 @@ def build(plan):
             if ln is None or ln <= 0:
                 errors.append(f'{mname} / {label}: can\'t read the length {p.get("len")!r}')
                 continue
+            len_ok(f'{mname} / {label}', ln)
             q = {'name': pname, 'qty': qty, 'len': ln}
             if sheet:
                 wd = L(p.get('wid'))
                 if wd is None or wd <= 0:
                     errors.append(f'{mname} / {label}: sheet parts need a width too')
                     continue
+                len_ok(f'{mname} / {label} width', wd)
+                if qty > SHEET_QTY:
+                    warnings.append(f'{mname} / {label}: qty {qty}. Kerf plans at most {SHEET_QTY} of one sheet part — split it into two rows.')
                 grain = bool(p.get('grain', True))
                 q.update({'wid': wd, 'grain': grain})
                 fits = any(
@@ -244,7 +272,9 @@ def main():
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     print(summary(project))
     print(f'\nFile: {path}')
-    print(f'\nLink: {link(doc, a.base)}')
+    url = link(doc, a.base)
+    print(f'\nLink: {url}')
+    print(f'Link length: {len(url):,} characters' + ('. Long link: offer the file first.' if len(url) > LONG_LINK else ''))
     if not a.no_paste:
         print('\nPaste text (Kerf › Projects › paste box):')
         print(json.dumps(doc, separators=(',', ':'), ensure_ascii=False))

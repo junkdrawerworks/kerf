@@ -487,6 +487,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       parts: []
     };
   }
+  // What Other board and Other sheet start with.
+  function otherPreset(kind, units) { return kind === 'board' ? { name: 'Board', note: '', stock: units === 'mm' ? [[2400, 5]] : [[96, 5]] } : { name: 'Sheet', note: '', stock: units === 'mm' ? [[2440, 1220, 40]] : [[96, 48, 40]] }; }
   function part(name, qty, len, wid, grain) { var p = { id: uid(), name: name, qty: qty, len: len }; if (wid != null) { p.wid = wid; p.grain = grain !== false; } return p; }
   function blankProject(units) { return { id: uid(), name: 'Untitled project', units: units, kerf: units === 'mm' ? 3 / 25.4 : 0.125, trim: 0, keep: units === 'mm' ? 300 / 25.4 : 12, cur: CUR, updated: Date.now(), materials: [], done: {} }; }
   function sampleProject() {
@@ -1280,7 +1282,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function onClick(e) {
     var b = e.target.closest('button'); if (!b) return;
     if (b.dataset.add) {
-      var k = b.dataset.add.split(':'), kind = k[0], pre = k[1] === 'x' ? (kind === 'board' ? { name: 'Board', note: '', stock: U === 'mm' ? [[2400, 5]] : [[96, 5]] } : { name: 'Sheet', note: '', stock: U === 'mm' ? [[2440, 1220, 40]] : [[96, 48, 40]] }) : PRESETS[U][kind][+k[1]];
+      var k = b.dataset.add.split(':'), kind = k[0], pre = k[1] === 'x' ? otherPreset(kind, U) : PRESETS[U][kind][+k[1]];
       var m = materialFrom(kind, pre, U); P.materials.push(m); touch(); renderList(); resolve(); addPart(m, 'pname');
       // A board or sheet not on the list gets its name first, typed over the plain 'Board' or 'Sheet'.
       if (k[1] === 'x') { var nm = document.querySelector('.mat[data-mid="' + m.id + '"] .mat-name'); nm.focus(); nm.select(); }
@@ -1809,23 +1811,40 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }).join('');
     host.querySelectorAll('.pitem').forEach(function (b) { b.addEventListener('click', function () { DB.current = b.dataset.id; P = DB.projects[DB.current]; save(true); closeSheet(); applyProject(); }); });
   }
-  // Take only what Kerf knows, as the types it expects; a hand-edited file or a link can't break the page.
-  function cleanProject(o) {
+  // Take only what Kerf knows, as the types it expects; a hand-edited file or a link can't break the page. The limits
+  // are well past anything the cut list makes, so what Kerf saves opens again whole; anything past them is left out
+  // and said, in `notes`. So is a material with parts but no size to buy, which gets the size Other board or Other
+  // sheet starts with rather than losing its parts. A part with no count is one, and a sheet part is grain-locked
+  // unless it says otherwise, as in the cut list. Kerf's own files always carry both.
+  var LIMITS = { materials: 100, sizes: 50, parts: 1000, name: 200 };
+  function cleanProject(o, notes) {
     var p = o && (o.project || o);
     if (!p || !Array.isArray(p.materials)) throw new Error('not a project');
-    var num = function (v, lo, hi) { v = +v; return v > lo ? Math.min(v, hi) : 0; }, str = function (v, n) { return String(v == null ? '' : v).slice(0, n); };
+    notes = notes || [];
+    var long = 0, num = function (v, lo, hi) { v = +v; return v > lo ? Math.min(v, hi) : 0; };
+    var str = function (v, n) { v = String(v == null ? '' : v); if (v.length > n) long++; return v.slice(0, n); };
+    var first = function (a, n, what, of) { a = Array.isArray(a) ? a : []; if (a.length > n) notes.push('Kept the first ' + n + ' ' + what + (of ? ' of ' + of : '') + '; ' + plural(a.length - n, 'more was', 'more were') + ' left out.'); return a.slice(0, n); };
     var units = p.units === 'mm' ? 'mm' : 'in', q = blankProject(units);
-    q.name = str(p.name, 80) || 'Imported project';
+    q.name = str(p.name, LIMITS.name) || 'Imported project';
     if (+p.kerf >= 0 && +p.kerf <= 1) q.kerf = +p.kerf;
     if (+p.trim >= 0 && +p.trim <= 6) q.trim = +p.trim;
     if (+p.keep >= 0 && +p.keep <= 240) q.keep = +p.keep;
-    if (p.cur) q.cur = str(p.cur, 3);
-    q.materials = p.materials.slice(0, 40).map(function (m) {
-      var sheet = m && m.kind === 'sheet';
-      return { id: uid(), kind: sheet ? 'sheet' : 'board', name: str(m && m.name, 60) || (sheet ? 'Sheet' : 'Board'), note: str(m && m.note, 80),
-        stock: (Array.isArray(m && m.stock) ? m.stock : []).slice(0, 20).map(function (s) { var o = { id: uid(), len: num(s && s.len, 0, 1200), price: Math.round(num(s && s.price, -1, 1e5) * 100) / 100, have: Math.min(10, Math.max(0, (s && s.have) | 0)) }; if (sheet) o.wid = num(s && s.wid, 0, 1200); return o; }).filter(function (s) { return s.len > 0 && (!sheet || s.wid > 0); }),
-        parts: (Array.isArray(m && m.parts) ? m.parts : []).slice(0, 200).map(function (r) { return part(str(r && r.name, 60), Math.min(500, Math.max(0, (r && r.qty) | 0)), num(r && r.len, 0, 1200), sheet ? num(r && r.wid, 0, 1200) : null, sheet ? !!(r && r.grain) : null); }) };
-    }).filter(function (m) { return m.stock.length; });
+    if (p.cur) q.cur = String(p.cur).slice(0, 3);
+    q.materials = first(p.materials, LIMITS.materials, 'materials').map(function (m) {
+      m = m && typeof m === 'object' ? m : {};
+      var sheet = m.kind === 'sheet', name = str(m.name, LIMITS.name) || (sheet ? 'Sheet' : 'Board');
+      var c = { id: uid(), kind: sheet ? 'sheet' : 'board', name: name, note: str(m.note, LIMITS.name),
+        stock: first(m.stock, LIMITS.sizes, 'sizes', name).map(function (s) { var o = { id: uid(), len: num(s && s.len, 0, 1200), price: Math.round(num(s && s.price, -1, 1e5) * 100) / 100, have: Math.min(10, Math.max(0, (s && s.have) | 0)) }; if (sheet) o.wid = num(s && s.wid, 0, 1200); return o; }).filter(function (s) { return s.len > 0 && (!sheet || s.wid > 0); }),
+        parts: first(m.parts, LIMITS.parts, 'parts', name).map(function (r) {
+          r = r || {};
+          var qty = r.qty == null || r.qty === '' ? 1 : Math.min(500, Math.max(0, r.qty | 0));
+          return part(str(r.name, LIMITS.name), qty, num(r.len, 0, 1200), sheet ? num(r.wid, 0, 1200) : null, sheet ? r.grain !== false : null);
+        }) };
+      if (!c.stock.length && c.parts.length) { c.stock = materialFrom(c.kind, otherPreset(c.kind, units), units).stock; notes.push(name + ' came with no size to buy, so it has Kerf’s usual ' + (sheet ? 'sheet' : 'board') + '. Check the sizes.'); }
+      return c;
+    }).filter(function (m) { return m.stock.length; }); // with no size and no parts, there's nothing in it
+    if (!q.materials.length && p.materials.length) throw new Error('not a project'); // none of them could be read
+    if (long) notes.push(plural(long, 'name was', 'names were') + ' cut short at ' + LIMITS.name + ' characters.');
     q.from = sigOf(q);
     return q;
   }
@@ -1834,21 +1853,22 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function sigOf(p) { return linkSig(JSON.stringify(p, function (k, v) { return k === 'id' || k === 'updated' || k === 'done' || k === 'from' ? undefined : v; })); }
   function addProject(p) { DB.projects[p.id] = p; DB.order.unshift(p.id); DB.current = p.id; P = p; save(true); closeSheet(); applyProject(); toast('Opened “' + P.name + '”'); }
   function importText(t, how) {
-    var p; try { p = cleanProject(JSON.parse(t)); } catch (e) {
+    var p, notes = []; try { p = cleanProject(JSON.parse(t), notes); } catch (e) {
       // A link pasted here opens as it would from the address bar: on an iPhone a tapped link opens in Safari,
       // not in Kerf on the home screen, so copying it across is the way in.
       if (/k1[zj]|project(=|%3D)/i.test(t)) openLink(t); else toast('That isn’t a Kerf project');
       return;
     }
-    showImport(p, how);
+    showImport(p, how, notes);
   }
   // Shows what's coming in and asks before adding it, or offers the copy opened before, if it's still here.
-  function showImport(p, how) {
+  function showImport(p, how, notes) {
     var had = DB.order.filter(function (id) { return DB.projects[id] && DB.projects[id].from === p.from; })[0];
     var pieces = function (m) { return m.parts.reduce(function (a, q) { return a + (q.qty || 0); }, 0); };
     var title = { link: 'Open a project from a link', file: 'Open a project file', text: 'Open pasted project' }[how];
     openSheet('<div class="hd"><h2>' + title + '</h2><button class="btn sm sec" type="button" id="lkx">Not now</button></div><div class="bd">' +
       '<div class="lk"><b>' + esc(p.name) + '</b><ul>' + p.materials.map(function (m) { return '<li>' + esc(m.name) + ' — ' + plural(pieces(m), 'piece') + '</li>'; }).join('') + '</ul></div>' +
+      notes.map(function (n) { return '<p class="note">' + esc(n) + '</p>'; }).join('') +
       (had ? '<p class="note">You opened this project before; your copy is still in Projects.</p><div class="row"><button class="btn tape" type="button" id="lkOpen">Open my copy</button><button class="btn sec" type="button" id="lkAdd">Add another copy</button></div>'
         : '<div class="row"><button class="btn tape" type="button" id="lkAdd">Add to my projects</button></div><p class="note">It comes in as a new project; nothing you already have changes. Check the prices — they’re whatever the ' + { link: 'link', file: 'file', text: 'text' }[how] + ' came with.</p>') + '</div>');
     $('lkx').addEventListener('click', closeSheet);
@@ -1909,9 +1929,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     // linkText inside the chain, so a link cut short or badly escaped ends in the toast below too
     (function next(i) {
       if (i >= tries.length) return Promise.reject(new Error('no project'));
-      return Promise.resolve(tries[i]).then(linkText).then(function (t) { return cleanProject(JSON.parse(t)); })
+      var notes = [];
+      return Promise.resolve(tries[i]).then(linkText).then(function (t) { return { p: cleanProject(JSON.parse(t), notes), notes: notes }; })
         .catch(function (e) { if (e && /browser/.test(e.message)) throw e; return next(i + 1); });
-    })(0).then(function (p) { showImport(p, 'link'); }).catch(function (e) { toast(e && /browser/.test(e.message) ? e.message : 'That link doesn’t hold a Kerf project'); });
+    })(0).then(function (r) { showImport(r.p, 'link', r.notes); }).catch(function (e) { toast(e && /browser/.test(e.message) ? e.message : 'That link doesn’t hold a Kerf project'); });
   }
 
   // ---------- shop PDF ----------
