@@ -1041,6 +1041,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       return '<span class="chip' + (s.have ? ' have' : '') + '">' + dims + ' · ' + (s.have ? s.have + ' on hand' : esc(money(+s.price || 0))) + '</span>';
     }).join('');
   }
+  // A length in a field: in mm the bare number, so the field stays short (the cut list says it's in mm) and a phone can
+  // offer its number pad; in inches as a tape reads, with the letter keyboard for the ' and " marks.
+  function fieldLen(x, o) { return U === 'mm' ? fmt(x, { bare: true }) : fmt(x, o); }
+  function lenMode() { return U === 'mm' ? ' inputmode="decimal"' : ''; }
   function renderList() {
     var host = $('mats'), open = {};
     host.querySelectorAll('details.stock[open]').forEach(function (d) { open[d.dataset.mid] = 1; });
@@ -1054,16 +1058,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         h += '<div class="prow" data-pid="' + p.id + '"><span class="plet">' + letter(i) + '</span>' +
           '<input data-f="pname" value="' + esc(p.name) + '" aria-label="Part name" autocomplete="off" placeholder="Part">' +
           '<input class="pq mono" data-f="qty" value="' + (p.qty || '') + '" inputmode="numeric" aria-label="Quantity" autocomplete="off">' +
-          '<input class="mono" data-f="len" value="' + (p.len > 0 ? esc(fmt(p.len)) : '') + '" aria-label="Length" autocomplete="off" placeholder="' + (U === 'mm' ? '900' : '35 3/4') + '">' +
-          (sheet ? '<input class="mono" data-f="wid" value="' + (p.wid > 0 ? esc(fmt(p.wid)) : '') + '" aria-label="Width" autocomplete="off" placeholder="' + (U === 'mm' ? '400' : '16') + '"><button class="grain" type="button" data-a="grain" aria-pressed="' + (p.grain ? 'true' : 'false') + '" title="' + (p.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned') + '" aria-label="Keep grain along the length">' + ICON.grain + '</button>' : '') +
+          '<input class="mono" data-f="len" value="' + (p.len > 0 ? esc(fieldLen(p.len)) : '') + '"' + lenMode() + ' aria-label="Length" autocomplete="off" placeholder=""' + (U === 'mm' ? '900' : '35 3/4') + '">' +
+          (sheet ? '<input class="mono" data-f="wid" value="' + (p.wid > 0 ? esc(fieldLen(p.wid)) : '') + '"' + lenMode() + ' aria-label="Width" autocomplete="off" placeholder=""' + (U === 'mm' ? '400' : '16') + '"><button class="grain" type="button" data-a="grain" aria-pressed="' + (p.grain ? 'true' : 'false') + '" title="' + (p.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned') + '" aria-label="Keep grain along the length">' + ICON.grain + '</button>' : '') +
           '<button class="icon" type="button" data-a="delpart" aria-label="Remove ' + esc(p.name || 'part') + '">✕</button></div>';
       });
       h += '<button class="addpart" type="button" data-a="addpart">+ Add a part</button></div><div class="perr" data-err="' + m.id + '" hidden></div>' +
         '<details class="stock" data-mid="' + m.id + '"' + (open[m.id] ? ' open' : '') + '><summary><span class="chips">' + stockSummary(m) + '</span><span class="chev" aria-hidden="true">›</span><span class="sr">Edit stock and prices</span></summary><div class="stock-bd">' +
         '<div class="srow head"><span>' + (sheet ? 'Length' : 'Length') + '</span>' + (sheet ? '<span>Width</span>' : '') + '<span>Price</span><span>Source</span><span></span></div>';
       m.stock.forEach(function (s) {
-        h += '<div class="srow" data-sid="' + s.id + '"><input class="mono" data-f="slen" value="' + esc(fmt(s.len, { ft: !sheet })) + '" aria-label="Stock length" autocomplete="off">' +
-          (sheet ? '<input class="mono" data-f="swid" value="' + esc(fmt(s.wid)) + '" aria-label="Stock width" autocomplete="off">' : '') +
+        h += '<div class="srow" data-sid="' + s.id + '"><input class="mono" data-f="slen" value="' + esc(fieldLen(s.len, { ft: !sheet })) + '"' + lenMode() + ' aria-label="Stock length" autocomplete="off">' +
+          (sheet ? '<input class="mono" data-f="swid" value="' + esc(fieldLen(s.wid)) + '"' + lenMode() + ' aria-label="Stock width" autocomplete="off">' : '') +
           '<span class="money"><span>' + esc(CUR) + '</span><input class="mono" data-f="price" style="padding-left:' + (12 + Array.from(CUR).length * 9) + 'px" value="' + (s.have ? '' : (+s.price || 0).toFixed(2)) + '" inputmode="decimal" aria-label="Price" autocomplete="off"' + (s.have ? ' disabled placeholder="free"' : '') + '></span>' +
           '<select data-f="have" aria-label="Where it comes from"><option value="0"' + (s.have ? '' : ' selected') + '>Buy</option>' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return '<option value="' + n + '"' + (s.have === n ? ' selected' : '') + '>Have ' + n + '</option>'; }).join('') + '</select>' +
           '<button class="icon" type="button" data-a="delstock" aria-label="Remove this size">✕</button></div>';
@@ -1120,9 +1124,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var el = e.target, f = el.dataset && el.dataset.f; if (!f) return;
     var m = findMat(el); if (!m) return;
     var p = findPart(m, el), s = findStock(m, el);
-    if (p && (f === 'len' || f === 'wid') && p[f] > 0) el.value = fmt(p[f]);
+    if (p && (f === 'len' || f === 'wid') && p[f] > 0) el.value = fieldLen(p[f]);
     if (p && f === 'qty' && p.qty > 0 && el.value.trim() !== String(p.qty)) { el.value = p.qty; el.classList.remove('bad'); } // 600 becomes the 500 planned
-    if (s && (f === 'slen' || f === 'swid')) el.value = fmt(f === 'slen' ? s.len : s.wid, { ft: f === 'slen' && m.kind === 'board' });
+    if (s && (f === 'slen' || f === 'swid')) el.value = fieldLen(f === 'slen' ? s.len : s.wid, { ft: f === 'slen' && m.kind === 'board' });
     if (s && f === 'price' && !s.have) { el.value = (+s.price || 0).toFixed(2); el.classList.remove('bad'); }
   }
   // A count, a price or a stock size is usually typed over whole, so a tap selects it (after the tap, or iOS drops the
@@ -1523,6 +1527,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       '<p class="note">Kerf is the wood the blade turns to sawdust — about ⅛″ (3 mm) for most circular and table saw blades, 3/32″ for thin-kerf ones. Trimming the ends squares up factory ends that aren’t quite square; many people skip it for studs.</p></div>');
     function draw() {
       document.querySelectorAll('#uSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === U); });
+      ['sKerf', 'sTrim', 'sKeep'].forEach(function (id) { $(id).inputMode = U === 'mm' ? 'decimal' : 'text'; });
       $('sKerf').value = fmt(P.kerf); $('sTrim').value = fmt(P.trim || 0); $('sKeep').value = fmt(P.keep); $('sCur').value = CUR;
     }
     document.querySelectorAll('#uSeg button').forEach(function (b) { b.addEventListener('click', function () { P.units = U = b.dataset.v; touch(); draw(); renderHead(); renderList(); resolve(); }); });

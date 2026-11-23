@@ -677,6 +677,22 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   assert.equal(await page.textContent('#toast'), 'Deleted “Keep me”');
 }
 
+// In mm a length in a field is the bare number, with the number pad: "1233.5", not "1233.5 mm" cut short on a phone.
+{
+  await open(saved(project('Metrisch', [board('45×90', [{ len: 2400 / 25.4, price: 6.5 }], [{ name: 'Bein', qty: 2, len: 1233.5 / 25.4 }]),
+    sheet('18 mm plywood', [{ len: 2440 / 25.4, wid: 1220 / 25.4, price: 62 }], [{ name: 'Seite', qty: 1, len: 2033.5 / 25.4, wid: 1210 / 25.4 }])], { units: 'mm' })));
+  await view('list');
+  const fields = () => page.$$eval('#mats input.mono:not([data-f="qty"]):not([data-f="price"])', is => is.map(i => i.dataset.f + ' ' + i.value + ' ' + i.inputMode));
+  assert.deepEqual(await fields(), ['len 1233.5 decimal', 'slen 2400 decimal', 'len 2033.5 decimal', 'wid 1210 decimal', 'slen 2440 decimal', 'swid 1220 decimal']);
+  const len = page.locator('.prow[data-pid] input[data-f="len"]').first();
+  await len.fill('1250');
+  await len.blur();
+  assert.equal(await len.inputValue(), '1250');
+  await page.waitForTimeout(600);
+  await view('plan');
+  assert.match(await page.textContent('#planOut .steps'), /Bein · 2 × 1250 mm/, 'a bare number isn’t read as mm');
+}
+
 // A price typed with a decimal comma means what it says, and a thousands comma still reads as one.
 await open(saved(project('Komma', [board('45×90', [{ len: 2400 / 25.4, price: 6.5 }], [{ name: 'Bein', qty: 2, len: 700 / 25.4 }])], { units: 'mm', cur: '€' })));
 await view('list');
