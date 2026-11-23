@@ -1832,8 +1832,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var p; try { p = cleanProject(JSON.parse(t)); } catch (e) {
       // A link pasted here opens as it would from the address bar: on an iPhone a tapped link opens in Safari,
       // not in Kerf on the home screen, so copying it across is the way in.
-      var link = /#(k1[zj][A-Za-z0-9_-]+|project=\S+)/.exec(t);
-      if (link) openLink('#' + link[1]); else toast('That isn’t a Kerf project');
+      if (/k1[zj]|project(=|%3D)/i.test(t)) openLink(t); else toast('That isn’t a Kerf project');
       return;
     }
     addProject(p);
@@ -1842,8 +1841,30 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // ---------- opening a project from a link ----------
   // kerf/#k1z… carries a project as deflated JSON in base64url (#k1j… uncompressed); links from the
   // Kerf planner skill look like this. #project=<url-encoded JSON> works too, for writing one by hand.
+  // A Kerf link the way it's often found: with a full stop or bracket from the sentence around it, wrapped across lines
+  // (or with %20 where it broke), or inside an Outlook Safe Links address (…?url=https%3A%2F%2Fkerf…%23k1z…).
+  // Returns the links it could be, longest first: whatever follows a line break may be the link going on, or the
+  // next sentence, so each shorter one is tried in turn until one holds a project.
+  function linkHashes(t) {
+    t = String(t == null ? '' : t);
+    var w = /[?&]url=([^&\s]+)/.exec(t);
+    if (w && /k1[zj]|project/.test(w[1])) try { t = decodeURIComponent(w[1]); } catch (e) { }
+    t = t.replace(/%23/gi, '#');
+    var m = /#k1([zj])((?:[\w-]|\s|%20|%0[aAdD])*)/.exec(t), out = [];
+    if (m) {
+      var bits = m[2].split(/(?:\s|%20|%0[aAdD])+/).filter(Boolean);
+      for (var k = bits.length; k > 0; k--) out.push('#k1' + m[1] + bits.slice(0, k).join(''));
+      return out;
+    }
+    m = /#project=(\S+)/.exec(t);
+    if (m) { // the JSON ends at its last brace
+      var s = m[1], a = s.lastIndexOf('}'), b = s.toUpperCase().lastIndexOf('%7D'), end = Math.max(a < 0 ? 0 : a + 1, b < 0 ? 0 : b + 3);
+      out.push('#project=' + (end ? s.slice(0, end) : s));
+    }
+    return out;
+  }
   function linkText(hash) {
-    var m = /^#k1([zj])([A-Za-z0-9_-]+)$/.exec(hash || '');
+    var m = /^#k1([zj])([A-Za-z0-9_-]+)/.exec(hash || '');
     if (m) {
       var b = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
       var bin = atob(b), bytes = new Uint8Array(bin.length);
@@ -1857,16 +1878,20 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   function linkSig(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) >>> 0; return h.toString(36) + s.length.toString(36); }
   function checkLink() {
-    var hash = location.hash; if (!/^#(k1[zj]|project=)/.test(hash)) return;
+    var hash = location.hash; if (!/^#(k1|project=)/.test(hash)) return;
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { }
     openLink(hash);
   }
   // Shows what a link holds and asks before adding it, whether it came in the address or was pasted into Projects.
-  function openLink(hash) {
+  function openLink(text) {
+    var tries = linkHashes(text), hash;
     // linkText inside the chain, so a link cut short or badly escaped ends in the toast below too
-    Promise.resolve(hash).then(linkText).then(function (t) {
-      if (!t) return;
-      var p = cleanProject(JSON.parse(t)); p.from = linkSig(hash);
+    (function next(i) {
+      if (i >= tries.length) return Promise.reject(new Error('no project'));
+      return Promise.resolve(tries[i]).then(linkText).then(function (t) { var p = cleanProject(JSON.parse(t)); hash = tries[i]; return p; })
+        .catch(function (e) { if (e && /browser/.test(e.message)) throw e; return next(i + 1); });
+    })(0).then(function (p) {
+      p.from = linkSig(hash);
       var had = DB.order.filter(function (id) { return DB.projects[id] && DB.projects[id].from === p.from; })[0];
       var pieces = function (m) { return m.parts.reduce(function (a, q) { return a + (q.qty || 0); }, 0); };
       openSheet('<div class="hd"><h2>Open a project from a link</h2><button class="btn sm sec" type="button" id="lkx">Not now</button></div><div class="bd">' +

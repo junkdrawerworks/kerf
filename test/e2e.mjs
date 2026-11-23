@@ -248,8 +248,17 @@ assert.ok(await page.isHidden('#sheet'), 'Projects closes once the file is open'
 assert.equal(await page.textContent('.total'), '$70.76');
 assert.equal((await stored()).order.length, 3);
 
+// A link copied with a bit more or less than it should still opens: a full stop or bracket from the sentence around it,
+// or %20 where a line wrapped (the address bar keeps the link, so it's the page that has to cope).
+for (const [what, hash] of [['a full stop after it', linkTo(MUDROOM) + '.'], ['a bracket after it', linkTo(MUDROOM) + ')'],
+  ['%20 inside it', linkTo(MUDROOM).slice(0, 300) + '%20' + linkTo(MUDROOM).slice(300)], ['a quote after it', linkTo(MUDROOM) + '%22']]) {
+  await open(null, hash);
+  await page.waitForSelector('#lkAdd', { timeout: 5000 }).catch(() => assert.fail(`a link with ${what} doesn’t open`));
+  assert.match(await page.textContent('#sheet .lk'), /^Mudroom bench/);
+}
+
 // A broken link says so instead of failing quietly, and a good link after it in the same tab still opens.
-for (const bad of ['#k1zABCDE', '#project=%E0%A4%A', '#project={"name":"50% off bench"}']) {
+for (const bad of ['#k1zABCDE', '#project=%E0%A4%A', '#project={"name":"50% off bench"}', '#k1z!!!!', '#k1j', '#k1']) {
   await open(null, bad);
   await page.waitForFunction(() => document.getElementById('toast').classList.contains('show'), null, { timeout: 3000 }).catch(() => {});
   assert.equal(await page.textContent('#toast'), 'That link doesn’t hold a Kerf project', bad + ' says nothing');
@@ -262,6 +271,7 @@ await page.click('#lkx');
 // not in Kerf on the home screen). A broken one says so, and text that's neither says that.
 {
   const paste = text => page.evaluate(t => {
+    document.getElementById('toast').classList.remove('show'); // so a toast is this paste's
     const data = new DataTransfer(); data.setData('text/plain', t);
     document.getElementById('pjPaste').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   }, text);
@@ -274,7 +284,23 @@ await page.click('#lkx');
   await page.click('#lkAdd');
   assert.equal(await page.inputValue('#pname'), 'Pasted bench');
   await page.click('#projBtn');
+  // A link wrapped across lines (as plain-text mail does at 60 or 76 characters), with the next sentence after it, and
+  // one rewritten by Outlook's Safe Links, open the same way.
+  const named = name => 'https://kerf.junkdrawer.works/' + linkTo({ kerf: 1, project: { ...MUDROOM.project, name } });
+  const pasted = [['wrapped at 60', 'Here it is:\n' + named('Wrapped bench').match(/.{1,60}/g).join('\n') + '\nTap it to open Kerf.', 'Wrapped bench'],
+    ['wrapped with spaces', named('Spaced bench').match(/.{1,76}/g).join(' \r\n'), 'Spaced bench'],
+    ['in Safe Links', 'https://nam12.safelinks.protection.outlook.com/?url=' + encodeURIComponent(named('Outlook bench')) + '&data=05%7C02%7C%7Cabc&sdata=xyz%3D&reserved=0', 'Outlook bench'],
+    ['in brackets', '[Open in Kerf](' + named('Markdown bench') + ').', 'Markdown bench']];
+  for (const [what, text, name] of pasted) {
+    await paste(text);
+    await page.waitForSelector('#lkAdd', { timeout: 5000 }).catch(() => assert.fail(`a link ${what} doesn’t open`));
+    assert.equal(await page.textContent('#sheet .lk b'), name, what);
+    await page.click('#lkx');
+    await page.click('#projBtn');
+  }
   await paste('https://kerf.junkdrawer.works/#k1zABCDE');
+  assert.equal(await toastSays(), 'That link doesn’t hold a Kerf project');
+  await paste('https://kerf.junkdrawer.works/#k1z!!!!');
   assert.equal(await toastSays(), 'That link doesn’t hold a Kerf project');
   await paste('a bench, about four feet long');
   assert.equal(await toastSays(), 'That isn’t a Kerf project');
