@@ -891,6 +891,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // A board's last part comes off with no cut only when it's all that's left: nothing past it (a sliver
   // thinner than the kerf still has to be cut away) and no far end to square up.
   function lastIsLeft(b) { return !(b.trim > 0) && b.cap - b.need < 1 / 32; }
+  // An offcut is worth keeping when the length shown for it (to the sixteenth, or the half millimetre) is at least the
+  // one shown for Keep offcuts over: a 300 mm offcut that works out a hair short of 300 mm is still 300 mm.
+  function worthKeeping(len) { var grid = function (x) { return Math.round(U === 'mm' ? x * 50.8 : x * 16); }; return grid(len) >= grid(P.keep); }
 
   // ---------- sheets: guillotine cutting (every cut runs edge to edge) ----------
   var SORTS = [
@@ -1601,7 +1604,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     // 2 5/8 in offcut". The drawing itself is left out for it.
     var said = m.items.map(function (b, bi) {
       return '<li>Board ' + (bi + 1) + ', ' + esc(sayLen(b.stock.len, { ft: true })) + (b.stock.have ? ', yours' : '') + ': ' + (b.trim > 0 ? 'trim ' + esc(sayLen(b.trim)) + ' off each end, ' : '') +
-        b.pieces.map(function (p) { return letter(p.pi) + ' ' + esc(sayLen(p.len)); }).join(', ') + (b.offcut > 0 ? ', leaves a ' + esc(sayLen(b.offcut)) + ' offcut' + (b.offcut >= P.keep ? ' worth keeping' : '') : '') + '</li>';
+        b.pieces.map(function (p) { return letter(p.pi) + ' ' + esc(sayLen(p.len)); }).join(', ') + (b.offcut > 0 ? ', leaves a ' + esc(sayLen(b.offcut)) + ' offcut' + (worthKeeping(b.offcut) ? ' worth keeping' : '') : '') + '</li>';
     }).join('');
     var s = '<ol class="sr">' + said + '</ol><svg class="diag" viewBox="0 0 ' + width + ' ' + H + '" aria-hidden="true">' + tapeRuler(labelW, drawW, maxLen, 2);
     m.items.forEach(function (b, bi) {
@@ -1622,7 +1625,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (restW > 0.5) {
         s += '<rect class="dg-scrap" x="' + cx.toFixed(1) + '" y="' + y + '" width="' + restW.toFixed(1) + '" height="' + rowH + '"/>';
         // a label only where it fits (about 6.6px a character): the length alone if "keep" makes it too wide
-        var keep = b.offcut >= P.keep, t = (keep ? 'keep ' : '') + fmt(b.offcut), fits = function (t) { return t.length * 6.6 + 8 <= restW; };
+        var keep = worthKeeping(b.offcut), t = (keep ? 'keep ' : '') + fmt(b.offcut), fits = function (t) { return t.length * 6.6 + 8 <= restW; };
         if (!fits(t)) t = fmt(b.offcut);
         if (fits(t)) s += '<text class="dg-scrapt" x="' + (cx + restW / 2).toFixed(1) + '" y="' + (y + rowH / 2) + '" text-anchor="middle">' + esc(t) + '</text>';
       }
@@ -1726,7 +1729,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             t.cuts.push({ id: id, meas: measH(p.len), what: name(p.pi), sub: (k === 0 ? 'Measure from the ' + (it.trim > 0 ? 'squared ' : '') + 'end, cut on the waste side of the mark' : 'Measure from the fresh end') + (far ? ' — this cut squares up the far end too' : '') });
           });
           // With end trim, the offcut still has its factory end: it's that much longer on the bench than once squared.
-          if (it.offcut > 0) t.note = 'Leaves a ' + fmtH(it.offcut + it.trim) + ' offcut' + (it.trim > 0 ? ' (' + fmtH(it.offcut) + ' once its end is squared)' : '') + (it.offcut >= P.keep ? ' — worth keeping' : '');
+          if (it.offcut > 0) t.note = 'Leaves a ' + fmtH(it.offcut + it.trim) + ' offcut' + (it.trim > 0 ? ' (' + fmtH(it.offcut) + ' once its end is squared)' : '') + (worthKeeping(it.offcut) ? ' — worth keeping' : '');
         } else {
           it.steps.forEach(function (st) {
             var g = st.gives, tag = function (g) { return g.it.pi + ' ' + g.l.toFixed(4) + '×' + g.w.toFixed(4) + (g.rot ? ' turned' : ''); };
@@ -1735,7 +1738,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: measH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + pieceName(st.on, fmtH) + stepGives(st, name, ' → '), sub: st.type === 'rip' ? 'Along the grain — set the fence at ' + fmtH(st.at) + ', or mark it and cut on the waste side' : 'Across the grain — measure from the end, cut on the waste side' });
           });
           // What's left that's worth keeping, at least the smallest offcut worth keeping each way.
-          var keep = it.spare.filter(function (f) { return f.w >= P.keep && f.h >= P.keep; });
+          var keep = it.spare.filter(function (f) { return worthKeeping(f.w) && worthKeeping(f.h); });
           if (keep.length) t.note = 'Leaves ' + keep.map(function (f) { return 'a ' + fmtH(f.w) + ' × ' + fmtH(f.h) + ' piece'; }).join(' and ') + ' — worth keeping';
         }
         tasks.push(t);
@@ -2251,7 +2254,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           if (rest > 0.5) {
             hatch(cx, y, rest, 24);
             // its length, with "keep" when it's worth keeping and there's room
-            var t = [(b.offcut >= P.keep ? 'keep ' : '') + fmt(b.offcut), fmt(b.offcut)].filter(function (c) { return textW('H', 7.5, c) < rest - 4; })[0];
+            var t = [(worthKeeping(b.offcut) ? 'keep ' : '') + fmt(b.offcut), fmt(b.offcut)].filter(function (c) { return textW('H', 7.5, c) < rest - 4; })[0];
             if (t) { var tw = textW('H', 7.5, t); rect(cx + (rest - tw) / 2 - 1.5, y + 8, tw + 3, 9.5, '#FFFFFF'); text('H', 7.5, cx + (rest - tw) / 2, y + 15, t, '#50575E'); }
           }
           rect(x, y, b.stock.len * px, 24, null, '#B08447', 0.8);

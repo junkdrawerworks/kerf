@@ -23,7 +23,7 @@
 - **Shop PDF.** A printable sheet with the shopping list and every diagram, drawn to read in black and white: parts white, offcuts and what's left of a sheet hatched and labelled with their size.
 - **Projects** are kept in the browser's local storage, with no account and no server. To move one to another device, save it as a file or copy it as text, then open or paste it there. With Kerf open in two windows, a project added, changed or deleted in one shows up in the other. If the browser won't keep them (its storage is full, or cookies are blocked), a strip under the top bar says so until a save works, with a button to save the project as a file.
 
-Settings per project: saw kerf (⅛″ by default), trimming each board end square, the smallest offcut worth keeping, and the currency sign. The preset prices are examples; change them to what your store charges.
+Settings per project: saw kerf (⅛″ by default), trimming each board end square, the smallest offcut worth keeping (an offcut that shows as that length counts, though the sums leave it a hair short), and the currency sign. The preset prices are examples; change them to what your store charges.
 
 ## How it plans
 
@@ -92,6 +92,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - **Sheets:** in 200 random jobs, every part is on its sheet at the right size, no two parts overlap once the kerf is counted, and grain-locked parts are never turned. Every part on a sheet is named by exactly one step (the cut that gives it, the cut that leaves it, or the note that it is the whole sheet), in 200 more seeded jobs full of parts that fill what a cut leaves exactly. More than 300 of one part is reported, not quietly left out. One sheet on hand and the same size to buy plan one free and one bought. Two ¾ plywood jobs that cost more when the shuffle had half the work come out as cheap as the old time limit found them.
 - **Tips:** the example's tip saves what it says; a 40-piece workbench, too big for the exact search, gets no tip promising a total its parts as they are can already reach; and two plywood seats free to turn get tips that save exactly what they say.
 - **Same plan anywhere:** with the clock slowed to a crawl, the example, a bigger board job and a plywood cabinet come out exactly as they do at full speed.
+- **Offcuts worth keeping:** a 300 mm offcut with Keep offcuts over at 300 mm, and an 11 31/32″ one shown as 12″ with it at 12″, are worth keeping at the saw; a 299 mm one isn't.
 - **Ticks stay on their cuts:** over 400 seeded random edits, wherever an edit keeps a material's tick key, every cut the saw shows for it reads as before; switching units keeps the keys.
 - **Plans kept between edits:** in a project with a board and a sheet material, each of 35 edits plans again only the materials it changes (nothing for a rename, only the plywood for a part's grain, both for the kerf), and the plan Kerf keeps is the one a fresh start finds, down to the sizes and parts it points at, also when another window's save brings a new copy of the project.
 

@@ -439,7 +439,7 @@ console.log('ticks stay on their cuts');
   // aside: renaming a part keeps its ticks). Seeded random edits to a project with a board and a sheet material.
   const saw = () => new Function([
     ...SOLVER, 'var P = null, RES = null, CUR = "$";', line('var PLANS = '),
-    ...['plural', 'sayLen', 'lastIsLeft', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'sawTasks', 'tickKeys'].map(fn),
+    ...['plural', 'sayLen', 'lastIsLeft', 'worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'sawTasks', 'tickKeys'].map(fn),
     'return { solve: function (p) { P = p; U = p.units; solveAll(); var t = sawTasks(); return { keys: tickKeys(t), tasks: t }; } };'
   ].join('\n'))();
   const R = rng(11), pick = a => a[Math.floor(R() * a.length)], q16 = x => Math.round(x * 16) / 16;
@@ -504,6 +504,28 @@ console.log('ticks stay on their cuts');
     const inches = page.solve(p).keys; p.units = 'mm';
     check(JSON.stringify(page.solve(p).keys) === JSON.stringify(inches), 'switching to millimetres changed a tick key');
   }
+}
+
+console.log('offcuts worth keeping');
+{
+  // An offcut as long as Keep offcuts over is worth keeping, though the sums leave it a hair short: 2400 mm less 1980,
+  // 114 and two 3 mm kerfs is 300 mm, and came to 11.811023622047232" against a keep of 11.811023622047244".
+  const saw = new Function([
+    ...SOLVER, 'var P = null, RES = null, CUR = "$";', line('var PLANS = '),
+    ...['plural', 'sayLen', 'lastIsLeft', 'worthKeeping', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'sawTasks'].map(fn),
+    'return function (p) { P = p; U = p.units; PLANS = {}; solveAll(); return sawTasks().map(function (t) { return t.note || ""; }); };'
+  ].join('\n'))();
+  const mm = x => x / 25.4;
+  const proj = (units, kerf, keep, m) => ({ name: 'P', units, kerf, trim: 0, keep, cur: '$', materials: [Object.assign({ id: 'm', name: 'M', note: '' }, m)] });
+  const jobs = [
+    ['a 300 mm offcut, keeping 300 mm', proj('mm', mm(3), mm(300), { kind: 'board', stock: [{ id: 's', len: mm(2400), price: 5, have: 0 }], parts: [{ id: 'a', name: 'Rail', qty: 1, len: mm(1980) }, { id: 'b', name: 'Block', qty: 1, len: mm(114) }] }), ['Leaves a 300 mm offcut — worth keeping']],
+    ['a 299 mm offcut, keeping 300 mm', proj('mm', mm(3), mm(300), { kind: 'board', stock: [{ id: 's', len: mm(2400), price: 5, have: 0 }], parts: [{ id: 'a', name: 'Rail', qty: 1, len: mm(1981) }, { id: 'b', name: 'Block', qty: 1, len: mm(114) }] }), ['Leaves a 299 mm offcut']],
+    // 11 31/32" shows as 12": the saw says a 12" offcut, so it's worth keeping when 12" are.
+    ['an 11 31/32" offcut, keeping 12"', proj('in', 3 / 32, 12, { kind: 'board', stock: [{ id: 's', len: 96, price: 5, have: 0 }], parts: [{ id: 'a', name: 'Rail', qty: 1, len: 83 + 15 / 16 }] }), ['Leaves a 12″ offcut — worth keeping']],
+    ['an 11 7/8" offcut, keeping 12"', proj('in', 0.125, 12, { kind: 'board', stock: [{ id: 's', len: 96, price: 5, have: 0 }], parts: [{ id: 'a', name: 'Rail', qty: 1, len: 84 }] }), ['Leaves a 11 <span class="fr"><span class="sr">7/8</span><span aria-hidden="true"><sup>7</sup>⁄<sub>8</sub></span></span>″ offcut']],
+    ['a sheet leaving 2440 × 300 mm, keeping 300 mm', proj('mm', mm(3), mm(300), { kind: 'sheet', stock: [{ id: 's', len: mm(2440), wid: mm(1220), price: 50, have: 0 }], parts: [{ id: 'a', name: 'Side', qty: 1, len: mm(2440), wid: mm(917), grain: true }] }), ['Leaves a 2440 mm × 300 mm piece — worth keeping']],
+  ];
+  for (const [what, p, want] of jobs) { const got = saw(p); check(JSON.stringify(got) === JSON.stringify(want), `${what}: the saw says ${JSON.stringify(got)}, want ${JSON.stringify(want)}`); }
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall good');
