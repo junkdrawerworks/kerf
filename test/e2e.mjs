@@ -405,6 +405,7 @@ assert.equal((await stored()).order.length, 3);
       await page.click('#lkAdd');
       await view('list');
       assert.deepEqual(await cutList(), want, 'make_kerf.py’s link in the cut list');
+      assert.equal(await page.inputValue('#pnotes'), 'Pocket screws: 16 × 2½″ for the frame\nFinish: two coats of wipe-on poly', 'make_kerf.py’s notes');
       await page.click('#projBtn');
       await page.setInputFiles('#pjFile', path);
       await page.waitForSelector('#lkAdd');
@@ -547,6 +548,7 @@ await page.click('#lkx');
     sheet('¾ maple plywood', sizes, [{ name: 'Side', qty: 4, len: 30, wid: 23.25, grain: false }, { name: 'Shelf', qty: 6, len: 22.5, wid: 11.25 }]),
   ], { units: 'mm', kerf: 0.09375, trim: 0.5, edge: 0.25, keep: 18, cur: '€' });
   big.materials[1].note = 'A1 grade';
+  big.notes = 'Hinges: 4 × 35 mm cup\n\nEdge band the shelf fronts';
   await open(saved(big));
   await page.click('#projBtn');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#pjExport')]);
@@ -561,13 +563,14 @@ await page.click('#lkx');
   const many = Array.from({ length: 1005 }, (_, i) => ({ name: 'Slat ' + i, qty: 0, len: 20 }));
   many[3] = { name: 'A long name '.repeat(21), qty: 2, len: 30 }; // 252 characters
   await page.click('#projBtn');
-  await pasteIn(JSON.stringify({ kerf: 1, project: { name: 'Over the limits', materials: [
+  await pasteIn(JSON.stringify({ kerf: 1, project: { name: 'Over the limits', notes: 'Glue up the top. '.repeat(118), materials: [
     { kind: 'board', name: '2×4', parts: many },
     { kind: 'sheet', name: 'Ply', stock: Array.from({ length: 52 }, () => ({ len: 96, wid: 48, price: 58 })), parts: [{ name: 'Side', len: 30, wid: 12 }, { name: 'Back', qty: null, len: 30, wid: 20, grain: false }, { name: 'Spare', qty: 0, len: 10, wid: 10 }, { name: 'Top', qty: '', len: 30, wid: 20 }] },
   ] } }));
   await page.waitForSelector('#lkAdd', { timeout: 5000 });
   assert.equal(await page.textContent('#sheet h2'), 'Open pasted project');
-  assert.deepEqual((await page.$$eval('#sheet .note', ns => ns.map(n => n.textContent))).slice(0, 4), [
+  assert.deepEqual((await page.$$eval('#sheet .note', ns => ns.map(n => n.textContent))).slice(0, 5), [
+    'The notes were cut short at 2,000 characters.',
     'Kept the first 1000 parts of 2×4; 5 more were left out.',
     '2×4 came with no size to buy, so it has Kerf’s usual board. Check the sizes.',
     'Kept the first 50 sizes of Ply; 2 more were left out.',
@@ -578,6 +581,7 @@ await page.click('#lkx');
   assert.deepEqual(over.materials[0].stock.map(s => [s.len, s.price, s.have]), [[96, 5, 0]]);
   assert.equal(over.materials[0].parts[3].name, 'A long name '.repeat(21).slice(0, 200));
   assert.equal(over.materials[1].stock.length, 50);
+  assert.equal(over.notes, 'Glue up the top. '.repeat(118).slice(0, 2000));
   assert.deepEqual(over.materials[1].parts.map(p => [p.name, p.qty, p.grain]), [['Side', 1, true], ['Back', 1, false], ['Spare', 0, true], ['Top', 1, true]], 'a part with no count or grain');
   // Nothing in it that can be read: said, not added as an empty project. An empty project, as Kerf saves one, opens.
   await page.click('#projBtn');
@@ -592,6 +596,29 @@ await page.click('#lkx');
   assert.equal(await page.textContent('#sheet .lk b'), 'Empty');
   await page.click('#lkx');
   assert.equal((await stored()).order.length, 3, 'something unreadable was added');
+}
+
+// A project's notes (hardware, glue-ups, finish) sit at the foot of the cut list, are saved with it, and print on the
+// shop PDF's first page under the shopping list, line for line, a blank line kept as a gap; ⅛, which the PDF's fonts
+// don't have, as 1/8. A project with none prints no heading for them.
+{
+  await open(saved(project('Bench', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 4, len: 16.5 }])])));
+  await view('list');
+  assert.equal(await page.inputValue('#pnotes'), '');
+  assert.ok(!pdfRuns(await shopPdf()).some(r => r.text === 'NOTES'), 'a project with no notes prints a heading for them');
+  const typed = 'Pocket screws: 16 × 2½″\n\nFinish: wipe-on poly; leave the 1⅛″ dowels bare';
+  await page.fill('#pnotes', typed);
+  await page.waitForFunction(() => (localStorage.getItem('kerf.v1') || '').includes('dowels bare'), null, { timeout: 5000 });
+  await page.reload();
+  await page.waitForSelector('#planOut > *', { state: 'attached' });
+  await view('list');
+  assert.equal(await page.inputValue('#pnotes'), typed, 'the notes weren’t kept through a reload');
+  const first = pdfPages(await shopPdf())[0], texts = first.map(r => r.text), at = texts.indexOf('NOTES');
+  assert.ok(at > texts.indexOf('Total'), 'the notes aren’t under the shopping list on the shop PDF’s first page');
+  assert.deepEqual(texts.slice(at + 1, at + 3), ['Pocket screws: 16 \xd7 2\xbd"', 'Finish: wipe-on poly; leave the 1 1/8" dowels bare'], 'the shop PDF’s notes');
+  assert.ok(first[at + 2].y < first[at + 1].y - 15, 'the blank line between the notes left no gap');
+  await page.fill('#pnotes', '');
+  await page.waitForFunction(() => !(localStorage.getItem('kerf.v1') || '').includes('"notes"'), null, { timeout: 5000 });
 }
 
 // Opening Kerf writes nothing until something really changes. A first visit that only looks around leaves
@@ -868,7 +895,7 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   }
   // The text in every field is 16px or more, in the cut list and in the dialogs.
   const small = sel => page.$$eval(sel, els => els.filter(e => parseFloat(getComputedStyle(e).fontSize) < 16).map(e => e.dataset.f || e.id || e.tagName));
-  assert.deepEqual(await small('#mats input, #mats select'), [], 'fields in the cut list under 16px');
+  assert.deepEqual(await small('#mats input, #mats select, #pnotes'), [], 'fields in the cut list under 16px');
   for (const [btn, done] of [['#setBtn', '#stx'], ['#projBtn', '#pjx']]) {
     await page.click(btn);
     assert.deepEqual(await small('#sheet input:not([type=file]), #sheet select, #sheet textarea'), [], 'fields in a dialog under 16px');
@@ -1795,6 +1822,12 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
     assert.deepEqual(await edit('pname', 0, 'Long leg'), [], 'renaming a part planned again');
     assert.deepEqual(await edit('pname', 3, 'Bench top'), [], 'renaming a part too big for any sheet planned again');
     assert.match(await cp.textContent('.sheetmat .perr'), /^Bench top \(100″ × 30″\) won’t fit/, 'the cut list has the old name');
+    // The project's notes aren't anything a plan is worked out from: typing them saves, and solves nothing.
+    const solved = await cp.evaluate(() => solves);
+    await cp.fill('#pnotes', 'Glue the top');
+    await cp.waitForFunction(() => (localStorage.getItem('kerf.v1') || '').includes('Glue the top'), null, { timeout: 5000 });
+    assert.equal(await cp.evaluate(() => solves), solved, 'typing the notes solved the project again');
+    assert.deepEqual(await newlyPlanned(), [], 'typing the notes planned again');
     // Both seen on the Plan tab, where the plan is drawn once it shows.
     const plan = () => cp.evaluate(() => [...document.getElementById('planOut').children].filter(c => c.id !== 'tips').map(c => c.outerHTML).join('') + document.getElementById('sawOut').innerHTML);
     await cp.click('#tabs button[data-t="plan"]');

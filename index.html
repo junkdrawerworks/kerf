@@ -164,6 +164,9 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .lbtn:hover{text-decoration:underline;text-underline-offset:3px}
 .addmat{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:12px;border:1px dashed var(--line2);border-radius:var(--r);background:color-mix(in srgb,var(--surface) 60%,transparent)}
 .addmat .lbl{font:700 12px var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin-right:4px}
+.notes{display:block;margin-top:14px}
+.notes .lbl{display:block;font:700 12px var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin:0 0 6px}
+.notes textarea{font:16px/1.4 var(--body);min-height:80px;resize:vertical}
 .pbtn{background:var(--surface);border:1px solid var(--line2);border-radius:7px;padding:5px 10px;font:600 13.5px var(--body);color:var(--ink)}
 .pbtn:hover{border-color:var(--ink3)}
 .pbtn small{color:var(--ink3);font-weight:500}
@@ -451,6 +454,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     <section class="pane list" aria-label="Cut list">
       <div class="pane-hd lhd"><h2>What you need to cut</h2><span class="note" id="unitNote"></span></div>
       <div class="mats" id="mats"></div>
+      <label class="notes"><span class="lbl">Notes</span><textarea id="pnotes" maxlength="2000" rows="3" placeholder="Hardware, glue-ups, finish, a spare board. They print on the shop PDF."></textarea></label>
     </section>
     <section class="pane plan" aria-label="Plan">
       <div class="right-tabs"><div class="seg" id="rseg"><button type="button" data-t="plan">Plan</button><button type="button" data-t="saw">At the saw</button></div></div>
@@ -664,6 +668,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       fix(p, 'units', function (v) { return v === 'in' || v === 'mm'; }, function () { return 'in'; });
       fix(p, 'kerf', num, toNum(0.125)); fix(p, 'trim', num, toNum(0)); fix(p, 'keep', num, toNum(12));
       if (p.edge !== undefined) fix(p, 'edge', num, toNum(0)); // none, in a project saved before sheet edges could be trimmed, is 0
+      if (p.notes !== undefined) fix(p, 'notes', str, toStr(''));
       fix(p, 'cur', str, toStr('$')); fix(p, 'updated', num, toNum(0)); fix(p, 'done', goodDone, function () { return {}; });
       list(p, 'materials').forEach(function (m) {
         fix(m, 'kind', function (v) { return v === 'board' || v === 'sheet'; }, function () { return 'board'; });
@@ -2431,6 +2436,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   function renderHead() {
     $('pname').value = P.name; $('pTitle').textContent = P.name || 'Kerf'; // the page's heading, for a screen reader
+    $('pnotes').value = P.notes || '';
     $('unitNote').textContent = U === 'mm' ? 'Lengths in mm' : 'Lengths in inches — 35 3/4, 2\' 11 3/4", 910mm all work';
     var ex = $('exampleBar');
     ex.innerHTML = P.example ? '<div class="example"><span>This is an example project — change anything, or start your own.</span><button class="btn sm" type="button" id="exNew">New project</button></div>' : '';
@@ -2587,7 +2593,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // and said, in `notes`. So is a material with parts but no size to buy, which gets the size Other board or Other
   // sheet starts with rather than losing its parts. A part with no count is one, and a sheet part is grain-locked
   // unless it says otherwise, as in the cut list. Kerf's own files always carry both.
-  var LIMITS = { materials: 100, sizes: 50, parts: 1000, name: 200 };
+  var LIMITS = { materials: 100, sizes: 50, parts: 1000, name: 200, notes: 2000 };
   // The most of one part a count holds. Kerf plans at most 500 of one board part and 300 of one sheet part, and says
   // so for a count past that, which keeps what was typed (or what a link or file asked for) rather than quietly less.
   var MAXQTY = 9999;
@@ -2605,6 +2611,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (+p.edge >= 0 && +p.edge <= 6) q.edge = +p.edge;
     if (+p.keep >= 0 && +p.keep <= 240) q.keep = +p.keep;
     if (p.cur) q.cur = String(p.cur).slice(0, 3);
+    if (typeof p.notes === 'string' && p.notes.trim()) {
+      if (p.notes.length > LIMITS.notes) notes.push('The notes were cut short at ' + LIMITS.notes.toLocaleString('en-US') + ' characters.');
+      q.notes = p.notes.slice(0, LIMITS.notes);
+    }
     q.materials = first(p.materials, LIMITS.materials, 'materials').map(function (m) {
       m = m && typeof m === 'object' ? m : {};
       var sheet = m.kind === 'sheet', name = str(m.name, LIMITS.name) || (sheet ? 'Sheet' : 'Board');
@@ -2811,6 +2821,17 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     // the offcuts worth keeping, under the shopping list as on screen
     var keep = keepers();
     if (keep.length) { pdfLines('H', 9, ['Offcuts worth keeping:'].concat(keep.map(function (k, i) { return k + (i < keep.length - 1 ? ',' : ''); })), ' ', PW - 2 * M).forEach(function (l, i) { need(11); y += i ? 11 : 2; text('H', 9, M, y, l, '#50575E'); }); y += 14; }
+    // the project's notes, line for line as typed, a blank line a small gap; ⅛ and the like, which the PDF's fonts
+    // don't have, as 1/8
+    var said = (P.notes || '').replace(/[⅛⅜⅝⅞]/g, function (c) { return VULGAR[c]; }).replace(/[ \t]+/g, ' ').replace(/\s+$/, '').replace(/^\s*\n/, '');
+    if (said.trim()) {
+      need(36); y += 6; text('HB', 10, M, y, 'NOTES', '#686D73'); y += 2;
+      said.split('\n').forEach(function (para) {
+        if (!para.trim()) { y += 5; return; }
+        pdfLines('H', 10, para.trim().split(' '), ' ', PW - 2 * M).forEach(function (l) { need(13); y += 13; text('H', 10, M, y, l); });
+      });
+      y += 18;
+    }
     RES.mats.forEach(function (m) {
       if (!m.items.length) return;
       var width = PW - 2 * M;
@@ -2972,6 +2993,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   $('mats').addEventListener('click', onClick);
   $('pname').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); this.blur(); } });
   $('pname').addEventListener('input', function () { P.name = this.value; $('pTitle').textContent = P.name || 'Kerf'; if (P.example) { P.example = false; renderHead(); $('pname').focus(); } touch(); });
+  // The project's notes (hardware, glue-ups, finish) aren't anything a plan is worked out from, so they only save.
+  $('pnotes').addEventListener('input', function () { if (this.value) P.notes = this.value; else delete P.notes; touch(); });
   $('setBtn').addEventListener('click', settingsSheet);
   $('projBtn').addEventListener('click', projectsSheet);
   $('pdfBtn').addEventListener('click', function () {

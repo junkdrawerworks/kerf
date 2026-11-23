@@ -9,6 +9,7 @@ Kerf reads a project as JSON: from a file (**Projects → Open a project file**)
   "name": "Mudroom bench",
   "units": "in",
   "kerf": 0.125, "trim": 0, "edge": 0, "keep": 12, "cur": "$",
+  "notes": "Pocket screws: 16 × 2½″ for the frame.\nFinish: two coats of wipe-on poly.",
   "materials": [
     {"kind": "board", "name": "2×4", "note": "1½ × 3½ in",
      "stock": [{"len": 96, "price": 4.28, "have": 0}, {"len": 120, "price": 6.38, "have": 0}, {"len": 30, "price": 0, "have": 1}],
@@ -35,6 +36,7 @@ Kerf reads a project as JSON: from a file (**Projects → Open a project file**)
 | `edge` | Inches trimmed off each factory edge of a sheet before any other cut, 0–6; each sheet is planned that much smaller all round | 0 |
 | `keep` | Offcuts at least this long (inches) are called out as worth keeping, 0–240 | 12 |
 | `cur` | Currency sign, up to 3 characters | `"$"` |
+| `notes` | The project's notes, up to 2,000 characters, line breaks kept (`\n`): hardware, glue-ups, finish, a spare board. Kerf shows them under the cut list and prints them on the shop PDF's first page | none |
 | `materials[]` | Up to 100 materials | — |
 | `materials[].kind` | `"board"` (one cross-section; parts have a length) or `"sheet"` (parts have a length and a width) | `"board"` |
 | `materials[].name`, `note` | Shown as the material's title and subtitle, up to 200 characters each | `"Board"` or `"Sheet"`, and no note |

@@ -63,7 +63,7 @@ How Kerf sees materials, so the plan maps cleanly:
   - Set `grain: true` on visible parts (tops, sides, doors), so the grain runs along the part's length.
   - Use `false` for hidden parts (backs, drawer bottoms, cleats) and for MDF. That lets Kerf turn them to fit better.
 - **Leave the kerf out.** Kerf adds the saw kerf between parts itself; don't add it to part sizes.
-- **Not in Kerf:** hardware, finish, edge banding, glue-ups wider than a board, and rough hardwood sold by the board foot. List these in your notes instead (`references/woodworking.md` covers how to model glue-ups and hardwood).
+- **Not in Kerf:** hardware, finish, edge banding, glue-ups wider than a board, and rough hardwood sold by the board foot. Put these in the project's notes instead (`"notes"`, below): Kerf shows them under the cut list and prints them on the shop PDF. `references/woodworking.md` covers how to model glue-ups and hardwood.
 
 Stock sizes and prices:
 - Offer what's usual for their region (the reference has US and metric sizes, with rough prices).
@@ -96,6 +96,8 @@ In `plan.json`, lengths are written the way a tape reads — `"35 3/4"`, `"8'"`,
    "parts": [{"name": "Seat", "qty": 1, "len": "48", "wid": "16", "grain": true}]}]}
 ```
 
+Optional top-level `"notes"`: a string or a list of lines, up to 2,000 characters in all. Put in what Kerf won't cover, so it travels with the project and prints on the shop PDF: the hardware (screw sizes and counts), glue-ups, the finish, the spare board. Keep it to short lines, the way they'd read at the bench.
+
 Optional top-level settings: `"kerf"` (default ⅛″, or 3 mm in a metric plan), `"trim"` (squaring each board end, default 0), `"edge"` (trimming each factory edge of a sheet, default 0), `"keep"` (the smallest offcut worth keeping, default 12″ or 300 mm), and `"currency"`. For a metric plan, use `"units": "mm"`; bare numbers are then millimetres. Set `"currency"` for the region, such as `"£"` or `"€"`.
 
 The script does five things:
@@ -114,7 +116,7 @@ Without code tools, write the project by hand following `references/kerf-format.
 Keep the final message tidy:
 1. A two- or three-line recap of the design.
 2. The cut list, grouped by material: quantity, part, size, and grain where it matters.
-3. Notes Kerf won't cover: hardware, glue-ups, finish, the spare board.
+3. Notes Kerf won't cover: hardware, glue-ups, finish, the spare board. The same notes go in the plan's `"notes"`, so they're in Kerf too.
 4. The Kerf link, presented as a link. Tapping it opens Kerf and offers to add the project. If they use Kerf on an iPhone, add: "On an iPhone with Kerf on the home screen, press and hold the link, copy it, and paste it in Kerf › Projects." (A tapped link opens in Safari, which keeps its own projects.)
 5. The fallback: offer the `.kerf.json` file (**Projects** → **Open a project file** in Kerf). If the script says `Long link: offer the file first` (past about 2,000 characters), put the file before the link: some apps cut a long link short. Only put paste text in the reply if you can't offer the file. Copy the link and the paste text character for character from the script's output; they are encoded data, and one retyped digit breaks them.
 6. One line saying prices are examples, and that Kerf will show exactly what to buy and how to cut it. Leave the buying arithmetic to Kerf; hand-worked totals are easy to get wrong. If you mention one, call it rough.

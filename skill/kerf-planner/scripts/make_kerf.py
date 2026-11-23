@@ -10,6 +10,7 @@ plan.json (lengths may be numbers in the plan's units, or strings the way a tape
   "name": "Mudroom bench",
   "units": "in",                      # "in" or "mm": what Kerf shows; bare numbers are in these units
   "kerf": "1/8", "trim": 0, "edge": 0, "keep": 12, "currency": "$",      # all optional
+  "notes": ["Pocket screws: 16 × 2½″ for the frame", "Finish: two coats of wipe-on poly"],   # optional: a string, or a list of lines
   "materials": [
     {"kind": "board", "name": "2×4", "note": "1½ × 3½ in",
      "stock": [{"len": "8'", "price": 4.28}, {"len": "10'", "price": 6.38}, {"len": "30", "have": 1}],
@@ -32,7 +33,7 @@ from pathlib import Path
 
 DEFAULT_BASE = 'https://kerf.junkdrawer.works/'
 # What Kerf opens from a link or a file; past these it keeps the first and leaves the rest out (references/kerf-format.md).
-LIMITS = {'materials': 100, 'sizes': 50, 'parts': 1000, 'name': 200, 'len': 1200}
+LIMITS = {'materials': 100, 'sizes': 50, 'parts': 1000, 'name': 200, 'len': 1200, 'notes': 2000}
 SHEET_QTY = 300     # Kerf plans at most this many of one sheet part
 LONG_LINK = 2000    # characters; past this, offer the file before the link
 VULGAR = {'½': ' 1/2', '¼': ' 1/4', '¾': ' 3/4', '⅛': ' 1/8', '⅜': ' 3/8', '⅝': ' 5/8', '⅞': ' 7/8'}
@@ -121,6 +122,15 @@ def build(plan):
         'materials': [],
     }
     name_ok('the project name', project['name'])
+    # the project's notes (hardware, glue-ups, finish), shown under Kerf's cut list and printed on the shop PDF
+    notes = plan.get('notes')
+    if isinstance(notes, list):
+        notes = '\n'.join(str(n) for n in notes)
+    notes = str(notes or '').strip()
+    if len(notes) > LIMITS['notes']:
+        errors.append(f'the notes: {len(notes):,} characters; Kerf keeps notes up to {LIMITS["notes"]:,}')
+    if notes:
+        project['notes'] = notes
     mats = plan.get('materials')
     if not isinstance(mats, list) or not mats:
         errors.append('the plan has no materials')
