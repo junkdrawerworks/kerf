@@ -1879,6 +1879,13 @@ assert.equal(await page.textContent('#planOut .warn'), 'Some parts are left out.
 await view('list');
 assert.equal(await page.textContent('.perr'), 'Peg × 400: Kerf plans at most 300 of one sheet part — split it into two rows.');
 
+// A grain-locked sheet part that's too big either way round isn't told to "let it turn": turned, it fits no better.
+// One that would fit turned is.
+await open(saved(project('Tabletop', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }, { len: 48, wid: 24, price: 21 }],
+  [{ name: 'Huge tabletop', qty: 1, len: 100, wid: 50 }, { name: 'Cross panel', qty: 1, len: 40, wid: 60 }])])));
+await view('list');
+assert.equal(await page.textContent('.perr'), 'Huge tabletop (100″ × 50″) won’t fit on any sheet listed below. Add a bigger size. Cross panel (40″ × 60″) won’t fit on any sheet listed below with the grain along its length. Add a bigger size or let it turn.');
+
 // An empty plan points to the cut list (a phone has no left side), and when every part is left out it says why.
 await open(saved(project('Nothing yet', [])));
 assert.match(await page.textContent('#planOut .empty'), /^Nothing to cut yet\.Add a material in the cut list, then the parts you need from it/);

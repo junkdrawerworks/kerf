@@ -1343,7 +1343,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         }
         if (e.max) return (e.part.name || 'A part') + ' × ' + e.part.qty + ': Kerf plans at most ' + e.max + ' of one ' + r.kind + ' part — split it into two rows.';
         var p = e.part, dims = r.kind === 'sheet' ? fmtT(p.len) + ' × ' + fmtT(p.wid) : fmtT(p.len);
-        return (p.name || 'A part') + ' (' + dims + ') won’t fit on any ' + (r.kind === 'sheet' ? 'sheet' : 'board') + ' listed below' + (r.kind === 'sheet' && p.grain ? ' with the grain along its length' : '') + '. Add a bigger size' + (r.kind === 'sheet' && p.grain ? ' or let it turn' : '') + '.';
+        // The grain is only worth a mention when turning the part would let it fit, by the planner's own test.
+        var turn = r.kind === 'sheet' && p.grain && r.mat.stock.some(function (st) { return st.len > 0 && st.wid > 0 && fitsStock({ l: p.len, w: p.wid, rot: true }, { L: Math.max(st.len, st.wid), W: Math.min(st.len, st.wid) }); });
+        return (p.name || 'A part') + ' (' + dims + ') won’t fit on any ' + (r.kind === 'sheet' ? 'sheet' : 'board') + ' listed below' + (turn ? ' with the grain along its length' : '') + '. Add a bigger size' + (turn ? ' or let it turn' : '') + '.';
       });
       el.hidden = !msgs.length; el.textContent = msgs.join(' ');
     });
