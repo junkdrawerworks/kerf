@@ -733,6 +733,44 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   assert.equal(await strip(), reload, 'the reload strip goes after a reload that didn’t help');
 }
 
+// Two windows opened on a first visit show one example between them: a tick in each used to leave two identical
+// "Garage shelves (example)" projects, one made by each window. And when the example is the last project and is
+// deleted, the new example it leaves shows in both windows, and stays, though it's newer than the deletion by
+// less than a millisecond.
+{
+  await open(null);
+  const other = await ctx.newPage();
+  other.on('pageerror', e => problems.push('second window: ' + e.message));
+  await other.goto(base);
+  await other.waitForSelector('#planOut > *', { state: 'attached' });
+  const examples = async () => Object.values((await stored()).projects).map(p => p.name);
+  await view('saw');
+  await other.click('#tabs button[data-t="saw"]');
+  await page.locator('#sawOut .cut[data-k]').first().click();
+  await page.waitForFunction(() => localStorage.getItem('kerf.v1'));
+  await other.locator('#sawOut .cut[data-k]').nth(1).click();
+  await other.waitForFunction(() => /"0\.1"/.test(localStorage.getItem('kerf.v1')));
+  assert.deepEqual(await examples(), ['Garage shelves (example)'], 'two windows on a first visit made two examples');
+  await other.click('#projBtn');
+  assert.deepEqual(await other.$$eval('#sheet .pitem b', bs => bs.map(b => b.textContent)), ['Garage shelves (example)'], 'Projects lists the example twice');
+  await other.click('#pjx');
+  await page.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '2 of 27 cuts', null, { timeout: 5000 })
+    .catch(() => assert.fail('a tick in one window’s example doesn’t show in the other’s'));
+
+  await page.click('#projBtn');
+  await page.click('#sheet .btn.danger');
+  await page.waitForTimeout(600);
+  await page.click('#sheet .btn.danger');
+  await other.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '0 of 27 cuts', null, { timeout: 5000 })
+    .catch(() => assert.fail('the new example doesn’t show in the other window'));
+  assert.ok(!(await other.textContent('#toast')).includes('deleted in another window'), 'the other window took the new example as deleted');
+  await other.locator('#sawOut .cut[data-k]').first().click();
+  await page.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '1 of 27 cuts', null, { timeout: 5000 })
+    .catch(() => assert.fail('the new example went missing from the window that deleted the old one'));
+  assert.deepEqual(await examples(), ['Garage shelves (example)'], 'the new example is missing from storage');
+  await other.close();
+}
+
 // Two windows open at once keep each other's work: a project added in one isn't undone when the other saves, nor
 // brought back once deleted, a tick in one and an edit in the other are both kept, and an edit still waiting to
 // be saved isn't lost when the other window saves.

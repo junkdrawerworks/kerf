@@ -672,8 +672,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     localStorage.setItem(LS + '.probe', '1'); localStorage.removeItem(LS + '.probe');
   } catch (e) { if (!isFull(e)) UNSAVED = 'blocked'; } // full: said once an edit can't be saved
+  // The example, for a first visit or once the last project is deleted. It always has the same id, so two windows
+  // opened on a first visit show one example, not one each, once either saves. Made again after it was deleted, it's
+  // newer than that deletion, so another window that took the deletion in doesn't drop the new one too.
+  function freshExample() {
+    var ex = sampleProject(); ex.id = 'example';
+    ex.updated = Math.max(ex.updated, (DB.deleted.example || 0) + 1); delete DB.deleted.example;
+    DB.projects.example = ex; return ex;
+  }
   var P = DB.projects[DB.current];
-  if (!P) { var ex = sampleProject(); DB.projects[ex.id] = ex; DB.order = [ex.id].concat(DB.order.filter(function (id) { return DB.projects[id]; })); DB.current = ex.id; P = ex; }
+  if (!P) { var ex = freshExample(); DB.order = [ex.id].concat(DB.order.filter(function (id) { return DB.projects[id] && id !== ex.id; })); DB.current = ex.id; P = ex; }
   // Nothing is written until something really changes; which view is showing (`view`) doesn't count until
   // this browser keeps projects. So a first visit that only looks around leaves storage empty, and carry.js
   // can still bring projects over from junkdrawer.works/kerf/ on a later visit.
@@ -725,7 +733,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (DB.projects[DB.current] !== P) {
       var gone = !DB.projects[DB.current], name = P.name;
       if (gone) {
-        if (!DB.order.length) { var ex = sampleProject(); DB.projects[ex.id] = ex; DB.order = [ex.id]; }
+        if (!DB.order.length) DB.order = [freshExample().id];
         DB.current = DB.order[0];
         closeSheet(); // Projects' Delete button may be armed for the project that's gone
       }
@@ -2079,7 +2087,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (Date.now() - delAt < 500) return; // a double tap only asks
       DB.deleted[P.id] = Math.max(Date.now(), (P.updated || 0) + 1); // so another open window doesn't bring it back
       delete DB.projects[P.id]; DB.order = DB.order.filter(function (id) { return id !== P.id && DB.projects[id]; });
-      if (!DB.order.length) { var ex = sampleProject(); ex.example = true; DB.projects[ex.id] = ex; DB.order = [ex.id]; }
+      if (!DB.order.length) DB.order = [freshExample().id];
       var name = P.name; DB.current = DB.order[0]; P = DB.projects[DB.current]; save(true); closeSheet(); applyProject(); toast('Deleted “' + name + '”');
     });
     $('pjList').parentNode.insertBefore(del, $('pjList').nextSibling);
