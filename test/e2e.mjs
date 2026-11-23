@@ -1273,6 +1273,17 @@ assert.ok(await page.evaluate(() => {
   assert.ok(outline > 0 && outline < pdf.indexOf('0.14 0.38 0.8 RG 1 w [3 2] 0 d'), 'the PDF draws the sheet outline over its cut numbers');
 }
 
+// A board's length beside its drawing stays clear of the board, "600 mm" as well as "10'".
+await open(saved(project('Metric offcuts', [board('45×90', [{ len: 2400 / 25.4, price: 9 }, { len: 600 / 25.4, have: 3 }], [{ name: 'Rail', qty: 2, len: 2000 / 25.4 }, { name: 'Block', qty: 3, len: 550 / 25.4 }])], { units: 'mm', kerf: 3 / 25.4 })));
+{
+  const clear = await page.$eval('#planOut svg.diag', svg => {
+    const left = Math.min(...[...svg.querySelectorAll('rect.dg-wood')].map(r => r.getBBox().x));
+    return [...svg.querySelectorAll('text.dg-meta')].filter(t => t.getAttribute('x') === '0').map(t => [t.textContent, t.getBBox().x + t.getBBox().width <= left - 2]);
+  });
+  assert.deepEqual(clear.map(c => c[0]), ['2.4 m', '2.4 m', '600 mm', '600 mm', '600 mm']);
+  assert.ok(clear.every(c => c[1]), 'a board\'s length runs into its drawing: ' + JSON.stringify(clear));
+}
+
 // An offcut's label fits inside the offcut: on a phone "keep 23 7/8\"" is too wide for it, so it shows the length alone.
 await open(saved(project('Offcut', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 1, len: 72 }])])));
 assert.deepEqual(await page.$$eval('#planOut .dg-scrapt', ts => ts.map(t => [t.textContent, t.getBBox().width <= t.previousElementSibling.width.baseVal.value - 2])), [['23 7/8"', true]], 'the offcut label');

@@ -1491,7 +1491,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     });
   }
   function boardDiagram(m) {
-    var width = W.plan, labelW = 40, maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; }));
+    // The left column is as wide as its widest length (12px mono is 7.2px a character), with 4px to spare: "600 mm"
+    // needs more than "2.4 m" or "10'".
+    var width = W.plan, maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; }));
+    var labelW = Math.max(40, Math.ceil(Math.max.apply(null, m.items.map(function (b) { return fmt(b.stock.len, { ft: true }).length; })) * 7.2 + 4));
     var rightW = m.items.some(function (b) { return b.stock.have; }) ? 44 : 0; // room for "yours" after a board you have
     var drawW = width - labelW - rightW, px = drawW / maxLen, rowH = 34, gap = 22, top = 24, H = top + m.items.length * (rowH + gap) - gap + 6;
     var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + H + '" role="img" aria-label="' + esc(m.mat.name) + ' cutting diagram">' + tapeRuler(labelW, drawW, maxLen, 2);
