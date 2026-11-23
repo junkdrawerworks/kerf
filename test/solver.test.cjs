@@ -223,6 +223,48 @@ console.log('sheets: random jobs, every layout checked');
   console.log('  ' + n + ' jobs');
 }
 
+console.log('sheets: every part named by one step');
+{
+  // Each part on a sheet is named once at the saw: by the cut that gives it, by the cut that leaves it ("what's left
+  // is"), or by the note that the whole sheet is that part. A part that needed no cut of its own used to take over the
+  // name of whatever step came last, so the strip a rip cut off was never named, or named as the piece it left.
+  const names = sh => [].concat(...sh.steps.map(s => (s.gives ? [s.gives] : []).concat(s.also || []))).map(g => g.it.pi + '@' + g.l + 'x' + g.w).sort();
+  const parts = sh => sh.placed.map(p => p.pi + '@' + p.l + 'x' + p.w).sort();
+  const full = [{ len: 96, wid: 48, price: 58, have: 0 }];
+  const named = (what, stock, ps, kerf, want) => {
+    const r = K.solveSheets({ stock, parts: ps }, { kerf });
+    r.items.forEach((sh, si) => check(JSON.stringify(names(sh)) === JSON.stringify(parts(sh)), `${what}, sheet ${si + 1}: the steps name ${JSON.stringify(names(sh))}, its parts are ${JSON.stringify(parts(sh))}`));
+    if (want) {
+      const steps = r.items[0].steps.map(s => s.type + (s.at != null ? ' ' + s.at : '') + (s.gives ? ' → ' + s.gives.it.pi : '') + (s.also ? ' · left ' + s.also.map(g => g.it.pi).join(',') : ''));
+      check(JSON.stringify(steps) === JSON.stringify(want), `${what}: steps ${JSON.stringify(steps)}, want ${JSON.stringify(want)}`);
+    }
+    return r;
+  };
+  // The sides of a cabinet, ripped from one sheet: the rip gives the 24" side and leaves the other.
+  named('sides 96 × 24 and 96 × 23 7/8', full, [{ len: 96, wid: 24, qty: 1, grain: true }, { len: 96, wid: 23.875, qty: 1, grain: true }], 0.125, ['rip 24 → 0 · left 1']);
+  named('two halves of a sheet, less the kerf', full, [{ len: 47.9375, wid: 48, qty: 2, grain: true }], 0.125, ['cross 47.9375 → 0 · left 0']);
+  named('two rips of 23 15/16', full, [{ len: 96, wid: 23.9375, qty: 2, grain: true }], 0.125, ['rip 23.9375 → 0 · left 0']);
+  named('a 20" crosscut and two 30 × 23 15/16', full, [{ len: 30, wid: 23.9375, qty: 2, grain: true }, { len: 20, wid: 48, qty: 1, grain: true }], 0.125);
+  named('the whole sheet', full, [{ len: 96, wid: 48, qty: 1, grain: true }], 0.125, ['none → 0']);
+  // Seeded jobs where parts often fill what a cut leaves exactly: halves, thirds and the rest of a sheet, kerf counted.
+  const R = rng(23); let n = 0;
+  for (let t = 0; t < 200; t++) {
+    const kerf = [0.125, 0.09375, 0][t % 3], L = 96, W = 48, ps = [];
+    const exact = [(W - kerf) / 2, (L - kerf) / 2, (W - 2 * kerf) / 3, (L - 2 * kerf) / 3, W, L];
+    for (let k = 0, nT = 1 + Math.floor(R() * 4); k < nT; k++) {
+      const a = R() < 0.5 ? exact[Math.floor(R() * exact.length)] : Math.round((4 + R() * 40) * 8) / 8;
+      const b = R() < 0.5 ? exact[Math.floor(R() * exact.length)] : Math.round((4 + R() * 40) * 8) / 8;
+      ps.push({ len: Math.max(a, b), wid: Math.min(a, b), qty: 1 + Math.floor(R() * 3), grain: R() < 0.5 });
+    }
+    // and now and then a part that fills the rest of a strip another part leaves
+    if (R() < 0.5) { const w = Math.round((6 + R() * 30) * 8) / 8; ps.push({ len: L, wid: w, qty: 1, grain: true }, { len: L, wid: W - w - kerf, qty: 1, grain: true }); }
+    const stock = t % 4 ? full : [{ len: 96, wid: 48, price: 58, have: 0 }, { len: 48, wid: 24, price: 21, have: 0 }];
+    const r = named(`job ${t}`, stock, ps, kerf);
+    if (!r.errors.length) n++;
+  }
+  console.log('  ' + n + ' jobs');
+}
+
 console.log('tips that are worth taking');
 {
   const proj = (kind, stock, parts) => ({ name: 'T', units: 'in', kerf: 0.125, trim: 0, keep: 12, cur: '$', materials: [{ id: 'm', kind, name: kind, note: '',
@@ -364,7 +406,7 @@ console.log('ticks stay on their cuts');
   // aside: renaming a part keeps its ticks). Seeded random edits to a project with a board and a sheet material.
   const saw = () => new Function([
     ...SOLVER, 'var P = null, RES = null, CUR = "$";', line('var PLANS = '),
-    ...['plural', 'sayLen', 'lastIsLeft', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'sawTasks', 'tickKeys'].map(fn),
+    ...['plural', 'sayLen', 'lastIsLeft', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'stepGives', 'sawTasks', 'tickKeys'].map(fn),
     'return { solve: function (p) { P = p; U = p.units; solveAll(); var t = sawTasks(); return { keys: tickKeys(t), tasks: t }; } };'
   ].join('\n'))();
   const R = rng(11), pick = a => a[Math.floor(R() * a.length)], q16 = x => Math.round(x * 16) / 16;
