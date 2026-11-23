@@ -904,6 +904,24 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       return settle(boards, left);
     }
     function fresh() { return stocks.map(function (st) { return st.left; }); }
+    // First fit, longest first, opening a board on hand (the shortest that holds the part) while one is left, then the
+    // longest size to buy. Parts no size to buy can hold are the longest, so they come first and get the boards on hand;
+    // one that finds no room is left out (`drop`, how many of each length; `n` in all). Leaving a part out changes nothing
+    // for the parts after it, so the same parts without those come out the same, every one placed.
+    function handFirst() {
+      var top = -1, left = fresh(), bs = [], drop = L.map(function () { return 0; }), n = 0;
+      stocks.forEach(function (st, si) { if (!isFinite(st.left) && (top < 0 || st.cap > stocks[top].cap)) top = si; });
+      for (var j = 0; j < L.length; j++) for (var q = 0; q < C0[j]; q++) {
+        for (var k = 0; k < bs.length && bs[k].need + kerf + L[j] > stocks[bs[k].si].cap + 1e-9; k++);
+        if (k < bs.length) { bs[k].need += kerf + L[j]; bs[k].x[j]++; continue; }
+        var si = -1;
+        stocks.forEach(function (st, s) { if (isFinite(st.left) && left[s] > 0 && st.cap + 1e-9 >= L[j] && (si < 0 || st.cap < stocks[si].cap)) si = s; });
+        if (si < 0 && top >= 0 && stocks[top].cap + 1e-9 >= L[j]) si = top;
+        if (si < 0) { drop[j]++; n++; continue; }
+        left[si]--; var x = L.map(function () { return 0; }); x[j] = 1; bs.push({ si: si, x: x, need: L[j] });
+      }
+      return { boards: bs, left: left, drop: drop, n: n };
+    }
     var g0 = fresh(); consider((function () { var b = greedy(C0.slice(), g0, [], 0, 0); return b && settle(b, g0); })());
     var g1 = fresh(); consider((function () { var b = greedy(C0.slice(), g1, [], 0, 1); return b && settle(b, g1); })());
     var ex = exact(quick ? 3000 : 40000, quick ? EFFORT.quickExact : EFFORT.exact);
@@ -929,7 +947,25 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var lf = fresh(), b = greedy(C0.slice(), lf, [], 0.35, 0.5);
       consider(b && settle(b, lf));
     }
-    // Nothing worked: the boards on hand run out, and some part fits on no size to buy (`only`, the first one listed).
+    // Nothing worked: the boards on hand run out, and some parts fit on no size to buy. So plan what fits (see handFirst):
+    // the parts it finds no room for are left out (errors with `short`, how many of each part) and the rest planned again,
+    // which it can always do. If even that fails, `only` is the first part listed that fits on no size to buy.
+    if (!best) {
+      var hf = handFirst();
+      if (!hf.n) consider(settle(hf.boards, hf.left));
+      else if (!cfg.fit) {
+        var cut = {}, fit = {};
+        lens.forEach(function (g, j) { g.q.forEach(function (pi, k) { if (k < g.q.length - hf.drop[j]) fit[pi] = (fit[pi] || 0) + 1; else cut[pi] = (cut[pi] || 0) + 1; }); });
+        // the room left on each board, filled with the longest parts left out first
+        var r = planWhatFits(mat, cfg, quick, solveBoards, fit, cut, out.errors, function (r, put) {
+          var room = r.items.map(function (b) { return b.cap - b.need; });
+          Object.keys(cut).sort(function (a, b) { return mat.parts[b].len - mat.parts[a].len; }).forEach(function (pi) {
+            for (var n = 0, m = cut[pi]; n < m; n++) for (var k = 0; k < room.length; k++) if (room[k] + 1e-9 >= kerf + mat.parts[pi].len) { room[k] -= kerf + mat.parts[pi].len; put(pi); break; }
+          });
+        });
+        if (r) { r.exact = false; return r; }
+      }
+    }
     if (!best) { out.errors.push({ pi: -1, only: onlyHave(mat, function (p) { return stocks.some(function (st) { return !isFinite(st.left) && st.cap + 1e-9 >= p.len; }); }) }); return out; }
     var queues = lens.map(function (g) { return g.q.slice(); });
     out.cost = best.cost;
@@ -940,6 +976,26 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       return { stock: st.s, price: st.price, cap: st.cap, trim: trim, pieces: pieces, need: b.need, offcut: off };
     }).sort(function (a, b) { return (a.stock.have ? 1 : 0) - (b.stock.have ? 1 : 0) || b.stock.len - a.stock.len || b.need - a.need; });
     return out;
+  }
+  // Plans `mat` with only `fit[pi]` of each part: the rest (`cut[pi]`) are left out, for want of room on the stock on
+  // hand. A plan can leave room on a board or a sheet for some of those, so `room(r, put)` calls `put(pi)` for each part
+  // left out that plan `r` has room for, and they go back in to be planned again, for up to three more plans. A plan
+  // that then fails to place them all is dropped for the one before. Returns the plan, its errors those of the full
+  // job (`errors`) and the parts left out (`short`, how many of each), or null if not even the first plan could be made.
+  function planWhatFits(mat, cfg, quick, solve, fit, cut, errors, room) {
+    var r = null, c = Object.assign({}, cfg, { fit: 1 }), was = null;
+    for (var round = 0; round < 4; round++) {
+      var next = solve(Object.assign({}, mat, { parts: mat.parts.map(function (p, pi) { return Object.assign({}, p, { qty: fit[pi] || 0 }); }) }), c, quick);
+      if (next.errors.length) { if (was) { fit = was[0]; cut = was[1]; } break; }
+      r = next; was = [Object.assign({}, fit), Object.assign({}, cut)];
+      var more = 0;
+      if (round < 3) room(r, function (pi) { more++; fit[pi] = (fit[pi] || 0) + 1; cut[pi]--; });
+      if (!more) break;
+    }
+    if (!r) return null;
+    r.mat = mat;
+    r.errors = errors.concat(Object.keys(cut).filter(function (pi) { return cut[pi] > 0; }).map(function (pi) { return { pi: +pi, part: mat.parts[pi], short: cut[pi] }; }));
+    return r;
   }
   // When the stock on hand runs out: the first part planned that no size to buy can hold (`buys` says whether one can), or -1.
   function onlyHave(mat, buys) {
@@ -989,7 +1045,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   function fitsStock(it, st) { return orientations(it).some(function (o) { return o[0] <= st.L + 1e-9 && o[1] <= st.W + 1e-9; }); }
   // `work.n` counts the steps it takes: the spaces it tries each part in, and a few more per part and per run.
-  function packRun(items, stocks, kerf, sortFn, fitFn, split, pref, work) {
+  // With `drop`, a part that fits no sheet left goes in it, and the run goes on without it.
+  function packRun(items, stocks, kerf, sortFn, fitFn, split, pref, work, drop) {
     var list = items.slice().sort(sortFn), sheets = [], left = stocks.map(function (s) { return s.left; });
     work.n += 20;
     for (var i = 0; i < list.length; i++) {
@@ -1017,7 +1074,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             : a.price / (a.L * a.W) < b.price / (b.L * b.W) - 1e-12;
           if (better) pickSi = si;
         }
-        if (pickSi < 0) return null;
+        if (pickSi < 0) { if (drop) { drop.push(it); continue; } return null; }
         left[pickSi]--;
         var sh = newSheet(stocks[pickSi]); sheets.push(sh);
         var o = orientations(it).filter(function (o) { return o[0] <= sh.root.w + 1e-9 && o[1] <= sh.root.h + 1e-9; }).sort(function (p, q) { return fitFn(sh.root, p[0], p[1])[0] - fitFn(sh.root, q[0], q[1])[0]; })[0];
@@ -1175,6 +1232,31 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         var noise = 0.2 + 0.6 * rnd(), keyed = items.map(function (x) { return { x: x, k: x.l * x.w * (1 + noise * (rnd() - 0.5)) }; });
         keyed.sort(function (p, q) { return q.k - p.k; });
         keep(same, FITS[it % 3], SPLITS[(it >> 2) % 4], prefs[it % prefs.length], keyed.map(function (e) { return e.x; }));
+      }
+    }
+    // Nothing worked: the sheets on hand run out, and some parts fit on no size to buy. So plan what fits: the parts no
+    // size to buy can hold go first, biggest first, onto the sheets on hand, then the rest. The parts that find no room are
+    // left out (errors with `short`, how many of each part), and the rest planned again. Leaving a part out changes
+    // nothing for the parts after it, so this packing places every one of those, and the search always has a plan.
+    // If even that fails, `only` is the first part listed that fits on no size to buy.
+    if (!best) {
+      var buys = function (it) { return stocks.some(function (st) { return !isFinite(st.left) && fitsStock(it, st); }); };
+      items.forEach(function (it) { it.buy = buys(it) ? 1 : 0; });
+      var drop = [], hf = packRun(items, stocks, kerf, function (a, b) { return a.buy - b.buy || SORTS[0](a, b); }, FITS[0], 'short', 'free', work, drop);
+      if (!drop.length) consider(hf, { fit: 0, split: 'short', pref: 'free' });
+      else if (!cfg.fit) {
+        var cut = {}, fit = {};
+        drop.forEach(function (it) { cut[it.pi] = (cut[it.pi] || 0) + 1; fit[it.pi] = (fit[it.pi] || 0) - 1; });
+        items.forEach(function (it) { fit[it.pi] = (fit[it.pi] || 0) + 1; });
+        // the pieces left over on each sheet, each holding one more of the biggest parts left out that fit it
+        var r = planWhatFits(mat, cfg, quick, solveSheets, fit, cut, out.errors, function (r, put) {
+          var spare = [].concat.apply([], r.items.map(function (it) { return it.spare; }));
+          Object.keys(cut).sort(function (a, b) { return mat.parts[b].len * mat.parts[b].wid - mat.parts[a].len * mat.parts[a].wid; }).forEach(function (pi) {
+            var p = mat.parts[pi], it = { l: p.len, w: p.wid, rot: !p.grain };
+            for (var n = 0, m = cut[pi]; n < m; n++) for (var k = 0; k < spare.length; k++) if (fitsStock(it, { L: spare[k].w, W: spare[k].h })) { spare.splice(k, 1); put(pi); break; }
+          });
+        });
+        if (r) return r;
       }
     }
     if (!best) { out.errors.push({ pi: -1, only: onlyHave(mat, function (p) { return stocks.some(function (st) { return !isFinite(st.left) && fitsStock({ l: p.len, w: p.wid, rot: !p.grain }, st); }); }) }); return out; }
@@ -1453,7 +1535,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (!RES) return;
     RES.mats.forEach(function (r) {
       var el = document.querySelector('[data-err="' + r.mat.id + '"]'); if (!el) return;
-      var msgs = r.errors.map(function (e) {
+      var short = r.errors.filter(function (e) { return e.short; }), msgs = r.errors.filter(function (e) { return !e.short; }).map(function (e) {
         if (e.pi < 0) {
           // only the stock on hand can hold some part, and it has run out
           var q = r.mat.parts[e.only], have = r.kind === 'sheet' ? 'sheets' : 'boards';
@@ -1467,9 +1549,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         var turn = r.kind === 'sheet' && p.grain && on(true, e), edges = e > 0 && !turn && on(!p.grain, 0);
         return (p.name || 'A part') + ' (' + dims + ') won’t fit on any ' + (r.kind === 'sheet' ? 'sheet' : 'board') + ' listed below' + (turn ? ' with the grain along its length' : edges ? ' once its edges are trimmed' : '') + '. Add a bigger size' + (turn ? ' or let it turn' : edges ? ' or trim less off sheet edges in Settings' : '') + '.';
       });
+      // the parts the stock on hand has no room for, planned without them
+      if (short.length) msgs.push('The ' + (r.kind === 'sheet' ? 'sheets' : 'boards') + ' you have can’t hold every part: ' + andList(short.map(function (e) {
+        var p = e.part; return (p.name || 'Part ' + letter(e.pi)) + ' × ' + e.short + ' (' + (r.kind === 'sheet' ? fmtT(p.len) + ' × ' + fmtT(p.wid) : fmtT(p.len)) + ')';
+      })) + (short.length > 1 || short[0].short > 1 ? ' are' : ' is') + ' left out of the plan. Add a size to buy that fits ' + (short.length > 1 || short[0].short > 1 ? 'them.' : 'it.'));
       el.hidden = !msgs.length; el.textContent = msgs.join(' ');
     });
   }
+  function andList(a) { return a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0] || ''; }
+  // The parts of plan `r` left out for want of room on the stock on hand, as "Leg × 2 and Rail × 1".
+  function shortList(r) { return andList(r.errors.filter(function (e) { return e.short; }).map(function (e) { return (e.part.name || 'Part ' + letter(e.pi)) + ' × ' + e.short; })); }
   function findMat(el) { var a = el.closest('[data-mid]'); return a && P.materials.filter(function (m) { return m.id === a.dataset.mid; })[0]; }
   function findPart(m, el) { var r = el.closest('[data-pid]'); return r && m.parts.filter(function (p) { return p.id === r.dataset.pid; })[0]; }
   function findStock(m, el) { var r = el.closest('[data-sid]'); return r && m.stock.filter(function (s) { return s.id === r.dataset.sid; })[0]; }
@@ -1686,12 +1775,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function leftOut(r) {
     var errs = r.mats.filter(function (m) { return m.errors.length; });
     return errs.length ? '<div class="warn"><b>Some parts are left out.</b> ' + errs.map(function (m) {
-      var big = m.errors.filter(function (e) { return e.pi >= 0 && !e.max; }).length, many = m.errors.filter(function (e) { return e.max; });
-      var rest = m.errors.some(function (e) { return e.pi < 0; }), has = [];
+      var big = m.errors.filter(function (e) { return e.pi >= 0 && !e.max && !e.short; }).length, many = m.errors.filter(function (e) { return e.max; });
+      var rest = m.errors.some(function (e) { return e.pi < 0; }), few = shortList(m), has = [];
       if (big) has.push(plural(big, 'part') + ' too big for any size listed');
       if (many.length) has.push(plural(many.length, 'part') + ' with more than ' + many[0].max + ' pieces');
-      var short = 'the ' + (m.kind === 'sheet' ? 'sheets' : 'boards') + ' you have can’t hold ';
-      return esc(m.mat.name) + (has.length ? ' has ' + has.join(' and ') + (rest ? ', and ' + short + 'the rest' : '') : ': ' + short + 'every part');
+      var short = 'the ' + (m.kind === 'sheet' ? 'sheets' : 'boards') + ' you have can’t hold ' + (few ? esc(few) + ', so add a size to buy' : rest && has.length ? 'the rest' : 'every part');
+      return esc(m.mat.name) + (has.length ? ' has ' + has.join(' and ') + (rest || few ? ', and ' + short : '') : ': ' + short);
     }).join('; ') + ' — ' + (NARROW.matches ? '<button class="lbtn" type="button" data-go="err">see the cut list</button>' : 'see the cut list') + '.</div>' : '';
   }
   // On a phone the cut list is a tab of its own: its button goes there, to the field of the first part left out (the
@@ -1701,6 +1790,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var el = null;
     (RES ? RES.mats : []).some(function (r) {
       return r.errors.some(function (e) {
+        // parts the stock on hand can't hold: to its sizes, to add one to buy
+        var sizes = e.short && document.querySelector('details.stock[data-mid="' + r.mat.id + '"]');
+        if (sizes) { sizes.open = true; el = sizes.querySelector('summary'); return true; }
         var p = e.pi >= 0 ? e.part : r.mat.parts[e.only], f = 'len';
         if (e.max) f = 'qty';
         else if (r.kind === 'sheet' && p && r.mat.stock.some(function (st) { return p.len <= (p.grain ? st.len : Math.max(st.len, st.wid)) - 2 * (P.edge || 0) + 1e-9; })) f = 'wid';

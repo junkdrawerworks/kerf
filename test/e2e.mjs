@@ -1107,11 +1107,19 @@ assert.deepEqual(await source.locator('option').evaluateAll(os => os.map(o => o.
   await page.waitForFunction(() => document.querySelector('.total').textContent === '$58.00', null, { timeout: 5000 }).catch(() => {});
   assert.equal(await page.textContent('.total'), '$58.00');
   assert.deepEqual(await page.$$eval('.shop tbody tr:not(.grp)', rs => rs.map(r => r.textContent)), ['1 ×48″ × 96″$58.00$58.00', '1 ×48″ × 96″ (yours)—free']);
-  // Without a 4×8 to buy, the cut list says only the sheet you have could hold the sides.
+  // Without a 4×8 to buy, the four sides that fit on the sheet you have are planned, and the cut list and the plan say
+  // which are left out.
   await view('list');
   await page.click('.srow[data-sid] >> nth=1 >> [data-a="delstock"]');
   await page.waitForFunction(() => !document.querySelector('.perr').hidden, null, { timeout: 5000 });
-  assert.equal(await page.textContent('.perr'), 'The sheets you have can’t hold every part, and Side (72″ × 11\u00a01/4″) fits only those. Add a size to buy that fits it.');
+  assert.equal(await page.textContent('.perr'), 'The sheets you have can’t hold every part: Side × 2 (72″ × 11\u00a01/4″) are left out of the plan. Add a size to buy that fits them.');
+  await view('plan');
+  assert.equal(await page.textContent('#planOut .warn'), 'Some parts are left out. ¾ plywood: the sheets you have can’t hold Side × 2, so add a size to buy — see the cut list.');
+  assert.equal(await page.textContent('.total'), '$0.00');
+  assert.equal(await page.textContent('#planOut .mdiag h4'), '¾ plywood, 1 sheet');
+  // "see the cut list" opens the material's sizes, to add one to buy.
+  await page.click('#planOut .warn button');
+  assert.equal(await page.evaluate(() => document.activeElement.matches('details.stock[open] > summary')), true, 'see the cut list doesn’t open the sizes to buy');
 }
 
 // A price is kept to the cent, so the shopping list's lines add up to its total: 3 × $4.285 and 3 × $5.485 used to
@@ -1871,7 +1879,7 @@ for (const [typed, shown] of [['4,28', '€4.28'], ['1.234,50', '€1234.50'], [
 await open(saved(project('Left out', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 4, len: 72 }]),
   sheet('¾ plywood', [{ len: 96, wid: 48, have: 1 }], [{ name: 'Shelf', qty: 3, len: 90, wid: 40 }]),
   board('4×4', [{ len: 96, price: 11.98 }], [{ name: 'Post', qty: 1, len: 120 }])])));
-assert.equal(await page.textContent('#planOut .warn'), 'Some parts are left out. ¾ plywood: the sheets you have can’t hold every part; 4×4 has 1 part too big for any size listed — see the cut list.');
+assert.equal(await page.textContent('#planOut .warn'), 'Some parts are left out. ¾ plywood: the sheets you have can’t hold Shelf × 2, so add a size to buy; 4×4 has 1 part too big for any size listed — see the cut list.');
 
 // Kerf plans at most 300 of one sheet part: past that, the plan says parts are left out and the cut list says why.
 await open(saved(project('Pegboard', [sheet('¼ plywood', [{ len: 96, wid: 48, price: 28 }], [{ name: 'Peg', qty: 400, len: 4, wid: 4, grain: false }])])));
@@ -1922,8 +1930,10 @@ await open(saved(project('Nothing yet', [])));
 assert.match(await page.textContent('#planOut .empty'), /^Nothing to cut yet\.Add a material in the cut list, then the parts you need from it/);
 await open(saved(project('Too long', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Beam', qty: 1, len: 120 }])])));
 assert.equal((await page.textContent('#planOut')).replace(/^Plan/, ''), 'Some parts are left out. 2×4 has 1 part too big for any size listed — see the cut list.');
+// Two boards on hand and nothing to buy: the two legs that fit are planned, and the third is said to be left out.
 await open(saved(project('Short of legs', [board('Other board', [{ len: 96, have: 2 }], [{ name: 'Leg', qty: 3, len: 72 }])])));
-assert.equal((await page.textContent('#planOut')).replace(/^Plan/, ''), 'Some parts are left out. Other board: the boards you have can’t hold every part — see the cut list.');
+assert.equal(await page.textContent('#planOut .warn'), 'Some parts are left out. Other board: the boards you have can’t hold Leg × 1, so add a size to buy — see the cut list.');
+assert.equal(await page.textContent('#planOut .mdiag h4'), 'Other board, 2 boards');
 
 // A sheet's outline goes under its cut lines and numbers, not through them, on screen and in the PDF.
 await open(null);
@@ -2151,10 +2161,11 @@ for (const [units, len, short] of [['in', 47 + 15 / 16, 9.5], ['mm', 1213.5 / 25
   assert.ok(rows.every(r => r.fr >= 0.8), `a fraction at the saw is small in ${units}`);
 }
 
-// Boards on hand that run short say so in the cut list, instead of stopping the page.
+// Boards on hand that run short say so in the cut list, instead of stopping the page: which parts are left out, and
+// how many.
 await open(saved(project('Short of legs', [board('Other board', [{ len: 96, have: 2 }], [{ name: 'Leg', qty: 3, len: 72 }])])));
 await view('list');
-assert.equal(await page.textContent('.perr'), 'The boards you have can’t hold every part, and Leg (72″) fits only those. Add a size to buy that fits it.');
+assert.equal(await page.textContent('.perr'), 'The boards you have can’t hold every part: Leg × 1 (72″) is left out of the plan. Add a size to buy that fits it.');
 
 assert.deepEqual(problems, [], 'no errors, and nothing loaded from anywhere else');
 

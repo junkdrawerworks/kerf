@@ -22,7 +22,7 @@ function line(start) { const i = src.indexOf(start); return src.slice(i, src.ind
 const SOLVER = [
   "var U = 'in';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
-  ...['esc', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'orientations', 'newSheet',
+  ...['esc', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'onlyHave', 'planWhatFits', 'solveBoards', 'orientations', 'newSheet',
     'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'orderSteps', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
 ];
 const K = new Function([
@@ -122,14 +122,68 @@ console.log('boards: the example project');
   check(Math.abs(r.cost - 42.64) < 1e-6, `garage shelves 2×4s cost $${r.cost.toFixed(2)}, want $42.64`);
 }
 
+const errs = r => JSON.stringify(r.errors.map(e => ({ pi: e.pi, short: e.short, only: e.only })));
 console.log('boards: on-hand boards that run short');
 {
-  // Only two boards on hand and nothing to buy: three legs can't all be cut, and the plan has to say so.
+  // Only two boards on hand and nothing to buy: three legs can't all be cut. The plan cuts the two that fit and says the
+  // third is left out, rather than planning nothing.
   let r = null;
   try { r = K.solveBoards({ stock: [{ len: 96, price: 0, have: 2 }], parts: [{ len: 72, qty: 3 }] }, { kerf: 0.125, trim: 0 }); } catch (e) { check(false, 'have 2 for 3 legs threw: ' + e.message); }
-  if (r) check(r.items.length === 0 && r.errors.length === 1 && r.errors[0].pi === -1 && r.errors[0].only === 0, 'have 2 for 3 legs: ' + JSON.stringify(r.errors));
+  if (r) check(r.items.length === 2 && r.cost === 0 && r.errors.length === 1 && r.errors[0].pi === 0 && r.errors[0].short === 1 && !r.exact, 'have 2 for 3 legs: ' + r.items.length + ' boards, ' + errs(r));
   r = K.solveBoards({ stock: [{ len: 96, price: 0, have: 3 }], parts: [{ len: 72, qty: 3 }] }, { kerf: 0.125, trim: 0 });
   check(r.items.length === 3 && r.cost === 0 && !r.errors.length, 'have 3 for 3 legs uses all three, free');
+  // An 8' board on hand and 4' boards to buy: one 72" leg fits only the board on hand, the other is left out, and the
+  // rails that fit a 4' board are all bought and planned. A 120" beam fits nothing at all.
+  const stock = [{ len: 96, price: 0, have: 1 }, { len: 48, price: 2.5, have: 0 }];
+  r = K.solveBoards({ stock, parts: [{ len: 120, qty: 1 }, { len: 30, qty: 4 }, { len: 72, qty: 2 }] }, { kerf: 0.125, trim: 0 });
+  const got = {}; r.items.forEach(b => b.pieces.forEach(p => { got[p.pi] = (got[p.pi] || 0) + 1; }));
+  check(got[1] === 4 && got[2] === 1 && !got[0] && r.cost === 10 && errs(r) === '[{"pi":0},{"pi":2,"short":1}]', 'a leg short with rails to buy: ' + JSON.stringify(got) + ' $' + r.cost + ' ' + errs(r));
+}
+
+console.log('on-hand stock that runs short, with nothing to buy for some parts: what fits is planned');
+{
+  // Seeded jobs where some parts fit only the boards or sheets on hand, and those run out. Every part is planned or
+  // said to be left out, never both and never more than asked for; only parts no size to buy can hold are left out;
+  // nothing uses more on hand than there is; no part left out fits in the room the plan leaves; and the same parts less
+  // those left out come out as planned.
+  const R = rng(4711); let shortJobs = 0;
+  for (let t = 0; t < 160; t++) {
+    const sheet = t % 2 === 1, kerf = 0.125;
+    let stock, parts;
+    if (!sheet) {
+      stock = [{ len: 96, price: 0, have: 1 + Math.floor(R() * 3) }, { len: 72, price: 0, have: Math.floor(R() * 2) }];
+      if (t % 4 === 0) stock.push({ len: 48, price: 3, have: 0 });
+      parts = Array.from({ length: 1 + Math.floor(R() * 4) }, () => ({ len: Math.round((10 + R() * 80) * 8) / 8, qty: 1 + Math.floor(R() * 4) }));
+    } else {
+      stock = [{ len: 96, wid: 48, price: 0, have: 1 + Math.floor(R() * 2) }];
+      if (t % 4 === 1) stock.push({ len: 48, wid: 24, price: 21, have: 0 });
+      parts = Array.from({ length: 1 + Math.floor(R() * 4) }, () => ({ len: Math.round((8 + R() * 80) * 4) / 4, wid: Math.round((4 + R() * 30) * 4) / 4, qty: 1 + Math.floor(R() * 4), grain: R() < 0.6 }));
+    }
+    const mat = { kind: sheet ? 'sheet' : 'board', stock, parts };
+    const r = sheet ? K.solveSheets(mat, { kerf }) : K.solveBoards(mat, { kerf, trim: 0 });
+    const got = parts.map(() => 0), used = new Map();
+    r.items.forEach(it => { (sheet ? it.placed : it.pieces).forEach(p => got[p.pi]++); used.set(it.stock, (used.get(it.stock) || 0) + 1); });
+    const short = parts.map(() => 0); r.errors.forEach(e => { if (e.short) short[e.pi] += e.short; });
+    if (short.some(n => n)) shortJobs++;
+    check(!r.errors.some(e => e.pi < 0), `job ${t}: planned nothing: ${errs(r)}`);
+    parts.forEach((p, pi) => {
+      const big = r.errors.some(e => e.pi === pi && !e.short && !e.max);
+      check(big ? got[pi] === 0 && !short[pi] : got[pi] + short[pi] === p.qty, `job ${t}: part ${pi} × ${p.qty}: ${got[pi]} planned, ${short[pi]} left out${big ? ', and too big' : ''}`);
+      const buyable = stock.some(s => !s.have && (sheet ? (p.len <= s.len && p.wid <= s.wid) || (!p.grain && p.len <= s.wid && p.wid <= s.len) : p.len <= s.len));
+      check(!short[pi] || !buyable, `job ${t}: part ${pi} left out though a size to buy holds it`);
+    });
+    check(stock.every(s => !s.have || (used.get(s) || 0) <= s.have), `job ${t}: used more on hand than there is`);
+    // and no part left out would fit in the room the plan leaves on a board, or on a piece left over from a sheet
+    const fits = (p, f) => (p.len <= f.w + 1e-9 && p.wid <= f.h + 1e-9) || (!p.grain && p.wid <= f.w + 1e-9 && p.len <= f.h + 1e-9);
+    check(!parts.some((p, pi) => short[pi] && r.items.some(it => sheet ? it.spare.some(f => fits(p, f)) : it.cap - it.need >= kerf + p.len - 1e-9)), `job ${t}: a part left out fits in the room left`);
+    if (short.some(n => n)) {
+      const again = { kind: mat.kind, stock, parts: parts.map((p, pi) => ({ ...p, qty: got[pi] })) };
+      const r2 = sheet ? K.solveSheets(again, { kerf }) : K.solveBoards(again, { kerf, trim: 0 });
+      check(!r2.errors.length && Math.abs(r2.cost - r.cost) < 1e-6 && r2.items.length === r.items.length, `job ${t}: the parts that fit, planned again, come out differently`);
+    }
+  }
+  check(shortJobs > 40, 'only ' + shortJobs + ' of the jobs leave parts out');
+  console.log('  ' + shortJobs + ' jobs leave parts out');
 }
 
 console.log('boards: random jobs against brute force (offcuts on hand, end trim, two kerfs)');
@@ -320,9 +374,11 @@ console.log('sheets: one on hand and more to buy');
   const parts = [{ len: 72, wid: 11.25, qty: 6, grain: true }], ply = [{ len: 48, wid: 48, price: 34, have: 0 }, { len: 48, wid: 24, price: 21, have: 0 }];
   let r = K.solveSheets({ kind: 'sheet', stock: [{ len: 96, wid: 48, price: 58, have: 1 }, { len: 96, wid: 48, price: 58, have: 0 }, ...ply], parts }, { kerf: 0.125 });
   check(r.cost === 58 && r.items.length === 2 && r.items.filter(it => it.stock.have).length === 1 && !r.errors.length, `two sheets with one on hand: $${r.cost}, ${r.items.length} sheets, ${JSON.stringify(r.errors)}`);
-  // With no 4×8 left to buy, the plan can't be made, and it says which part only the sheet on hand could hold.
+  // With no 4×8 left to buy, the sides that fit on the sheet on hand are planned, and the rest are left out. The small
+  // parts, which a size to buy holds, are planned too.
   r = K.solveSheets({ kind: 'sheet', stock: [{ len: 96, wid: 48, price: 58, have: 1 }, ...ply], parts: [{ len: 20, wid: 10, qty: 2, grain: true }, ...parts] }, { kerf: 0.125 });
-  check(r.items.length === 0 && r.errors.length === 1 && r.errors[0].pi === -1 && r.errors[0].only === 1, 'one 4×8 on hand for two sheets of sides: ' + JSON.stringify(r.errors));
+  const got = [0, 0]; r.items.forEach(it => it.placed.forEach(p => got[p.pi]++));
+  check(got[0] === 2 && got[1] === 4 && r.errors.length === 1 && r.errors[0].pi === 1 && r.errors[0].short === 2 && r.items.some(it => it.stock.have), 'one 4×8 on hand for two sheets of sides: ' + JSON.stringify(got) + ' ' + JSON.stringify(r.errors.map(e => ({ pi: e.pi, short: e.short }))));
 }
 
 console.log('sheets: more than 300 of one part');
