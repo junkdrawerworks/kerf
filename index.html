@@ -2085,13 +2085,31 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     del.addEventListener('click', function () {
       if (del.dataset.armed !== '1') { del.dataset.armed = '1'; delAt = Date.now(); del.textContent = 'Press again to delete “' + P.name + '”'; return; }
       if (Date.now() - delAt < 500) return; // a double tap only asks
+      var gone = P, at = DB.order.indexOf(P.id), name = P.name, stand = null;
       DB.deleted[P.id] = Math.max(Date.now(), (P.updated || 0) + 1); // so another open window doesn't bring it back
       delete DB.projects[P.id]; DB.order = DB.order.filter(function (id) { return id !== P.id && DB.projects[id]; });
-      if (!DB.order.length) DB.order = [freshExample().id];
-      var name = P.name; DB.current = DB.order[0]; P = DB.projects[DB.current]; save(true); closeSheet(); applyProject(); toast('Deleted “' + name + '”');
+      if (!DB.order.length) { stand = freshExample(); DB.order = [stand.id]; }
+      DB.current = DB.order[0]; P = DB.projects[DB.current]; save(true); closeSheet(); applyProject();
+      toast('Deleted “' + name + '”', { label: 'Undo', run: function (kb) { undelete(gone, at, stand, kb); } });
     });
     $('pjList').parentNode.insertBefore(del, $('pjList').nextSibling);
     drawProjects();
+  }
+  // Undo for Delete this project: the project comes back where it was in the list, with its ticks, as the open one,
+  // and the example the delete left in its place (when it was the last) goes again. It comes back newer than its
+  // deletion, which another open window has already taken in and only lets a newer copy past (mergeDB).
+  function undelete(gone, at, stand, kb) {
+    var after = Math.max(DB.deleted[gone.id] || 0, stand ? stand.updated : 0, gone.updated || 0);
+    delete DB.deleted[gone.id];
+    var ex = stand && DB.projects[stand.id];
+    if (ex && ex.example && stand.id !== gone.id) { delete DB.projects[stand.id]; DB.deleted[stand.id] = Math.max(Date.now(), ex.updated + 1); }
+    DB.projects[gone.id] = gone;
+    DB.order = DB.order.filter(function (id) { return id !== gone.id && DB.projects[id]; });
+    DB.order.splice(Math.min(at, DB.order.length), 0, gone.id);
+    gone.updated = after; touch(gone);
+    DB.current = gone.id; P = gone; save(true); closeSheet(); applyProject();
+    toast('Brought back “' + gone.name + '”');
+    if (kb) $('projBtn').focus();
   }
   // The list in Projects, when it's open; drawn again when another window saves.
   function drawProjects() {

@@ -1712,7 +1712,62 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   await page.waitForTimeout(600);
   await page.click('#sheet .btn.danger');
   assert.deepEqual((await stored()).order, [other.id], 'a second tap a moment later deletes it');
-  assert.equal(await page.textContent('#toast'), 'Deleted “Keep me”');
+  assert.equal(await page.textContent('#toast'), 'Deleted “Keep me”Undo');
+}
+
+// Undo brings a deleted project back, in this window and in another one open beside it, which had already taken the
+// deletion in: back where it was in the list, with its ticks, as the open project here. A deletion not undone still
+// holds in both. Deleting the last project leaves the example in its place, and Undo takes that away again.
+{
+  const keep = project('Keep me', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 2, len: 30 }])], { done: {} });
+  const first = project('First', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 3, len: 30 }])]);
+  const last = project('Last', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 1, len: 30 }])]);
+  await open({ ...saved(keep, first, last), current: keep.id, order: [first.id, keep.id, last.id] });
+  await view('saw');
+  await page.locator('#sawOut .cut[data-k]').first().click();
+  const other = await ctx.newPage();
+  other.on('pageerror', e => problems.push('second window: ' + e.message));
+  await other.goto(base);
+  await other.waitForSelector('#planOut > *', { state: 'attached' });
+  const listed = async win => { await win.click('#projBtn'); const n = await win.$$eval('#sheet .pitem b', bs => bs.map(b => b.textContent)); await win.click('#pjx'); return n; };
+  const deleteOpen = async () => { await page.click('#projBtn'); await page.click('#sheet .btn.danger'); await page.waitForTimeout(600); await page.click('#sheet .btn.danger'); };
+  const otherHas = names => other.waitForFunction(n => JSON.stringify(Object.values(JSON.parse(localStorage.getItem('kerf.v1')).projects).map(p => p.name).sort()) === n, JSON.stringify(names.sort()), { timeout: 5000 });
+
+  await deleteOpen();
+  await otherHas(['First', 'Last']);
+  assert.deepEqual(await listed(other), ['First', 'Last'], 'the other window still lists the deleted project');
+  await page.click('#toast .lbtn');
+  assert.equal(await page.textContent('#toast'), 'Brought back “Keep me”');
+  assert.equal(await page.inputValue('#pname'), 'Keep me', 'Undo doesn’t open the project it brings back');
+  assert.equal(await page.textContent('.saw-bar b'), '1 of 2 cuts', 'the project came back without its tick');
+  assert.deepEqual((await stored()).order, [first.id, keep.id, last.id], 'the project came back somewhere else in the list');
+  await other.waitForFunction(() => document.querySelector('#pjx') === null && localStorage.getItem('kerf.v1').includes('Keep me'), null, { timeout: 5000 });
+  await other.waitForTimeout(100);
+  assert.deepEqual((await listed(other)).sort(), ['First', 'Keep me', 'Last'], 'the other window doesn’t get the project back');
+  await other.fill('#pname', 'First, renamed');
+  await other.waitForFunction(() => localStorage.getItem('kerf.v1').includes('First, renamed'));
+  assert.deepEqual(Object.values((await stored()).projects).map(p => p.name).sort(), ['First, renamed', 'Keep me', 'Last'], 'a save in the other window deleted it again');
+
+  // Deleted and not undone, it stays deleted in both.
+  await deleteOpen();
+  await otherHas(['First, renamed', 'Last']);
+  await page.waitForTimeout(100);
+  await other.fill('#pname', 'First again');
+  await other.waitForFunction(() => localStorage.getItem('kerf.v1').includes('First again'));
+  await page.waitForFunction(() => document.getElementById('pname').value === 'First again');
+  await page.fill('#pname', 'First, third');
+  await page.waitForFunction(() => localStorage.getItem('kerf.v1').includes('First, third'));
+  assert.deepEqual(Object.values((await stored()).projects).map(p => p.name).sort(), ['First, third', 'Last'], 'a deletion that wasn’t undone came back');
+  assert.deepEqual((await listed(other)).sort(), ['First, third', 'Last']);
+  await other.close();
+
+  // The last project: deleted, the example takes its place; Undo, and the example goes again.
+  await open(saved(last));
+  await deleteOpen();
+  assert.equal(await page.inputValue('#pname'), 'Garage shelves (example)');
+  await page.click('#toast .lbtn');
+  assert.deepEqual(Object.values((await stored()).projects).map(p => p.name), ['Last'], 'Undo left the example behind');
+  assert.deepEqual(await listed(page), ['Last']);
 }
 
 // In mm a length in a field is the bare number, with the number pad: "1233.5", not "1233.5 mm" cut short on a phone.
