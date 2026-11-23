@@ -206,6 +206,8 @@ div.sec{margin-top:22px}
 .shop .have td{color:var(--good)}
 .shop .dims{white-space:nowrap}
 .shop tfoot td{font-weight:700;border-top:1px solid var(--line2)}
+.keeps{margin:8px 2px 0;font-size:13.5px;color:var(--ink2)}.keeps b{color:var(--ink);font-weight:600}.keeps .nw{white-space:nowrap}
+.saw-bar+.keeps{margin:-4px 2px 12px}
 .mdiag{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 12px 6px;margin-top:12px}
 .mdiag h4{margin:0 0 2px;font:700 16px var(--body)}
 .mdiag h4 small{font:500 13px var(--body);color:var(--ink3);margin-left:6px}
@@ -1848,7 +1850,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         h += '<tr' + (l.have ? ' class="have"' : '') + '><td class="q">' + l.n + ' ×</td><td><span class="dims">' + l.dimsH + '</span>' + (l.have ? ' <small>(yours)</small>' : '') + '</td><td class="n">' + (l.have ? '—' : esc(money(l.price))) + '</td><td class="n">' + (l.have ? 'free' : esc(money(l.price * l.n))) + '</td></tr>';
       });
     });
-    h += '</tbody><tfoot><tr><td colspan="3">Total</td><td class="n">' + esc(money(r.cost)) + '</td></tr></tfoot></table></div></div>';
+    h += '</tbody><tfoot><tr><td colspan="3">Total</td><td class="n">' + esc(money(r.cost)) + '</td></tr></tfoot></table></div>' + keepLine() + '</div>';
     r.mats.forEach(function (m, mi) {
       if (!m.items.length) return;
       h += '<div class="sec"><div class="mdiag"><h4>' + esc(m.mat.name) + '<small><span class="sr">, </span>' + (m.kind === 'sheet' ? plural(m.items.length, 'sheet') : plural(m.items.length, 'board')) + '</small></h4>' + (m.kind === 'sheet' || m.rip ? sheetDiagrams(m) : boardDiagram(m)) + '</div></div>';
@@ -1902,6 +1904,21 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     });
     return lines.sort(function (a, b) { return (a.have ? 1 : 0) - (b.have ? 1 : 0) || b.len - a.len; });
   }
+  // The offcuts worth keeping, as the drawings and the saw mark them, alike ones counted together: "2 × 14″ 2×4",
+  // "1 × 23″ × 11″ ¾ plywood". A board's is its length once squared; a sheet's piece, or a ripped board's, its length
+  // × width. `html` writes them typeset for the page, and otherwise as plain text for the shop PDF.
+  function keepers(html) {
+    var f = html ? fmtH : fmt, out = [], map = {};
+    RES.mats.forEach(function (m) {
+      var add = function (d) { var k = m.mat.id + ' ' + d; if (!map[k]) out.push(map[k] = { n: 0, d: d, name: m.mat.name }); map[k].n++; };
+      m.items.forEach(function (it) {
+        if (m.kind === 'board' && !m.rip) { if (it.offcut > 0 && worthKeeping(it.offcut)) add(f(it.offcut)); return; }
+        it.spare.forEach(function (sp) { if (worthKeeping(sp.w) && (m.rip || worthKeeping(sp.h))) add(f(sp.w) + ' × ' + f(sp.h)); });
+      });
+    });
+    return out.map(function (o) { return html ? '<span class="nw">' + o.n + ' × ' + o.d + '</span> ' + esc(o.name) : o.n + ' × ' + o.d + ' ' + o.name; });
+  }
+  function keepLine() { var k = keepers(true); return k.length ? '<p class="keeps"><b>Offcuts worth keeping:</b> ' + k.join(', ') + '</p>' : ''; }
   function copyList() {
     var t = P.name + '\n';
     RES.mats.forEach(function (m) { if (!m.items.length) return; t += '\n' + m.mat.name + (m.mat.note ? ' (' + m.mat.note + ')' : '') + '\n'; shopLines(m).forEach(function (l) { t += '  ' + l.n + ' x ' + l.dims + (l.have ? '  (already have)' : '  @ ' + money(l.price)) + '\n'; }); });
@@ -2293,7 +2310,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     });
     SAW = { done: done, total: total };
     var all = total && done === total, count = all ? '<b class="all">' + (total === 1 ? 'The cut is done' : 'All ' + total + ' cuts done') + '</b>' : '<b>' + done + '<small> of </small>' + total + '<small> ' + (total === 1 ? 'cut' : 'cuts') + '</small></b>';
-    host.innerHTML = '<h2 class="sr">At the saw</h2><div class="saw-bar' + (all ? ' all' : '') + '"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div>' + count + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>' + h;
+    host.innerHTML = '<h2 class="sr">At the saw</h2><div class="saw-bar' + (all ? ' all' : '') + '"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div>' + count + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>' + (all ? keepLine() : '') + h;
     // The list is drawn again after each tick, so focus goes back to the same cut (or the first, after Start over).
     // A tick changes the project like any edit, so another open window keeps it.
     var refocus = function (k) { var c = host.querySelector('.cut[data-k' + (k ? '="' + k + '"' : '') + ']'); if (c) c.focus({ preventScroll: true }); };
@@ -2733,6 +2750,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       shopLines(m).forEach(function (l) { need(14); y += 14; text('H', 10.5, M + 12, y, l.n + ' ×  ' + l.dims.replace(' x ', ' × ') + (l.have ? '   (already have)' : '')); if (!l.have) { var t = money(l.price * l.n); text('H', 10.5, PW - M - textW('H', 10.5, t), y, t); } });
     });
     y += 8; line(M, y, PW - M, y, '#B9BFB7', 0.6); y += 14; text('HB', 11, M, y, 'Total'); text('HB', 11, PW - M - textW('HB', 11, tot), y, tot); y += 16;
+    // the offcuts worth keeping, under the shopping list as on screen
+    var keep = keepers();
+    if (keep.length) { pdfLines('H', 9, ['Offcuts worth keeping:'].concat(keep.map(function (k, i) { return k + (i < keep.length - 1 ? ',' : ''); })), ' ', PW - 2 * M).forEach(function (l, i) { need(11); y += i ? 11 : 2; text('H', 9, M, y, l, '#50575E'); }); y += 14; }
     RES.mats.forEach(function (m) {
       if (!m.items.length) return;
       var width = PW - 2 * M;

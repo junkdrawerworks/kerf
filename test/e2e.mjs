@@ -2173,6 +2173,26 @@ for (const c of sawCases) {
   assert.ok(await page.$$eval('#sawOut .cut.note', ns => ns.every(n => n.childNodes.length === 1 && n.firstChild.tagName === 'SPAN')), what + ': a note at the saw is spread out');
 }
 
+// The offcuts worth keeping are gathered under the shopping list, alike ones counted together, and on the shop PDF;
+// at the saw they show again once the last cut is ticked.
+{
+  await open(saved(project('Keepers', [board('2×4', [{ len: 96, price: 4 }], [{ name: 'Leg', qty: 2, len: 72 }]), sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])])));
+  const line = '2 × 23 7⁄8″ 2×4, 1 × 96″ × 24 1⁄8″ ¾ plywood, 1 × 35 1⁄4″ × 23 3⁄4″ ¾ plywood';
+  assert.equal(shown(await page.textContent('#planOut .keeps')), 'Offcuts worth keeping: ' + line, 'the offcuts worth keeping in the plan');
+  const pdf = pdfRuns(await shopPdf()).map(r => r.text).join(' ');
+  assert.ok(pdf.includes('Offcuts worth keeping: 2 × 23 7/8" 2×4, 1 × 96" × 24 1/8" ¾ plywood, 1 × 35 1/4" × 23 3/4" ¾ plywood'.replace(/×/g, '\xd7').replace(/¾/g, '\xbe')), 'the offcuts worth keeping on the shop PDF: ' + pdf.slice(0, 400));
+  await view('saw');
+  assert.equal(await page.$('#sawOut .keeps'), null, 'the offcuts worth keeping show at the saw before the job is done');
+  const left = page.locator('#sawOut .cut[data-k][aria-checked="false"]');
+  while (await left.count()) await left.first().click();
+  assert.match(await page.textContent('.saw-bar b'), /^All \d+ cuts done$/);
+  assert.equal(shown(await page.textContent('#sawOut .keeps')), 'Offcuts worth keeping: ' + line, 'the offcuts worth keeping once the last cut is ticked');
+  await fitsPhone('saw with the offcuts worth keeping');
+  // a plan with none says nothing
+  await open(null);
+  assert.equal(await page.$('#planOut .keeps'), null, 'the example has no offcut worth keeping');
+}
+
 // A rip wider than what's left past the blade gives the fence setting for that too, for a saw whose fence can't go that
 // far: 31 1/4" off a 48" sheet leaves 16 5/8" past an 1/8" kerf. A rip narrower than what's left has no such line.
 {
