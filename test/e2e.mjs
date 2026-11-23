@@ -93,6 +93,15 @@ const fitsPhone = async what => assert.ok(await page.evaluate(() => document.doc
 const cutsFact = () => page.evaluate(() => [...document.querySelectorAll('.fact')].map(f => f.textContent).filter(t => /cut/.test(t))[0]);
 // Text as it shows: a typeset fraction carries a plain 15/16 for screen readers, so its text reads 15/1615⁄16.
 const shown = t => t.replace(/(\d+)\/(\d+)(?=\1⁄\2)/g, '');
+// Ticks the next `n` cuts not ticked yet, in order, on page `p`: a board or sheet finished folds away, so the cuts in
+// sight move up.
+const tickNext = async (n, p = page) => { for (let i = 0; i < n; i++) await p.locator('#sawOut .cut[data-k][aria-checked="false"]').first().click(); };
+// Opens every folded board and sheet at the saw, and gives the keys of the cuts ticked.
+const tickedRows = async () => {
+  const folded = page.locator('#sawOut .stk.fold [data-fold]');
+  while (await folded.count()) await folded.first().click();
+  return page.$$eval('#sawOut .cut[data-k]', els => els.filter(e => e.getAttribute('aria-checked') === 'true').map(e => e.dataset.k));
+};
 const sawSteps = () => page.$$eval('#sawOut .cut[data-k]', els => els.map(e => e.querySelector('small').textContent)).then(a => a.map(shown));
 // Saves the shop PDF and returns it as text (its streams aren't compressed).
 async function shopPdf() {
@@ -130,6 +139,9 @@ await page.waitForTimeout(600);
 await page.reload();
 await page.waitForSelector('#sawOut .cut[data-k]');
 assert.equal(await page.textContent('.saw-bar b'), '3 of 26 cuts', 'ticks survive a reload');
+// board 1, its three cuts done, is folded to its heading, and opens on a tap with its ticks
+assert.equal(shown(await page.textContent('#sawOut .stk.fold.done .stk-hd')).replace(/›$/, ''), 'Board 12×4 · 10′3/3 ✓');
+await page.click('#sawOut .stk.done [data-fold]');
 assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
 
 // The screen stays on while the checklist at the saw is in sight: Kerf asks for a screen wake lock there, lets go of it
@@ -178,9 +190,10 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
 {
   await open(null);
   await view('saw');
-  for (let i = 0; i < 20; i++) await cuts.nth(i).click();
+  for (let i = 0; i < 20; i++) await page.locator('#sawOut .cut[data-k][aria-checked="false"]').first().click();
   const nextCut = p => p.$eval('#sawOut .cut.next', c => [c.dataset.k, c.querySelector('.nx').textContent, c.getBoundingClientRect().top >= 0 && c.getBoundingClientRect().bottom <= innerHeight]);
-  const keys = await page.$$eval('#sawOut .cut[data-k]', els => els.map(e => e.dataset.k));
+  // the cuts not ticked, in order: boards finished fold away
+  const keys = Array(20).fill('').concat(await page.$$eval('#sawOut .cut[data-k][aria-checked="false"]', els => els.map(e => e.dataset.k)));
   assert.equal(await page.locator('#sawOut .cut.next').count(), 1, 'more than one cut is marked next');
   assert.deepEqual((await nextCut(page)).slice(0, 2), [keys[20], 'Next'], 'the next cut isn’t the first not ticked');
   await page.waitForTimeout(600);
@@ -216,13 +229,12 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
 // another material leaves them be, and a change that comes back (a count changed and changed back) brings them back.
 // When a material's plan does change, its ticks clear and a toast says so; none ever lands on a different cut.
 {
-  const tickedRows = () => page.$$eval('#sawOut .cut[data-k]', els => els.filter(e => e.getAttribute('aria-checked') === 'true').map(e => e.dataset.k));
   const toastNow = () => page.evaluate(() => { const t = document.getElementById('toast'); return t.classList.contains('show') ? t.firstChild.textContent : ''; });
   const part = (mat, i, f) => page.locator(`#mats .mat >> nth=${mat}`).locator(`.prow[data-pid] input[data-f="${f}"] >> nth=${i}`);
   const settle = () => page.waitForTimeout(600);
   await open(null);
   await view('saw');
-  for (let i = 0; i < 4; i++) await cuts.nth(i).click();
+  await tickNext(4);
   const four = await tickedRows();
   assert.equal(four.length, 4);
   await view('list');
@@ -286,12 +298,12 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
 // A part's ✕ removes it at once, and Undo puts it back: the same plan, and the same ticks at the saw. Start over can
 // be undone too.
 {
-  const tickedRows = () => page.$$eval('#sawOut .cut[data-k]', els => els.filter(e => e.getAttribute('aria-checked') === 'true').map(e => e.dataset.k));
   const plan = () => page.evaluate(() => [...document.getElementById('planOut').children].filter(c => c.id !== 'tips').map(c => c.outerHTML).join('') + document.getElementById('sawOut').innerHTML);
   await open(null);
   await view('saw');
-  for (const i of [0, 1, 2, 5]) await cuts.nth(i).click();
-  const before = await plan(), ticks = await tickedRows();
+  await tickNext(3); // board 1, which folds; then board 2's last cut
+  await cuts.nth(2).click();
+  const ticks = await tickedRows(), before = await plan();
   await view('list');
   await page.click('[data-a="delpart"] >> nth=1');
   assert.deepEqual(await page.$$eval('.prow[data-pid] input[data-f="pname"]', is => is.map(i => i.value)), ['Leg', 'Side rail', 'Shelf']);
@@ -1496,7 +1508,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
 // Boards cut alike are drawn once: the example's eight 2×4s are two rows, "1–4" over "10′ ×4" and "5–8" over "8′ ×4",
 // and so on the shop PDF. At the saw each board keeps its row and its own ticks: board 2, cut like board 1, is folded
-// until board 1 is done, then opens with the next cut, while boards 3 and 4 stay folded.
+// until board 1 is done, then opens with the next cut, while boards 3 and 4 stay folded (and board 1, done, folds).
 {
   await open(null);
   const rows = await page.$$eval('#planOut .mdiag svg.diag', ([svg]) => [...svg.querySelectorAll('text.dg-metab')].map(t => t.textContent + ' ' + t.nextElementSibling.textContent));
@@ -1507,7 +1519,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   const heads = () => page.$$eval('#sawOut .stk-hd', hs => hs.map(h => h.textContent));
   assert.deepEqual((await heads()).slice(0, 4), ['Board 12×4 · 10′0/3', 'Board 2— same as board 10/3›', 'Board 3— same as board 10/3›', 'Board 4— same as board 10/3›']);
   for (let i = 0; i < 3; i++) await page.locator('#sawOut .cut[data-k]').nth(i).click();
-  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓', 'Board 2— same as board 10/3', 'Board 3— same as board 10/3›'], 'board 2 didn’t open once board 1 was done');
+  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓›', 'Board 2— same as board 10/3', 'Board 3— same as board 10/3›'], 'board 2 didn’t open once board 1 was done');
   assert.match(await page.textContent('#sawOut .cut.next'), /Next B Front & back rail/);
   assert.match(await page.getAttribute('#sawOut .cut.next', 'data-k'), /\/1\.0$/, 'the next cut isn’t board 2’s first');
   await page.locator('#sawOut .cut.next').click();
@@ -1515,7 +1527,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   const ticks = await page.evaluate(() => { const db = JSON.parse(localStorage.getItem('kerf.v1')); const d = db.projects[db.current].done; return Object.values(d).map(x => Object.keys(x.ticks).sort().join(' ')).join(' | '); });
   assert.equal(ticks, '0.0 0.1 0.2 1.0', 'the ticks aren’t kept board by board');
   await page.reload(); await page.waitForSelector('#sawOut .cut[data-k]');
-  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓', 'Board 2— same as board 11/3', 'Board 3— same as board 10/3›'], 'a reload folds a board with ticks');
+  assert.deepEqual((await heads()).slice(0, 3), ['Board 12×4 · 10′3/3 ✓›', 'Board 2— same as board 11/3', 'Board 3— same as board 10/3›'], 'a reload folds a board with ticks');
 }
 
 // At tablet and laptop widths a drawing names each part where there's room: "B Front & back rail 48″" on a board, and on
@@ -1577,19 +1589,25 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   assert.equal(await toastSays(), '', 'a toast before the job is done');
   await done.nth(2).click();
   assert.equal(await toastSays(), 'That’s every cut. Bench is ready to put together.');
-  assert.deepEqual(await page.$eval('.saw-bar b', b => [b.textContent, getComputedStyle(b).color === getComputedStyle(document.querySelector('.cut[aria-checked="true"] .box')).backgroundColor, b.nextElementSibling.id]),
+  assert.deepEqual(await page.$eval('.saw-bar b', b => [b.textContent, getComputedStyle(b).color === getComputedStyle(document.querySelector('.stk.done .stk-hd .n')).color, b.nextElementSibling.id]),
     ['All 3 cuts done', true, 'sawReset'], 'the bar doesn’t say the job is done');
+  // The finished board folds to its heading, which keeps the focus, and a tap opens it with its ticks.
+  assert.deepEqual(await page.evaluate(() => [document.querySelectorAll('#sawOut .cut[data-k]').length, document.activeElement.matches('.stk.fold.done [data-fold][aria-expanded="false"]')]), [0, true], 'the finished board didn’t fold, with the focus on its heading');
+  assert.equal(shown(await page.textContent('#sawOut .stk-hd')), 'Board 12×4 · 8′3/3 ✓›');
   await page.waitForTimeout(600);
   await page.reload();
-  await page.waitForSelector('#sawOut .cut[data-k]');
+  await page.waitForSelector('#sawOut .stk');
   await page.waitForTimeout(300);
   assert.equal(await page.textContent('.saw-bar b'), 'All 3 cuts done');
   assert.equal(await toastSays(), '', 'a reload of a finished job toasts');
+  await page.click('#sawOut [data-fold]');
+  assert.equal(await done.count(), 3, 'a tap doesn’t open a finished board');
   await done.nth(2).click();
   assert.equal(await page.textContent('.saw-bar b'), '2 of 3 cuts');
   await hush();
   await done.nth(2).click();
   assert.equal(await toastSays(), 'That’s every cut. Bench is ready to put together.', 'ticking the last cut again doesn’t say so');
+  assert.equal(await done.count(), 0, 'a board opened by a tap stays open once its last cut is ticked again');
   // A long material name wraps beside "Board 1"; it used to split it into "Board" over "1".
   await open(saved(project('Bench', [board('1×6 board — select pine, kiln dried, from the big orange store', [{ len: 96, price: 8.28 }], [{ name: 'Slat', qty: 2, len: 46 }])])));
   await view('saw');
@@ -1597,8 +1615,8 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 }
 
 // At the saw on a short screen (a phone on its side, or 200% zoom), each board's heading stays in sight under the top
-// bar and the saw's own bar while its cuts scroll by, and Shift+Tab up the list never leaves the focused cut under either. Their cards don't
-// clip, so a focus ring shows whole.
+// bar and the saw's own bar while its cuts scroll by, and Shift+Tab up the list never leaves the focused cut under
+// either. Their cards don't clip, so a focus ring shows whole.
 {
   await page.setViewportSize({ width: 640, height: 400 });
   await open(null);
@@ -2054,6 +2072,7 @@ await page.emulateMedia({ colorScheme: null });
 await open(null);
 await view('saw');
 for (let i = 0; i < 3; i++) await cuts.nth(i).click();
+await page.click('#sawOut .stk.done [data-fold]'); // board 1, finished and folded, opened
 for (const scheme of ['light', 'dark']) {
   await page.emulateMedia({ colorScheme: scheme });
   const c = await page.evaluate(() => {

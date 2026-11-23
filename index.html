@@ -2309,6 +2309,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   var SAWOPEN = {}; // the folded boards opened with a tap ('material id/board'), for as long as the page is open
   var SAWDG = {}; // the sheets whose drawing is folded away at the saw, the same way
   var SBRO = null; // keeps --sb, the saw's bar's height, as it wraps
+  var JUST = null; // the board or sheet just ticked, which folds if that tick finished it
   function sawWidth() { var w = $('sawOut').clientWidth; return Math.max(240, Math.floor(w || planWidth() + 26) - 26); }
   function renderSaw() {
     var host = $('sawOut');
@@ -2327,11 +2328,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     tasks.forEach(function (t, ti) {
       var n = 0, d = 0, at = 0, first = same[t.mid][t.ii], fk = t.mid + '/' + t.ii;
       t.cuts.forEach(function (c, ci) { if (!c.noCut) { n++; if (ticked(t, ci)) d++; } });
-      var forced = d > 0 || (!next && d < n), open = first === t.ii || forced || !!SAWOPEN[fk];
+      // A board or sheet whose cuts are all ticked folds to its heading, "Board 1 · 2×4 · 10′ · 3/3 ✓", and opens on a
+      // tap, so the finished ones don't push the next cut screens down. The tick that finishes it folds it again.
+      var fin = n > 0 && d === n, forced = !fin && (d > 0 || (!next && d < n));
+      if (fin && JUST === fk) delete SAWOPEN[fk];
+      var open = fin ? !!SAWOPEN[fk] : first === t.ii || forced || !!SAWOPEN[fk];
       total += n; done += d;
       var like = first === t.ii ? '' : '<span>— same as board ' + (first + 1) + '</span>', count = n ? '<span class="n">' + d + '/' + n + (d === n ? ' ✓' : '') + '</span>' : '';
       h += '<div class="stk' + (n && d === n ? ' done' : '') + (open ? '' : ' fold') + '" role="group" aria-label="' + t.title + ', ' + (like ? 'same as board ' + (first + 1) + ', ' : '') + esc(t.say) + '">' +
-        (like && !forced ? '<button class="stk-hd" type="button" aria-expanded="' + open + '" data-fold="' + fk + '"><b>' + t.head + '</b>' + like + count + '<span class="chev" aria-hidden="true">›</span></button>' : '<div class="stk-hd"><b>' + t.head + '</b>' + (like || '<span' + (t.head !== t.title ? ' class="sz"' : '') + '>' + t.sub + '</span>') + count + '</div>');
+        (fin || (like && !forced) ? '<button class="stk-hd" type="button" aria-expanded="' + open + '" data-fold="' + fk + '"><b>' + t.head + '</b>' + (like || '<span' + (t.head !== t.title ? ' class="sz"' : '') + '>' + t.sub + '</span>') + count + '<span class="chev" aria-hidden="true">›</span></button>' : '<div class="stk-hd"><b>' + t.head + '</b>' + (like || '<span' + (t.head !== t.title ? ' class="sz"' : '') + '>' + t.sub + '</span>') + count + '</div>');
       if (!open) { h += '</div>'; return; }
       // A sheet's card starts with its drawing, the card's next cut standing out in it and the cuts ticked faded, and
       // each cut below gives its number in the drawing (drawn by the style sheet, so a cut's words stay as they were).
@@ -2350,18 +2355,19 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (t.note) h += '<div class="cut note"><span>' + t.note + '</span></div>';
       h += '</div>';
     });
-    SAW = { done: done, total: total };
+    SAW = { done: done, total: total }; JUST = null;
     var all = total && done === total, count = all ? '<b class="all">' + (total === 1 ? 'The cut is done' : 'All ' + total + ' cuts done') + '</b>' : '<b>' + done + '<small> of </small>' + total + '<small> ' + (total === 1 ? 'cut' : 'cuts') + '</small></b>';
     host.innerHTML = '<h2 class="sr">At the saw</h2><div class="saw-bar' + (all ? ' all' : '') + '"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div>' + count + (next && !all ? '<button class="lbtn" type="button" id="sawNext">Next cut</button>' : '') + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>' + (all ? keepLine() : '') + h;
     // The list is drawn again after each tick, so focus goes back to the same cut (or the first, after Start over).
     // A tick changes the project like any edit, so another open window keeps it.
-    var refocus = function (k) { var c = host.querySelector('.cut[data-k' + (k ? '="' + k + '"' : '') + ']'); if (c) c.focus({ preventScroll: true }); };
+    // A tick that folds its board leaves focus on the board's heading.
+    var refocus = function (k) { var c = host.querySelector('.cut[data-k' + (k ? '="' + k + '"' : '') + ']') || (k && host.querySelector('[data-fold="' + k.slice(0, k.lastIndexOf('.')) + '"]')); if (c) c.focus({ preventScroll: true }); };
     host.querySelectorAll('.cut[data-k]').forEach(function (b) {
       b.addEventListener('click', function () {
         var k = b.dataset.k, mid = k.slice(0, k.indexOf('/')), ck = k.slice(mid.length + 1);
         var d = P.done[mid] || (P.done[mid] = { key: TKEYS[mid], ticks: {}, was: [] }), on = !d.ticks[ck];
         if (on) d.ticks[ck] = 1; else delete d.ticks[ck];
-        touch(); renderSaw(); refocus(k);
+        JUST = mid + '/' + ck.slice(0, ck.indexOf('.')); touch(); renderSaw(); refocus(k);
         // The tick that finishes the job says so, once: never a reload or a redraw of a finished job.
         if (on && SAW.total && SAW.done === SAW.total) toast('That’s every cut. ' + (P.name.replace(/ \(example\)$/, '') || 'The project') + ' is ready to put together.');
       });
