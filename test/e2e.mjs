@@ -304,6 +304,34 @@ assert.equal(await page.inputValue('#pname'), 'Mudroom bench');
 assert.equal(await page.textContent('.total'), '$70.76');
 assert.deepEqual(Object.values((await stored()).projects).map(p => p.name).sort(), ['Garage shelves (example)', 'Mudroom bench']);
 
+// On an iPhone a tapped link opens in Safari, whose projects aren't the ones Kerf on the home screen keeps: there the
+// link says so and offers itself to copy, the whole link, though the page has taken it out of the address bar. Not
+// on other phones, and not in Kerf opened from the home screen.
+{
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+  const note = 'Using Kerf from your home screen? It keeps its own projects — copy this link and paste it under Projects there.';
+  for (const [what, ua, standalone, want] of [['Safari on an iPhone', IPHONE, false, true], ['Kerf on an iPhone’s home screen', IPHONE, true, false], ['another phone', undefined, false, false]]) {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, ...(ua ? { userAgent: ua } : {}) });
+    const p = await c.newPage();
+    p.on('pageerror', e => problems.push(e.message));
+    await p.addInitScript(standalone => {
+      if (standalone) Object.defineProperty(navigator, 'standalone', { get: () => true });
+      Object.defineProperty(navigator, 'clipboard', { get: () => ({ writeText: t => { window.copied = t; return Promise.resolve(); } }) });
+    }, standalone);
+    const hash = linkTo(MUDROOM);
+    await p.goto(base + hash);
+    await p.waitForSelector('#lkAdd');
+    assert.equal((await p.textContent('#sheet')).includes(note), want, what + ': the note about the home screen');
+    if (want) {
+      assert.equal(await p.evaluate(() => location.hash), '', 'the link is still in the address bar');
+      await p.click('#lkCopy');
+      assert.equal(await p.evaluate(() => window.copied), base + hash, 'Copy link copies something else');
+      await p.waitForFunction(() => document.getElementById('toast').textContent === 'Link copied — paste it under Projects in Kerf on your home screen');
+    }
+    await c.close();
+  }
+}
+
 // The same plan saved as a .kerf.json file opens from Projects, shown first the way a link is.
 const file = { kerf: 1, project: { ...MUDROOM.project, name: 'Garage bench' } };
 await page.click('#projBtn');

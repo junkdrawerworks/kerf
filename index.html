@@ -2014,7 +2014,14 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     showImport(p, how, notes);
   }
   // Shows what's coming in and asks before adding it, or offers the copy opened before, if it's still here.
-  function showImport(p, how, notes) {
+  // On an iPhone or iPad a tapped link opens in Safari, and Kerf on the home screen keeps its own projects apart from
+  // Safari's, so a link opened in Safari says so and offers itself to copy (`link`, the whole address: the page has
+  // already taken it out of the address bar).
+  function iosBrowser() {
+    var ua = navigator.userAgent, ios = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    return ios && !navigator.standalone && !(window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  }
+  function showImport(p, how, notes, link) {
     var had = DB.order.filter(function (id) { return DB.projects[id] && DB.projects[id].from === p.from; })[0];
     var pieces = function (m) { return m.parts.reduce(function (a, q) { return a + (q.qty || 0); }, 0); };
     var title = { link: 'Open a project from a link', file: 'Open a project file', text: 'Open pasted project' }[how];
@@ -2022,7 +2029,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       '<div class="lk"><b>' + esc(p.name) + '</b><ul>' + p.materials.map(function (m) { return '<li>' + esc(m.name) + ' — ' + plural(pieces(m), 'piece') + '</li>'; }).join('') + '</ul></div>' +
       notes.map(function (n) { return '<p class="note">' + esc(n) + '</p>'; }).join('') +
       (had ? '<p class="note">You opened this project before; your copy is still in Projects.</p><div class="row"><button class="btn tape" type="button" id="lkOpen">Open my copy</button><button class="btn sec" type="button" id="lkAdd">Add another copy</button></div>'
-        : '<div class="row"><button class="btn tape" type="button" id="lkAdd">Add to my projects</button></div><p class="note">It comes in as a new project; nothing you already have changes. Check the prices — they’re whatever the ' + { link: 'link', file: 'file', text: 'text' }[how] + ' came with.</p>') + '</div>');
+        : '<div class="row"><button class="btn tape" type="button" id="lkAdd">Add to my projects</button></div><p class="note">It comes in as a new project; nothing you already have changes. Check the prices — they’re whatever the ' + { link: 'link', file: 'file', text: 'text' }[how] + ' came with.</p>') +
+      (link && iosBrowser() ? '<p class="note">Using Kerf from your home screen? It keeps its own projects — copy this link and paste it under Projects there.</p><div class="row"><button class="btn sec sm" type="button" id="lkCopy">Copy link</button></div>' : '') + '</div>');
+    if ($('lkCopy')) $('lkCopy').addEventListener('click', function () {
+      var done = function () { toast('Link copied — paste it under Projects in Kerf on your home screen'); };
+      try { navigator.clipboard.writeText(link).then(done, function () { showText(link); }); } catch (e) { showText(link); }
+    });
     $('lkx').addEventListener('click', closeSheet);
     $('lkAdd').addEventListener('click', function () { addProject(p); });
     if (had) $('lkOpen').addEventListener('click', function () {
@@ -2072,11 +2084,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function linkSig(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) >>> 0; return h.toString(36) + s.length.toString(36); }
   function checkLink() {
     var hash = location.hash; if (!/^#(k1|project=)/.test(hash)) return;
+    var link = location.origin + location.pathname + hash;
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { }
-    openLink(hash);
+    openLink(hash, link);
   }
-  // Shows what a link holds and asks before adding it, whether it came in the address or was pasted into Projects.
-  function openLink(text) {
+  // Shows what a link holds and asks before adding it, whether it came in the address (then `link` is the whole
+  // address) or was pasted into Projects.
+  function openLink(text, link) {
     var tries = linkHashes(text);
     // linkText inside the chain, so a link cut short or badly escaped ends in the toast below too
     (function next(i) {
@@ -2084,7 +2098,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var notes = [];
       return Promise.resolve(tries[i]).then(linkText).then(function (t) { return { p: cleanProject(JSON.parse(t), notes), notes: notes }; })
         .catch(function (e) { if (e && /browser/.test(e.message)) throw e; return next(i + 1); });
-    })(0).then(function (r) { showImport(r.p, 'link', r.notes); }).catch(function (e) { toast(e && /browser/.test(e.message) ? e.message : 'That link doesn’t hold a Kerf project'); });
+    })(0).then(function (r) { showImport(r.p, 'link', r.notes, link); }).catch(function (e) { toast(e && /browser/.test(e.message) ? e.message : 'That link doesn’t hold a Kerf project'); });
   }
 
   // ---------- shop PDF ----------

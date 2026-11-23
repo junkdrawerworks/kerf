@@ -114,7 +114,7 @@ Keep the final message tidy:
 1. A two- or three-line recap of the design.
 2. The cut list, grouped by material: quantity, part, size, and grain where it matters.
 3. Notes Kerf won't cover: hardware, glue-ups, finish, the spare board.
-4. The Kerf link, presented as a link. Tapping it opens Kerf and offers to add the project.
+4. The Kerf link, presented as a link. Tapping it opens Kerf and offers to add the project. If they use Kerf on an iPhone, add: "On an iPhone with Kerf on the home screen, press and hold the link, copy it, and paste it in Kerf › Projects." (A tapped link opens in Safari, which keeps its own projects.)
 5. The fallback: offer the `.kerf.json` file (**Projects** → **Open a project file** in Kerf). If the script says `Long link: offer the file first` (past about 2,000 characters), put the file before the link: some apps cut a long link short. Only put paste text in the reply if you can't offer the file. Copy the link and the paste text character for character from the script's output; they are encoded data, and one retyped digit breaks them.
 6. One line saying prices are examples, and that Kerf will show exactly what to buy and how to cut it. Leave the buying arithmetic to Kerf; hand-worked totals are easy to get wrong. If you mention one, call it rough.
 
