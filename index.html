@@ -1364,7 +1364,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
             var copy = { id: uid(), len: s.len, price: s.price, have: 0 }; if (sheet) copy.wid = s.wid; m.stock.splice(m.stock.indexOf(s) + 1, 0, copy);
             renderList(); focusAfter(['.srow[data-sid="' + s.id + '"] [data-f="have"]'], true);
           }
-          toast('Kerf will use your ' + s.have + ' and buy more ' + (sheet ? fmtT(s.wid, { ft: true }) + ' × ' + fmtT(s.len, { ft: true }) : fmtT(s.len, { ft: true })) + ' if it needs them');
+          toast('Kerf will use the ' + (s.have > 1 ? s.have : sheet ? fmtT(s.wid, { ft: true }) + ' × ' + fmtT(s.len, { ft: true }) : fmtT(s.len, { ft: true })) + ' you have first, and buy more if it needs them');
         }
       }
       refreshChips(m);
@@ -1573,14 +1573,14 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var shown = TIPS.filter(tipFor).slice(0, 3);
     el.innerHTML = shown.map(function (t, i) {
       var at = tipFor(t);
-      return '<div class="tip"><span class="tag">TIP</span><span id="tip' + i + '">Make <b>' + esc(at.p.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and the ' + esc(at.m.name) + ' costs <b>' + esc(money(t.save)) + ' less</b>.</span><button class="btn sm sec" type="button" data-tip="' + i + '" aria-describedby="tip' + i + '">Use ' + esc(fmtT(t.to)) + '</button></div>';
+      return '<div class="tip"><span class="tag">TIP</span><span id="tip' + i + '">Make <b>' + esc(at.p.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and you spend <b>' + esc(money(t.save)) + ' less</b> on ' + esc(at.m.name) + '.</span><button class="btn sm sec" type="button" data-tip="' + i + '" aria-describedby="tip' + i + '">Use ' + esc(fmtT(t.to)) + '</button></div>';
     }).join('');
     el.querySelectorAll('[data-tip]').forEach(function (b) {
       var t = shown[+b.dataset.tip]; // the tip this button shows, whatever the next check finds
       b.addEventListener('click', function (e) {
         var at = tipFor(t), p = at && at.p, i = +b.dataset.tip;
         if (!p) return; // that part has changed since (and the tip should have gone with it)
-        p[t.dim] = t.to; touch(); renderList(); resolve(); toast((p.name || 'Part') + ' is now ' + fmtT(t.to) + (t.dim === 'wid' ? ' wide' : ''));
+        p[t.dim] = t.to; touch(); renderList(); resolve(); toast((p.name || 'Part') + ' is now ' + fmtT(t.to) + (t.dim === 'wid' ? ' wide' : '') + ' — ' + money(t.save) + ' less to buy');
         // Focus goes to the field just changed, where the cut list shows beside the plan, or else to the next tip.
         focusAfter(['.prow[data-pid="' + p.id + '"] [data-f="' + t.dim + '"]', '#tips [data-tip="' + i + '"]', '#tips [data-tip="' + (i - 1) + '"]', '#tips'], e.detail === 0);
       });
@@ -2064,7 +2064,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       '<textarea id="pjPaste" placeholder="…or paste a project’s text or a Kerf link here"></textarea></div>' +
       '<p class="note" id="pjNote">' + projectsNote() + '</p></div>');
     $('pjNew').addEventListener('click', function () { newProject(); });
-    $('pjDup').addEventListener('click', function () { var c = JSON.parse(JSON.stringify(P)); c.id = uid(); c.name = P.name.replace(/ \(example\)$/, '') + ' copy'; c.example = false; delete c.from; c.updated = Date.now(); DB.projects[c.id] = c; DB.order.unshift(c.id); DB.current = c.id; P = c; save(true); closeSheet(); applyProject(); toast('Duplicated'); });
+    $('pjDup').addEventListener('click', function () { var c = JSON.parse(JSON.stringify(P)); c.id = uid(); c.name = P.name.replace(/ \(example\)$/, '') + ' copy'; c.example = false; delete c.from; c.updated = Date.now(); DB.projects[c.id] = c; DB.order.unshift(c.id); DB.current = c.id; P = c; save(true); closeSheet(); applyProject(); toast('Made “' + c.name + '”'); });
     $('pjExport').addEventListener('click', exportProject);
     $('pjCopy').addEventListener('click', function () { var t = JSON.stringify({ kerf: 1, project: P }); try { navigator.clipboard.writeText(t).then(function () { toast('Project copied — paste it into Kerf on the other device'); }, function () { showText(t); }); } catch (e) { showText(t); } });
     $('pjOpen').addEventListener('click', function () { $('pjFile').click(); }); // a button, so the keyboard reaches it

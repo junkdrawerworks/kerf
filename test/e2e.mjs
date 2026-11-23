@@ -477,6 +477,7 @@ await page.click('#lkx');
   await page.click('#projBtn');
   await page.click('#pjDup');
   assert.equal(await page.inputValue('#pname'), 'Mudroom bench copy');
+  assert.equal(await page.textContent('#toast'), 'Made “Mudroom bench copy”', 'Duplicate doesn’t name the copy it made');
   await page.evaluate(hash => { location.hash = hash; }, linkTo(MUDROOM));
   await again('Open a project from a link');
   // Add another copy still adds one.
@@ -995,6 +996,15 @@ const source = page.locator('.srow[data-sid] select').nth(1);
 assert.equal(await source.inputValue(), '7', 'seven on hand shows as Buy');
 assert.deepEqual(await source.locator('option').evaluateAll(os => os.map(o => o.value)), ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
 
+// Have 2 on a size to buy: the toast counts what you have, in words that read right for any count.
+{
+  await open(saved(project('Two on hand', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 2, len: 30 }])])));
+  await view('list');
+  await page.click('details.stock summary');
+  await page.selectOption('.srow[data-sid] select >> nth=0', '2');
+  assert.equal(await page.textContent('#toast'), 'Kerf will use the 2 you have first, and buy more if it needs them');
+}
+
 // "Have 1" on a size you buy means you own one: Kerf uses it and still buys that size. Six 72" sides need two 4×8
 // sheets, and with one on hand the plan buys the other, where it used to drop the plywood from the plan.
 {
@@ -1003,7 +1013,7 @@ assert.deepEqual(await source.locator('option').evaluateAll(os => os.map(o => o.
   await view('list');
   await page.click('details.stock summary');
   await page.selectOption('.srow[data-sid] select >> nth=0', '1');
-  assert.equal(await page.textContent('#toast'), 'Kerf will use your 1 and buy more 4′ × 8′ if it needs them');
+  assert.equal(await page.textContent('#toast'), 'Kerf will use the 4′ × 8′ you have first, and buy more if it needs them');
   assert.deepEqual(await page.$$eval('.srow[data-sid]', rs => rs.map(r => r.querySelector('[data-f="slen"]').value + ' ' + r.querySelector('[data-f="price"]').value + ' ' + r.querySelector('select').value)),
     ['96"  1', '96" 58.00 0', '48" 34.00 0', '48" 21.00 0'], 'the sizes after "Have 1": yours, then the same size to buy');
   // Another Have on a size that's still bought adds nothing more.
@@ -1529,9 +1539,11 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   };
   await open(null);
   await page.waitForSelector('[data-tip]', { timeout: 30000 });
-  assert.ok(shown(await page.textContent('#tips')).includes(RAIL_TIP));
+  assert.ok(shown(await page.textContent('#tips')).includes(RAIL_TIP + ' and you spend $4.12 less on 2×4.'), 'the tip’s words: ' + shown(await page.textContent('#tips')));
   const applied = await tipsAfterTap(() => page.click('[data-tip]'));
   assert.equal(await page.inputValue('.prow[data-pid] >> nth=1 >> [data-f="len"]'), '47 15/16"');
+  // The toast says what the tip saved, as the tip did, with the length kept on one line.
+  assert.equal(await page.textContent('#toast'), 'Front & back rail is now 47\u00a015/16″ — $4.12 less to buy');
   assert.ok(!applied.some(t => t.includes(RAIL_TIP)), 'the tip just applied is still offered: ' + applied.join(' / '));
   await open(null);
   await page.waitForSelector('[data-tip]', { timeout: 30000 });
