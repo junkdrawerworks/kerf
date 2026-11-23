@@ -1000,6 +1000,37 @@ assert.equal(await page.$eval('#planOut div.sec', d => getComputedStyle(d).margi
   assert.match(pages[0].find(r => r.size === 9).text, /^Saw kerf 1\/8" · /, 'the header names the saw kerf');
 }
 
+// A thin kerf reads back as typed, in Settings and on the shop PDF: 3/32 used to show as 1/8", and 2.2 mm as 2 mm.
+// So does a length typed to the 32nd or the tenth of a millimetre, in its own field, and an edit next to it doesn't
+// save it back rounded: 23 3/32 used to become 23 1/8 when the cut list drew again.
+{
+  await open(saved(project('Thin kerf', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Rail', qty: 2, len: 30 }])])));
+  await page.click('#setBtn');
+  await page.fill('#sKerf', '3/32');
+  await page.click('#sTrim');
+  assert.equal(await page.inputValue('#sKerf'), '3/32"', 'a 3/32 kerf in Settings');
+  await page.click('#stx');
+  assert.match(pdfPages(await shopPdf())[0].find(r => r.size === 9).text, /^Saw kerf 3\/32" · /, 'the PDF header’s saw kerf');
+  await view('list');
+  const len = page.locator('#mats .prow[data-pid] input[data-f="len"]').first(), qty = page.locator('#mats .prow[data-pid] input[data-f="qty"]').first();
+  await len.fill('23 3/32');
+  await qty.click();
+  await qty.fill('3');
+  await page.waitForTimeout(600);
+  assert.equal(await len.inputValue(), '23 3/32"', 'a length typed to the 32nd');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('kerf.v1')).projects[JSON.parse(localStorage.getItem('kerf.v1')).current].materials[0].parts[0].len), 23 + 3 / 32, 'the length saved');
+  await page.click('#setBtn');
+  await page.click('#uSeg button[data-v="mm"]');
+  await page.fill('#sKerf', '2.2');
+  await page.click('#sTrim');
+  assert.equal(await page.inputValue('#sKerf'), '2.2 mm', 'a 2.2 mm kerf in Settings');
+  await page.click('#stx');
+  await len.fill('603.3');
+  await qty.click();
+  await page.waitForTimeout(600);
+  assert.equal(await len.inputValue(), '603.3', 'a length typed to the tenth of a millimetre');
+}
+
 // A sheet whose steps fit on a page keeps them with its drawing: in a big project, the ½ plywood's eight steps used to
 // start under its drawing at the foot of one page and go on at the top of the next.
 {

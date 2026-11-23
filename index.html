@@ -437,20 +437,24 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
 
   // ---------- lengths: stored in inches, shown in the project's units ----------
   var U = 'in', CUR = '$';
-  function sixteenths(x) { var n = Math.round(Math.abs(x) * 16), w = Math.floor(n / 16), f = n % 16, d = 16; while (f && f % 2 === 0) { f /= 2; d /= 2; } return { w: w, f: f, d: d }; }
-  function mmOf(x) { var mm = Math.round(x * 25.4 * 2) / 2; return mm % 1 ? mm.toFixed(1) : String(mm); }
-  // Plain text: 35 3/4"  8'  8' 6"  or  908 mm, 2.4 m
+  // Inches to the nearest sixteenth (or `den`th): whole inches and a fraction in lowest terms.
+  function sixteenths(x, den) { den = den || 16; var n = Math.round(Math.abs(x) * den), w = Math.floor(n / den), f = n % den, d = den; while (f && f % 2 === 0) { f /= 2; d /= 2; } return { w: w, f: f, d: d }; }
+  function mmOf(x, fine) { var k = fine ? 10 : 2, mm = Math.round(x * 25.4 * k) / k; return mm % 1 ? mm.toFixed(1) : String(mm); }
+  // Plain text: 35 3/4"  8'  8' 6"  or  908 mm, 2.4 m. The plan, the saw and the drawings work to the sixteenth and the
+  // half millimetre; `fine` (to the 32nd, or the tenth of a millimetre) is for the fields a length is typed into and
+  // the kerf, so 3/32 or 2.2 mm reads back as typed rather than as 1/8 or 2 mm, and isn't saved back rounded.
   function fmt(x, o) {
     o = o || {};
     if (U === 'mm') {
-      if (o.ft && x * 25.4 >= 1000) { var m = Math.round(x * 25.4) / 1000; return String(+m.toFixed(3)) + (o.bare ? '' : ' m'); }
-      return mmOf(x) + (o.bare ? '' : ' mm');
+      if (o.ft && !o.fine && x * 25.4 >= 1000) { var m = Math.round(x * 25.4) / 1000; return String(+m.toFixed(3)) + (o.bare ? '' : ' m'); }
+      return mmOf(x, o.fine) + (o.bare ? '' : ' mm');
     }
-    if (o.ft && x >= 24) { // to the nearest sixteenth first, so just under a foot shows as the foot, not 12"
-      var n = Math.round(x * 16), ft = Math.floor(n / 192), rem = (n - ft * 192) / 16;
-      return ft + "'" + (rem ? ' ' + fmt(rem) : '');
+    var den = o.fine ? 32 : 16;
+    if (o.ft && x >= 24) { // to the nearest sixteenth (or 32nd) first, so just under a foot shows as the foot, not 12"
+      var n = Math.round(x * den), ft = Math.floor(n / (12 * den)), rem = (n - ft * 12 * den) / den;
+      return ft + "'" + (rem ? ' ' + fmt(rem, { fine: o.fine }) : '');
     }
-    var p = sixteenths(x), s = p.w ? String(p.w) : '';
+    var p = sixteenths(x, den), s = p.w ? String(p.w) : '';
     if (p.f) s += (s ? ' ' : '') + p.f + '/' + p.d;
     return (s || '0') + (o.bare ? '' : '"');
   }
@@ -1216,8 +1220,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }).join('');
   }
   // A length in a field: in mm the bare number, so the field stays short (the cut list says it's in mm) and a phone can
-  // offer its number pad; in inches as a tape reads, with the letter keyboard for the ' and " marks.
-  function fieldLen(x, o) { return U === 'mm' ? fmt(x, { bare: true }) : fmt(x, o); }
+  // offer its number pad; in inches as a tape reads, with the letter keyboard for the ' and " marks. Either way finely
+  // enough (fmt's `fine`) that 23 3/32 or 603.3 stays as typed when the cut list draws again.
+  function fieldLen(x, o) { return U === 'mm' ? fmt(x, { bare: true, fine: true }) : fmt(x, { ft: !!(o && o.ft), fine: true }); }
   // A size to buy as a screen reader names it: the 8 ft size, the 4 ft × 8 ft size.
   function sizeName(m, s) { return m.kind === 'sheet' ? sayLen(s.wid, { ft: true }) + ' × ' + sayLen(s.len, { ft: true }) : sayLen(s.len, { ft: true }); }
   function nameSize(m, s, row) {
@@ -1923,12 +1928,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     function draw() {
       document.querySelectorAll('#uSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === U); b.setAttribute('aria-pressed', b.dataset.v === U); });
       ['sKerf', 'sTrim', 'sKeep'].forEach(function (id) { $(id).inputMode = U === 'mm' ? 'decimal' : 'text'; });
-      $('sKerf').value = fmt(P.kerf); $('sTrim').value = fmt(P.trim || 0); $('sKeep').value = fmt(P.keep); $('sCur').value = CUR;
+      $('sKerf').value = fmt(P.kerf, { fine: true }); $('sTrim').value = fmt(P.trim || 0, { fine: true }); $('sKeep').value = fmt(P.keep, { fine: true }); $('sCur').value = CUR;
     }
     document.querySelectorAll('#uSeg button').forEach(function (b) { b.addEventListener('click', function () { P.units = U = b.dataset.v; touch(); draw(); renderHead(); renderList(); resolve(); }); });
     [['sKerf', 'kerf', 0, 1], ['sTrim', 'trim', 0, 6], ['sKeep', 'keep', 0, 240]].forEach(function (a) {
       $(a[0]).addEventListener('input', function () { var v = parseLen(this.value); var ok = v >= a[2] && v <= a[3] || (this.value.trim() === '0'); this.classList.toggle('bad', !ok); if (ok) { P[a[1]] = this.value.trim() === '0' ? 0 : v; touch(); resolve(true); } });
-      $(a[0]).addEventListener('blur', function () { this.value = fmt(P[a[1]] || 0); this.classList.remove('bad'); });
+      $(a[0]).addEventListener('blur', function () { this.value = fmt(P[a[1]] || 0, { fine: true }); this.classList.remove('bad'); });
     });
     $('sCur').addEventListener('input', function () { P.cur = CUR = this.value.trim() || '$'; touch(); renderList(); resolve(true); });
     $('stx').addEventListener('click', closeSheet); draw();
@@ -2200,7 +2205,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var tot = money(RES.cost), totW = textW('HB', 22, tot);
     rect(M, y, 58, 22, '#F2C200'); text('HB', 15, M + 8, y + 16, 'KERF');
     text('HB', 16, M + 70, y + 16, fitText('HB', 16, P.name, PW - M - totW - 16 - (M + 70))); // stops short of the total
-    text('H', 9, M + 70, y + 29, 'Saw kerf ' + fmt(P.kerf) + (P.trim ? ' · trim ' + fmt(P.trim) + ' per end' : '') + ' · ' + new Date().toLocaleDateString());
+    text('H', 9, M + 70, y + 29, 'Saw kerf ' + fmt(P.kerf, { fine: true }) + (P.trim ? ' · trim ' + fmt(P.trim, { fine: true }) + ' per end' : '') + ' · ' + new Date().toLocaleDateString());
     text('HB', 22, PW - M - totW, y + 18, tot); text('H', 8, PW - M - textW('H', 8, 'TO BUY'), y + 29, 'TO BUY', '#686D73');
     y += 46;
     text('HB', 10, M, y, 'SHOPPING LIST', '#686D73'); y += 8;

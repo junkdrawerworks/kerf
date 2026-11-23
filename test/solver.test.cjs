@@ -87,6 +87,13 @@ for (const [x, want, wantH] of [[95.98, "8'", '8′'], [2438 / 25.4, "8'", '8′
   check(got === want && gotH === wantH, `fmt(${x}, in feet) = ${got} and ${gotH}, want ${want}`);
 }
 K.units('mm'); check(K.parseLen('600') === 600 / 25.4 && K.fmt(600 / 25.4) === '600 mm', 'millimeters'); K.units('in');
+// Fine, for a field and the kerf: to the 32nd, or the tenth of a millimetre, so what was typed reads back as typed.
+for (const [u, x, o, want] of [['in', 3 / 32, {}, '1/8"'], ['in', 3 / 32, { fine: true }, '3/32"'], ['in', 23 + 3 / 32, { fine: true }, '23 3/32"'], ['in', 23.125, { fine: true }, '23 1/8"'],
+  ['in', 96 + 3 / 32, { ft: true, fine: true }, "8' 3/32\""], ['in', 191.99, { ft: true, fine: true }, "16'"], ['mm', 2.2 / 25.4, {}, '2 mm'], ['mm', 2.2 / 25.4, { fine: true }, '2.2 mm'],
+  ['mm', 3 / 25.4, { fine: true }, '3 mm'], ['mm', 603.3 / 25.4, { fine: true, bare: true }, '603.3'], ['mm', 2440 / 25.4, { fine: true, ft: true }, '2440 mm']]) {
+  K.units(u); const got = K.fmt(x, o); K.units('in');
+  check(got === want, `fmt(${x}, ${JSON.stringify(o)}) in ${u} = ${got}, want ${want}`);
+}
 
 console.log('boards: the example project');
 {
