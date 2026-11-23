@@ -278,7 +278,7 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   assert.equal(await toastNow(), 'The ¾ plywood plan changed, so its ticked cut was cleared');
   await view('saw');
   assert.equal(await page.textContent('#sawOut .cut[data-k] .meas'), '25″');
-  assert.deepEqual(await tickedRows(), [], 'the tick on the 30" crosscut moved to the 40" one');
+  assert.deepEqual(await tickedRows(), [], 'the tick on the 20" rip moved to the 25" one');
 }
 
 // A part's ✕ removes it at once, and Undo puts it back: the same plan, and the same ticks at the saw. Start over can
