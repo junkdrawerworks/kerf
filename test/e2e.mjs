@@ -476,6 +476,16 @@ await view('list');
 assert.ok(await page.isVisible('#unitNote'), 'a phone isn’t told how to type lengths');
 assert.equal(await page.textContent('#unitNote'), 'Lengths in inches — 35 3/4, 2\' 11 3/4", 910mm all work');
 
+// Face-frame stock is a preset, and a material not on the list ('Other board') is named first: its name is selected.
+await open(saved(project('Bookcase', [])));
+await view('list');
+await page.click('.pbtn >> text=1×2 board');
+assert.equal(await page.textContent('.mat .mat-note'), '¾ × 1½ in');
+assert.match(await page.textContent('details.stock .chips'), /6′ · \$2\.38.*8′ · \$2\.98/);
+await page.click('.pbtn >> text=Other board');
+await page.keyboard.type('Poplar 1×5');
+assert.deepEqual(await page.$$eval('#mats .mat-name', is => is.map(i => i.value)), ['1×2 board', 'Poplar 1×5'], 'Other board doesn’t start on its name');
+
 // A three-letter currency sits clear of the price, and a price typed over an old one isn't read as both.
 {
   await open(saved(project('Franken', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }], [{ name: 'Shelf', qty: 2, len: 30, wid: 12 }])], { cur: 'CHF' })));

@@ -446,6 +446,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         { name: '2×6', note: '1½ × 5½ in', stock: [[96, 7.18], [120, 8.98], [144, 10.78], [192, 14.98]] },
         { name: '2×8', note: '1½ × 7¼ in', stock: [[96, 9.48], [120, 11.98], [144, 14.28], [192, 19.48]] },
         { name: '4×4', note: '3½ × 3½ in', stock: [[96, 11.98], [120, 15.48]] },
+        { name: '1×2 board', note: '¾ × 1½ in', stock: [[72, 2.38], [96, 2.98]] },
+        { name: '1×3 board', note: '¾ × 2½ in', stock: [[72, 3.18], [96, 4.18]] },
         { name: '1×4 board', note: '¾ × 3½ in', stock: [[72, 4.18], [96, 5.48]] },
         { name: '1×6 board', note: '¾ × 5½ in', stock: [[72, 6.28], [96, 8.28]] },
         { name: '1×12 board', note: '¾ × 11¼ in', stock: [[72, 17.98], [96, 23.98]] }
@@ -1197,6 +1199,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (b.dataset.add) {
       var k = b.dataset.add.split(':'), kind = k[0], pre = k[1] === 'x' ? (kind === 'board' ? { name: 'Board', note: '', stock: U === 'mm' ? [[2400, 5]] : [[96, 5]] } : { name: 'Sheet', note: '', stock: U === 'mm' ? [[2440, 1220, 40]] : [[96, 48, 40]] }) : PRESETS[U][kind][+k[1]];
       var m = materialFrom(kind, pre, U); P.materials.push(m); touch(); renderList(); resolve(); addPart(m, 'pname');
+      // A board or sheet not on the list gets its name first, typed over the plain 'Board' or 'Sheet'.
+      if (k[1] === 'x') { var nm = document.querySelector('.mat[data-mid="' + m.id + '"] .mat-name'); nm.focus(); nm.select(); }
       return;
     }
     var a = b.dataset.a; if (!a) return;
