@@ -258,8 +258,11 @@ div.sec{margin-top:22px}
 .pitem span{color:var(--ink3);font-size:13px;white-space:nowrap}
 textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surface);color:var(--ink);border:1px solid var(--line2);border-radius:7px;padding:8px}
 .note{color:var(--ink2);font-size:13.5px;margin:0}
-.toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(16px);background:var(--ink);color:var(--ground);padding:8px 14px;border-radius:9px;font:600 13.5px var(--body);opacity:0;transition:.2s;pointer-events:none;z-index:80;max-width:90vw;text-align:center}
-.toast.show{opacity:1;transform:translateX(-50%)}
+.toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(16px);background:var(--ink);color:var(--ground);padding:8px 14px;border-radius:9px;font:600 13.5px var(--body);opacity:0;visibility:hidden;transition:.2s;pointer-events:none;z-index:80;max-width:90vw;text-align:center}
+.toast.show{opacity:1;visibility:visible;transform:translateX(-50%)}
+.toast.act{display:flex;align-items:center;gap:12px;padding:6px 6px 6px 14px;text-align:left;width:max-content}
+.toast.act.show{pointer-events:auto}
+.toast .lbtn{flex:none;background:var(--tape);color:var(--tape-ink);border-radius:6px;padding:7px 12px;font-weight:700}
 .lk{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px 14px;margin-bottom:12px}.lk b{display:block;font-size:17px}.lk ul{margin:6px 0 0;padding-left:18px;color:var(--ink2)}
 .example{display:flex;gap:10px;align-items:center;background:var(--chalk-soft);border:1px solid color-mix(in srgb,var(--chalk) 40%,var(--line));border-radius:var(--r);padding:9px 12px;font-size:14px;margin-top:14px}
 .example button{margin-left:auto;flex:none}
@@ -340,7 +343,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
   function uid() { return Math.random().toString(36).slice(2, 9); }
-  var toastT; function toast(m) { var t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove('show'); }, 2600); }
+  // A toast can carry one action, { label: 'Undo', run: fn }: then it takes taps and stays for six seconds.
+  var toastT;
+  function toast(m, act) {
+    var t = $('toast'), hide = function () { clearTimeout(toastT); t.classList.remove('show'); };
+    t.textContent = m;
+    if (act) { var b = document.createElement('button'); b.type = 'button'; b.className = 'lbtn'; b.textContent = act.label; b.addEventListener('click', function () { hide(); act.run(); }); t.appendChild(b); }
+    t.classList.toggle('act', !!act); t.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(hide, act ? 6000 : 2600);
+  }
 
   // ---------- lengths: stored in inches, shown in the project's units ----------
   var U = 'in', CUR = '$';
@@ -536,8 +547,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // When the page is hidden or closed, a save still waiting for typing to stop is written straight away.
   // Only then: a tab that changed nothing mustn't write its copy over what another tab has saved since.
   function flush() { if (pending) save(true); }
-  // A change makes its project the newer copy, even within the same millisecond as another window's.
-  function touch() { P.updated = Math.max(Date.now(), (P.updated || 0) + 1); save(); }
+  // A change makes its project (the open one, unless another is given) the newer copy, even within the same
+  // millisecond as another window's.
+  function touch(q) { q = q || P; q.updated = Math.max(Date.now(), (q.updated || 0) + 1); save(); }
   // Takes in another window's save: projects it has that this one doesn't, the newer copy of each project both
   // have, and its deletions, which win over copies not changed since. `deleted` remembers when each project was
   // deleted, so a window that still has it doesn't bring it back.
@@ -1112,7 +1124,18 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var a = b.dataset.a; if (!a) return;
     var m = findMat(b); if (!m) return;
     if (a === 'addpart') addPart(m, 'pname');
-    else if (a === 'delpart') { var p = findPart(m, b); m.parts.splice(m.parts.indexOf(p), 1); touch(); renderList(); resolve(); }
+    else if (a === 'delpart') {
+      // A part goes at once, and Undo puts it back where it was, with its id: its material plans as before and the
+      // ticks at the saw come back with that plan.
+      var p = findPart(m, b), at = m.parts.indexOf(p), pid = P.id, mid = m.id;
+      m.parts.splice(at, 1); touch(); renderList(); resolve();
+      toast('Removed ' + (p.name || 'a part') + (CLEARED ? ' and cleared ' + plural(CLEARED, 'ticked cut') : ''), { label: 'Undo', run: function () {
+        var q = DB.projects[pid], mm = q && q.materials.filter(function (x) { return x.id === mid; })[0];
+        if (!mm || mm.parts.some(function (x) { return x.id === p.id; })) return;
+        mm.parts.splice(Math.min(at, mm.parts.length), 0, p); touch(q);
+        if (q === P) { renderList(); resolve(); }
+      } });
+    }
     else if (a === 'grain') { var q = findPart(m, b); q.grain = !q.grain; b.setAttribute('aria-pressed', q.grain ? 'true' : 'false'); b.title = q.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned'; touch(); resolve(); }
     else if (a === 'addstock' || a === 'addhave') {
       var ref = m.stock[m.stock.length - 1] || { len: U === 'mm' ? 2400 / 25.4 : 96, wid: 48, price: 5 };
@@ -1408,7 +1431,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         touch(); renderSaw(); refocus(k);
       });
     });
-    var rs = $('sawReset'); if (rs) rs.addEventListener('click', function () { P.done = {}; touch(); renderSaw(); refocus(); });
+    // Start over clears every tick in one tap, so it can be undone.
+    var rs = $('sawReset');
+    if (rs) rs.addEventListener('click', function () {
+      var pid = P.id, before = JSON.stringify(P.done);
+      P.done = {}; touch(); renderSaw(); refocus();
+      toast('Cleared ' + plural(done, 'tick'), { label: 'Undo', run: function () { var q = DB.projects[pid]; if (!q) return; q.done = JSON.parse(before); touch(q); if (q === P) renderSaw(); } });
+    });
   }
 
   // ---------- views ----------
@@ -1509,7 +1538,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       DB.deleted[P.id] = Math.max(Date.now(), (P.updated || 0) + 1); // so another open window doesn't bring it back
       delete DB.projects[P.id]; DB.order = DB.order.filter(function (id) { return id !== P.id && DB.projects[id]; });
       if (!DB.order.length) { var ex = sampleProject(); ex.example = true; DB.projects[ex.id] = ex; DB.order = [ex.id]; }
-      DB.current = DB.order[0]; P = DB.projects[DB.current]; save(true); closeSheet(); applyProject(); toast('Deleted');
+      var name = P.name; DB.current = DB.order[0]; P = DB.projects[DB.current]; save(true); closeSheet(); applyProject(); toast('Deleted “' + name + '”');
     });
     $('pjList').parentNode.insertBefore(del, $('pjList').nextSibling);
     drawProjects();

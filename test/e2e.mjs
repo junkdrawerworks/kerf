@@ -191,6 +191,37 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   assert.deepEqual(await tickedRows(), [], 'the tick on the 30" crosscut moved to the 40" one');
 }
 
+// A part's ✕ removes it at once, and Undo puts it back: the same plan, and the same ticks at the saw. Start over can
+// be undone too.
+{
+  const tickedRows = () => page.$$eval('#sawOut .cut[data-k]', els => els.filter(e => e.getAttribute('aria-checked') === 'true').map(e => e.dataset.k));
+  const plan = () => page.evaluate(() => [...document.getElementById('planOut').children].filter(c => c.id !== 'tips').map(c => c.outerHTML).join('') + document.getElementById('sawOut').innerHTML);
+  await open(null);
+  await view('saw');
+  for (const i of [0, 1, 2, 5]) await cuts.nth(i).click();
+  const before = await plan(), ticks = await tickedRows();
+  await view('list');
+  await page.click('[data-a="delpart"] >> nth=1');
+  assert.deepEqual(await page.$$eval('.prow[data-pid] input[data-f="pname"]', is => is.map(i => i.value)), ['Leg', 'Side rail', 'Shelf']);
+  assert.equal(await page.evaluate(() => document.getElementById('toast').firstChild.textContent), 'Removed Front & back rail and cleared 4 ticked cuts');
+  assert.equal(await page.$eval('#toast', t => getComputedStyle(t).pointerEvents), 'auto', 'a toast with Undo doesn’t take taps');
+  await page.click('#toast .lbtn');
+  assert.equal(await page.$eval('#toast', t => t.classList.contains('show') && /^The 2×4 plan is back/.test(t.textContent) && getComputedStyle(t).pointerEvents), 'none', 'after Undo, the toast still takes taps');
+  assert.deepEqual(await page.$$eval('.prow[data-pid] input[data-f="pname"]', is => is.map(i => i.value)), ['Leg', 'Front & back rail', 'Side rail', 'Shelf'], 'Undo didn’t put the part back where it was');
+  await view('saw');
+  assert.deepEqual(await tickedRows(), ticks, 'Undo didn’t bring the ticks back');
+  assert.equal(await plan(), before, 'Undo didn’t bring the same plan back');
+  await page.click('#sawReset');
+  assert.deepEqual(await tickedRows(), []);
+  assert.equal(await page.evaluate(() => document.getElementById('toast').firstChild.textContent), 'Cleared 4 ticks');
+  await page.click('#toast .lbtn');
+  assert.deepEqual(await tickedRows(), ticks, 'Undo after Start over didn’t bring the ticks back');
+  await page.waitForTimeout(600);
+  await page.reload();
+  await page.waitForSelector('#sawOut .cut[data-k]');
+  assert.deepEqual(await tickedRows(), ticks, 'ticks brought back by Undo weren’t saved');
+}
+
 // A link from the kerf-planner skill shows what's in it and comes in as a new project once you say so.
 await open(null, linkTo(MUDROOM));
 await page.waitForSelector('#lkAdd');
@@ -558,6 +589,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   await page.waitForTimeout(600);
   await page.click('#sheet .btn.danger');
   assert.deepEqual((await stored()).order, [other.id], 'a second tap a moment later deletes it');
+  assert.equal(await page.textContent('#toast'), 'Deleted “Keep me”');
 }
 
 // A price typed with a decimal comma means what it says, and a thousands comma still reads as one.
