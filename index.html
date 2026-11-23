@@ -204,6 +204,7 @@ div.sec{margin-top:22px}
 .dg-ply{fill:var(--ply)}
 .dg-grain{fill:none;stroke:var(--pine2);stroke-width:1;opacity:.75}
 .dg-edge{fill:none;stroke:var(--pine-edge);stroke-width:1}
+.dg-edge.have{stroke:var(--good);stroke-dasharray:4 3}
 .dg-pedge{fill:none;stroke:var(--ply-edge);stroke-width:1}
 .dg-part{fill:color-mix(in srgb,var(--surface) 22%,transparent);stroke:var(--pine-edge);stroke-width:1}
 .dg-scrap{fill:url(#hatch)}
@@ -220,6 +221,7 @@ div.sec{margin-top:22px}
 .dg-lblb{fill:#2E220F;font:700 12px var(--mono);dominant-baseline:central}
 .dg-meta{fill:var(--ink2);font:500 12px var(--mono);dominant-baseline:central}
 .dg-metab{fill:var(--ink);font:700 12px var(--mono);dominant-baseline:central}
+.dg-yours{fill:var(--good);font:500 12px var(--mono);dominant-baseline:central}
 .dg-scrapt{fill:var(--ink2);font:500 11px var(--mono);dominant-baseline:central}
 .dg-tape{fill:var(--tape)}
 .dg-tick{stroke:var(--tape-ink);stroke-width:1}
@@ -1636,8 +1638,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     // needs more than "2.4 m" or "10'".
     var width = W.plan, maxLen = Math.max.apply(null, m.items.map(function (b) { return b.stock.len; }));
     var labelW = Math.max(40, Math.ceil(Math.max.apply(null, m.items.map(function (b) { return fmt(b.stock.len, { ft: true }).length; })) * 7.2 + 4));
-    var rightW = m.items.some(function (b) { return b.stock.have; }) ? 44 : 0; // room for "yours" after a board you have
-    var drawW = width - labelW - rightW, px = drawW / maxLen, rowH = 34, gap = 22, top = 24, H = top + m.items.length * (rowH + gap) - gap + 6;
+    var drawW = width - labelW, px = drawW / maxLen, rowH = 34, gap = 22, top = 24, H = top + m.items.length * (rowH + gap) - gap + 6;
     // A screen reader gets the drawing as a list, a board to an item: "Board 1, 10 ft: B 48 in, B 48 in, C 21 in, leaves a
     // 2 5/8 in offcut". The drawing itself is left out for it.
     var said = m.items.map(function (b, bi) {
@@ -1647,7 +1648,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var s = '<ol class="sr">' + said + '</ol><svg class="diag" viewBox="0 0 ' + width + ' ' + H + '" aria-hidden="true">' + tapeRuler(labelW, drawW, maxLen, 2);
     m.items.forEach(function (b, bi) {
       var y = top + bi * (rowH + gap), bw = b.stock.len * px, x = labelW;
-      s += '<text class="dg-metab" x="0" y="' + (y + rowH / 2 - 7) + '">' + (bi + 1) + '</text><text class="dg-meta" x="0" y="' + (y + rowH / 2 + 8) + '">' + esc(fmt(b.stock.len, { ft: true })) + '</text>';
+      // a board you have says so under its length, and its edge is dashed green, like its size in the cut list
+      var mine = !!b.stock.have, ly = mine ? [-12, 1, 14] : [-7, 8];
+      s += '<text class="dg-metab" x="0" y="' + (y + rowH / 2 + ly[0]) + '">' + (bi + 1) + '</text><text class="dg-meta" x="0" y="' + (y + rowH / 2 + ly[1]) + '">' + esc(fmt(b.stock.len, { ft: true })) + '</text>';
+      if (mine) s += '<text class="dg-yours" x="0" y="' + (y + rowH / 2 + ly[2]) + '">yours</text>';
       s += '<rect class="dg-wood" x="' + x + '" y="' + y + '" width="' + bw.toFixed(1) + '" height="' + rowH + '" rx="2"/><path class="dg-grain" d="' + grainPaths(x, y, bw, rowH, 17 + bi * 31) + '"/>';
       var cx = x + b.trim * px;
       // both trimmed ends first, so the cut that squares up the far end draws over its hatching
@@ -1667,8 +1671,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         if (!fits(t)) t = fmt(b.offcut);
         if (fits(t)) s += '<text class="dg-scrapt" x="' + (cx + restW / 2).toFixed(1) + '" y="' + (y + rowH / 2) + '" text-anchor="middle">' + esc(t) + '</text>';
       }
-      s += '<rect class="dg-edge" x="' + x + '" y="' + y + '" width="' + bw.toFixed(1) + '" height="' + rowH + '" rx="2"/>';
-      if (b.stock.have) s += '<text class="dg-meta" x="' + (x + bw + 6).toFixed(1) + '" y="' + (y + rowH / 2) + '">yours</text>';
+      s += '<rect class="dg-edge' + (mine ? ' have' : '') + '" x="' + x + '" y="' + y + '" width="' + bw.toFixed(1) + '" height="' + rowH + '" rx="2"/>';
     });
     return s + '</svg>' + legendParts(m);
   }
@@ -1691,7 +1694,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         var q = m.mat.parts[pi]; return count[pi] + ' × ' + letter(pi) + (q && q.name ? ' ' + esc(q.name) : '') + ' ' + esc(sayLen(q.len) + ' × ' + sayLen(q.wid));
       }).join(', ') + (spare.length ? '; left over ' + spare.map(function (f) { return esc(sayLen(f.w) + ' × ' + sayLen(f.h)); }).join(' and ') : '') + '</p>';
       var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + (H + top + 8).toFixed(1) + '" aria-hidden="true" style="margin-top:' + (si ? 16 : 6) + 'px">';
-      s += '<text class="dg-metab" x="0" y="8">Sheet ' + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + esc(fmt(sh.W) + ' × ' + fmt(sh.L)) + (sh.stock.have ? ' · yours' : '') + '</text>';
+      s += '<text class="dg-metab" x="0" y="8">Sheet ' + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + esc(fmt(sh.W) + ' × ' + fmt(sh.L)) + (sh.stock.have ? '<tspan class="dg-yours"> · yours</tspan>' : '') + '</text>';
       var ox = 1, oy = top;
       s += '<rect class="dg-ply" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
       s += '<rect class="dg-scrap" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';

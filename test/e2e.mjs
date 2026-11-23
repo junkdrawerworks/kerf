@@ -1186,12 +1186,23 @@ assert.equal(await page.$eval('#planOut div.sec', d => getComputedStyle(d).margi
   await page.setViewportSize({ width: 390, height: 844 });
 }
 
-// A board you already have is labelled "yours" inside its drawing, not cut off past the edge.
+// A board you already have says "yours" under its length, clear of the board, and its edge is dashed green like its
+// size in the cut list. It used to say so after the board, taking room from every board, so on a phone the example with
+// an 8′ 2×4 on hand lost the letters from its labels: "C 21"" read "21"".
 await open(saved(project('Yours', [board('2×4', [{ len: 96, price: 4.28 }, { len: 96, have: 1 }], [{ name: 'Leg', qty: 3, len: 72 }])])));
-assert.ok(await page.evaluate(() => {
-  const svg = document.querySelector('#planOut svg.diag'), yours = [...svg.querySelectorAll('text')].find(t => t.textContent === 'yours');
-  return yours.getBoundingClientRect().right <= svg.getBoundingClientRect().right + 0.5;
-}), '"yours" runs past the drawing');
+{
+  const yours = await page.$eval('#planOut svg.diag', svg => {
+    const t = [...svg.querySelectorAll('text')].filter(t => t.textContent === 'yours'), wood = svg.querySelector('rect.dg-wood').getBBox();
+    return { n: t.length, cls: t[0].getAttribute('class'), clear: t[0].getBBox().x + t[0].getBBox().width <= wood.x - 2, dashed: svg.querySelectorAll('rect.dg-edge.have').length };
+  });
+  assert.deepEqual(yours, { n: 1, cls: 'dg-yours', clear: true, dashed: 1 }, 'a board you have isn’t marked as yours beside its length');
+}
+{
+  const studs = [{ len: 96, price: 4.28 }, { len: 120, price: 6.38 }, { len: 144, price: 7.68 }, { len: 192, price: 10.98 }, { len: 96, have: 1 }];
+  await open(saved(project('Shelves', [board('2×4', studs, [{ name: 'Leg', qty: 4, len: 72 }, { name: 'Front & back rail', qty: 8, len: 48 }, { name: 'Side rail', qty: 8, len: 21 }])])));
+  const labels = await page.$$eval('#planOut svg.diag .dg-lbl', ts => ts.map(t => t.textContent));
+  assert.ok(labels.length > 10 && labels.every(t => /^[A-C] /.test(t)), 'a board label lost its letter beside a board you have: ' + labels.join(', '));
+}
 
 // The shop PDF keeps everything on the page: a long project name stops short of the total, a board's parts and the
 // legend wrap onto more lines instead of running off (and losing parts), and an emoji is left out, not printed as "??".
