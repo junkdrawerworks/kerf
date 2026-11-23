@@ -1161,7 +1161,8 @@ assert.equal(await page.textContent('#unitNote'), 'Lengths in inches — 35 3/4,
 
 // A project coming in by link, file or pasted text takes your prices for the sizes you've priced, in a material of a
 // kind on the Add material list, and the dialog names those materials; sizes you never priced keep the prices it came
-// with. A material at your prices no longer says they're examples. Opening it again still finds the copy here.
+// with. A material wholly at your prices no longer says they're examples; one with a size still at the prices it came
+// with keeps saying so. Opening it again still finds the copy here.
 {
   const mats = () => stored().then(d => d.projects[d.current].materials.map(m => [m.name, m.stock.map(s => s.price), !!m.examplePrices]));
   const priced = { ...MUDROOM.project, materials: MUDROOM.project.materials.map(m => ({ ...m, examplePrices: true })) };
@@ -1176,7 +1177,7 @@ assert.equal(await page.textContent('#unitNote'), 'Lengths in inches — 35 3/4,
   assert.equal(await arrive({ 'in board 2×4': { 96: 3.98 }, 'in sheet ¾ plywood': { '96x48': 52 } }),
     'It comes in as a new project; nothing you already have changes. 2×4 and ¾ plywood use your prices. Check the others — they’re whatever the link came with.');
   await page.click('#lkAdd');
-  assert.deepEqual(await mats(), [['2×4', [3.98, 6.38, 0], false], ['¾ plywood', [52], false]], 'a project from a link didn’t take your prices');
+  assert.deepEqual(await mats(), [['2×4', [3.98, 6.38, 0], true], ['¾ plywood', [52], false]], 'a project from a link didn’t take your prices, or a guessed price passes for yours');
   await page.evaluate(hash => { location.hash = hash; }, linkTo({ kerf: 1, project: priced }));
   await page.waitForSelector('#lkOpen', { timeout: 5000 }).catch(() => assert.fail('a link opened again at your prices doesn’t find the copy'));
   assert.equal(await arrive({ 'in board 2×4': { 96: 3.98, 120: 5.97 }, 'in board 2×6': { 96: 7 } }),

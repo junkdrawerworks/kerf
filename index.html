@@ -2861,19 +2861,20 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   // A project coming in from a link, a file or pasted text: a material of a kind you've priced on the Add material list
   // (a 2×4, ¾ plywood) takes your prices for the sizes you've priced, which beat the planner's rough guesses or another
-  // store's. Sizes you never priced keep the prices they came with. Gives the names of the materials that took yours,
-  // and whether any price to buy is still the one it came with. Its signature (`from`) stays the one it came with, so
-  // opening it again still finds the copy here.
+  // store's. Sizes you never priced keep the prices they came with, and a material marked as on example prices stays
+  // marked while any size to buy is still at them, so a guessed price doesn't pass for yours. Gives the names of the
+  // materials that took yours, and whether any price to buy is still the one it came with. Its signature (`from`) stays
+  // the one it came with, so opening it again still finds the copy here.
   function usePrices(p) {
     var all = yourPrices(), named = [], rest = false;
     p.materials.forEach(function (m) {
-      var pr = presetOf(m, p.units), mine = pr && all[p.units + ' ' + m.kind + ' ' + pr.name], got = false;
+      var pr = presetOf(m, p.units), mine = pr && all[p.units + ' ' + m.kind + ' ' + pr.name], got = false, left = false;
       m.stock.forEach(function (s) {
         if (s.have) return; // on hand, so free whatever it's priced at
         var v = mine && typeof mine === 'object' ? mine[sizeKey(m, s)] : null;
-        if (typeof v === 'number' && v >= 0 && isFinite(v)) { s.price = Math.round(v * 100) / 100; got = true; } else rest = true;
+        if (typeof v === 'number' && v >= 0 && isFinite(v)) { s.price = Math.round(v * 100) / 100; got = true; } else left = rest = true;
       });
-      if (got) { delete m.examplePrices; if (named.indexOf(m.name) < 0) named.push(m.name); }
+      if (got) { if (!left) delete m.examplePrices; if (named.indexOf(m.name) < 0) named.push(m.name); }
     });
     return { named: named, rest: rest };
   }
