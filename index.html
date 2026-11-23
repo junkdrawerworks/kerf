@@ -1966,7 +1966,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         if (on) d.ticks[ck] = 1; else delete d.ticks[ck];
         touch(); renderSaw(); refocus(k);
         // The tick that finishes the job says so, once: never a reload or a redraw of a finished job.
-        if (on && SAW.total && SAW.done === SAW.total) toast('That’s every cut. ' + (P.name || 'The project') + ' is ready to put together.');
+        if (on && SAW.total && SAW.done === SAW.total) toast('That’s every cut. ' + (P.name.replace(/ \(example\)$/, '') || 'The project') + ' is ready to put together.');
       });
     });
     // Start over clears every tick in one tap, so it can be undone.
