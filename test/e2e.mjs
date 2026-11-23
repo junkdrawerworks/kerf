@@ -2173,6 +2173,29 @@ for (const c of sawCases) {
   assert.ok(await page.$$eval('#sawOut .cut.note', ns => ns.every(n => n.childNodes.length === 1 && n.firstChild.tagName === 'SPAN')), what + ': a note at the saw is spread out');
 }
 
+// The shop PDF is a checklist for the saw on paper: a box to tick before every cut, the same cuts the saw counts. Under
+// each row of boards cut alike come its cuts in order, a box for each board (numbered over them), its measurement and
+// its part; a run of more than 16 gets one box and its count. A sheet's steps each start with a box, its trims too.
+{
+  const boxes = pdf => (pdf.match(/1 1 1 rg 0\.11 0\.12 0\.13 RG 0\.8 w [\d. ]+ 8 8 re B/g) || []).length;
+  await open(null);
+  let raw = await shopPdf(), pdf = pdfRuns(raw).map(r => r.text);
+  assert.equal(boxes(raw), 26, 'the example’s PDF has a box for each of its 26 cuts');
+  const at = pdf.indexOf('1\x964'), cuts = pdf.slice(at, pdf.indexOf('5\x968'));
+  assert.deepEqual(cuts.slice(cuts.indexOf('4') + 1), ['48"', 'B Front & back rail', '48"', 'B Front & back rail', '21"', 'C Side rail'], 'boards 1–4’s cuts in order on the PDF: ' + cuts.join(' / '));
+  assert.deepEqual(cuts.filter(t => /^\d$/.test(t)), ['1', '2', '3', '4'], 'boards 1–4 numbered over their boxes');
+  assert.ok(pdf.includes('1.  Rip the full sheet at 23 3/4"'), 'the sheet’s steps on the PDF');
+  await open(saved(project('Posts', [board('2×4', [{ len: 96, price: 4 }], [{ name: 'Post', qty: 40, len: 45 }])], { trim: 0.25 })));
+  raw = await shopPdf(); pdf = pdfRuns(raw).map(r => r.text);
+  assert.ok(pdf.includes('\xd720') && pdf.includes('Square up one end, and measure every part from it'), 'a run of 20 boards on the PDF: ' + pdf.slice(0, 30).join(' / '));
+  assert.equal(boxes(raw), 3, 'a run of 20 boards gets one box for each cut: the end, and two posts');
+  await open(saved(project('Edges', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])], { edge: 0.25 })));
+  await view('saw');
+  const sawCuts = await page.locator('#sawOut .cut[data-k]').count();
+  raw = await shopPdf();
+  assert.equal(boxes(raw), sawCuts, 'the trimmed sheet’s boxes on the PDF, its edges first, as the cuts at the saw');
+}
+
 // The offcuts worth keeping are gathered under the shopping list, alike ones counted together, and on the shop PDF;
 // at the saw they show again once the last cut is ticked.
 {

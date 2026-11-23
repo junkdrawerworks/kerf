@@ -2729,6 +2729,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     function rect(x, yy, w, h, fill, stroke, lw) { ops.push((fill ? col(fill) + ' rg ' : '') + (stroke ? col(stroke) + ' RG ' + num(lw || 0.6) + ' w ' : '') + num(x) + ' ' + Y(yy + h) + ' ' + num(w) + ' ' + num(h) + ' re ' + (fill && stroke ? 'B' : fill ? 'f' : 'S')); }
     function line(x1, y1, x2, y2, c, lw, dash) { ops.push(col(c) + ' RG ' + num(lw) + ' w ' + (dash ? '[3 2] 0 d ' : '') + num(x1) + ' ' + Y(y1) + ' m ' + num(x2) + ' ' + Y(y2) + ' l S' + (dash ? ' [] 0 d' : '')); }
     function need(h) { if (y + h > PH - M) newPage(); }
+    // a box to tick by hand, sitting on the line of text whose baseline is `base`
+    var BOX = 13;
+    function tickBox(x, base) { rect(x + 0.5, base - 7.5, 8, 8, '#FFFFFF', '#1C1F22', 0.8); }
     // Waste (an offcut, a trimmed end, what's left of a sheet) is light grey with diagonal hatching clipped to it, as on
     // screen, so it reads as waste printed in black and white too, beside the white parts.
     function hatch(x, yy, w, h) {
@@ -2759,15 +2762,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       // The parts legend comes last, and stays on the page with the end of the last diagram.
       var legend = pdfLines('H', 8, m.mat.parts.map(function (p, i) { return letter(i, m.mat) + ' ' + (p.name || 'Part') + ' ' + partDims(m, p, fmt) + '  ×' + p.qty; }), '    ', width);
       var legendH = 16 + (legend.length - 1) * 11;
-      // A sheet's steps, line by line: each step's first line 12 points below the last, a line it wraps onto 11.
+      // A sheet's steps, line by line: each step's first line 12 points below the last, a line it wraps onto 11. Each
+      // cut, the trims first among them, starts with a box to tick, as at the saw, and its lines go in past the box.
       var stepLines = function (sh) {
-        var lines = [];
-        if (sh.ends > 0) pdfLines('H', 9, ('First square up both ends: trim ' + fmt(sh.ends) + ' off each, leaving ' + fmt(sh.L - 2 * sh.ends) + '. Every crosscut is measured from a squared end.').split(' '), ' ', width).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: M, text: l }); });
-        if (sh.edge > 0) pdfLines('H', 9, ('First trim ' + fmt(sh.edge) + ' off each factory edge, leaving ' + fmt(sh.W - 2 * sh.edge) + ' × ' + fmt(sh.L - 2 * sh.edge) + '. Every cut is measured from a trimmed edge.').split(' '), ' ', width).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: M, text: l }); });
+        var lines = [], at = M + BOX;
+        if (sh.ends > 0) pdfLines('H', 9, ('First square up both ends: trim ' + fmt(sh.ends) + ' off each, leaving ' + fmt(sh.L - 2 * sh.ends) + '. Every crosscut is measured from a squared end.').split(' '), ' ', width - BOX).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: at, text: l, box: !i }); });
+        if (sh.edge > 0) pdfLines('H', 9, ('First trim ' + fmt(sh.edge) + ' off each factory edge, leaving ' + fmt(sh.W - 2 * sh.edge) + ' × ' + fmt(sh.L - 2 * sh.edge) + '. Every cut is measured from a trimmed edge.').split(' '), ' ', width - BOX).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: at, text: l, box: !i }); });
         sh.steps.filter(function (s) { return s.type !== 'none'; }).forEach(function (st, k) {
           var no = (k + 1) + '.  ', ind = textW('H', 9, no), name = function (pi) { var part = m.mat.parts[pi]; return letter(pi, m.mat) + (part && part.name ? ' ' + part.name : ''); };
           var s = (st.type === 'rip' ? 'Rip ' : 'Crosscut ') + pieceName(st.on, fmt, m.rip) + ' at ' + fmt(st.at) + stepGives(st, name, '  »  ');
-          pdfLines('H', 9, s.split(' '), ' ', width - ind).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: M + (i ? ind : 0), text: i ? l : no + l }); });
+          pdfLines('H', 9, s.split(' '), ' ', width - BOX - ind).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: at + (i ? ind : 0), text: i ? l : no + l, box: !i }); });
         });
         return lines;
       };
@@ -2793,9 +2797,18 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         px = (width - lw - stack) / maxLen;
         rs.forEach(function (r, ri) {
           var bi = r[0], b = m.items[bi], n = r[1] - r[0] + 1;
-          var parts = b.pieces.map(function (p) { var q = m.mat.parts[p.pi]; return letter(p.pi, m.mat) + ' ' + (q && q.name ? q.name + ' ' : '') + fmt(p.len); });
-          var lines = pdfLines('H', 8, parts, '   ·   ', width - lw);
-          need(46 + stack + (lines.length - 1) * 10 + (ri === rs.length - 1 ? legendH : 0)); y += 12;
+          // Under the drawing, the board's cuts in the order to make them, as at the saw: its measurement and the part
+          // it gives, with a box to tick for each board of the run (numbered over them), or one box and "×20" for a
+          // run of more than 16. A part that comes off with no cut is a note, with no box.
+          var checks = [];
+          if (b.trim > 0) checks.push({ meas: fmt(b.trim), text: 'Square up one end, and measure every part from it' });
+          b.pieces.forEach(function (p, k) {
+            var last = k === b.pieces.length - 1, q = m.mat.parts[p.pi], nm = letter(p.pi, m.mat) + ' ' + (q && q.name || 'Part');
+            if (last && lastIsLeft(b)) checks.push({ note: k === 0 ? 'The whole board is ' + nm + ', no cut needed' : "What's left should be " + nm + ' ' + fmt(p.len) + ': measure it, and trim it if the board ran long' });
+            else checks.push({ meas: fmt(p.len), text: nm + (last && b.trim > 0 && b.offcut <= 0 ? ' (this cut squares up the far end too)' : '') });
+          });
+          var boxes = n > 16 ? 1 : n, bw = boxes * 10 + (n > 16 ? textW('H', 8, '×' + n) + 3 : 0) + 4, mw = Math.max.apply(null, checks.map(function (c) { return c.meas ? textW('HB', 9, c.meas) : 0; })) + 10;
+          need(46 + stack + (n > 1 && n <= 16 ? 9 : 0) + (checks.length - 1) * 12 + (ri === rs.length - 1 ? legendH : 0)); y += 12;
           text('HB', 10, M, y + 10, says[ri][0]); text('H', 8.5, M, y + 22, says[ri][1]);
           var x = M + lw;
           if (n > 1) rect(x + stack, y + stack, b.stock.len * px, 24, '#FFFFFF', '#B08447', 0.8);
@@ -2818,7 +2831,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           }
           rect(x, y, b.stock.len * px, 24, null, '#B08447', 0.8);
           y += 34 + stack;
-          lines.forEach(function (l, i) { if (i) { need(10); y += 10; } text('H', 8, M + lw, y, l, '#50575E'); });
+          var bx = M + lw;
+          if (n > 1 && n <= 16) { for (var j = 0; j < n; j++) { var no = String(r[0] + j + 1); text('H', 6, bx + j * 10 + 4.5 - textW('H', 6, no) / 2, y - 1, no, '#686D73'); } y += 9; }
+          checks.forEach(function (c, i) {
+            if (i) { need(12); y += 12; }
+            if (c.note) { text('H', 8.5, bx + bw, y, fitText('H', 8.5, c.note, width - lw - bw), '#50575E'); return; }
+            for (var j = 0; j < boxes; j++) tickBox(bx + j * 10, y);
+            if (n > 16) text('H', 8, bx + 10, y, '×' + n, '#50575E');
+            text('HB', 9, bx + bw, y, c.meas); text('H', 9, bx + bw + mw, y, fitText('H', 9, c.text, width - lw - bw - mw));
+          });
         });
       } else {
         m.items.forEach(function (sh, si) {
@@ -2863,6 +2884,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           lines.forEach(function (l, i) {
             if (last && i === Math.max(0, lines.length - 2)) need(lines.slice(i).reduce(function (a, x) { return a + x.gap; }, 0) + legendH);
             need(l.gap); y += l.gap; text('H', 9, l.x, y, l.text);
+            if (l.box) tickBox(M, y);
           });
         });
       }
