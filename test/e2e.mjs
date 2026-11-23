@@ -149,6 +149,28 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   await p.close();
 }
 
+// The first cut not ticked is marked as the next to make, and a tick moves the mark on. Kerf opened afresh at the saw
+// (a home-screen app the phone closed overnight) starts at that cut, not at the top, three screens of boards above it.
+{
+  await open(null);
+  await view('saw');
+  for (let i = 0; i < 20; i++) await cuts.nth(i).click();
+  const nextCut = p => p.$eval('#sawOut .cut.next', c => [c.dataset.k, c.querySelector('.nx').textContent, c.getBoundingClientRect().top >= 0 && c.getBoundingClientRect().bottom <= innerHeight]);
+  const keys = await page.$$eval('#sawOut .cut[data-k]', els => els.map(e => e.dataset.k));
+  assert.equal(await page.locator('#sawOut .cut.next').count(), 1, 'more than one cut is marked next');
+  assert.deepEqual((await nextCut(page)).slice(0, 2), [keys[20], 'Next'], 'the next cut isn’t the first not ticked');
+  await page.waitForTimeout(600);
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  await p.waitForSelector('#sawOut .cut[data-k]');
+  assert.deepEqual(await nextCut(p), [keys[20], 'Next', true], 'opened at the saw, the next cut is out of sight');
+  assert.ok(await p.evaluate(() => scrollY > 0));
+  await p.click('#sawOut .cut.next');
+  assert.equal((await nextCut(p))[0], keys[21], 'a tick didn’t move the next mark on');
+  await p.close();
+}
+
 // The saw counts the cuts the plan counts: a part that comes off with no cut is a note, not a cut to tick. The
 // example's tip makes each pair of rails fill an 8' board, so the second rail is what's left.
 {
@@ -219,13 +241,13 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   await settle();
   assert.equal(await toastNow(), 'The 2×4 plan changed, so its 2 ticked cuts were cleared');
   assert.deepEqual(await tickedRows(), [], 'a tick moved onto another cut when trim was turned on');
-  assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Square up one end/);
+  assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Next Square up one end/);
   assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
   // A sheet part resized where it sits: the full sheet's crosscut moves from 30" to 40", so its tick clears.
   await open(saved(project('One shelf', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Shelf', qty: 1, len: 30, wid: 20 }])])));
   await view('saw');
-  assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Crosscut the full sheet/);
+  assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Next Crosscut the full sheet/);
   assert.equal(await page.textContent('#sawOut .cut[data-k] .meas'), '30″');
   await cuts.nth(0).click();
   await view('list');

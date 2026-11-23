@@ -243,6 +243,9 @@ div.sec{margin-top:22px}
 .cut .what{flex:1;min-width:0;font-size:14.5px;color:var(--ink2)}
 .cut .what b{color:var(--ink);font-weight:700}
 .cut .what small{display:block;color:var(--ink3);font-size:12.5px}
+/* the next cut to make: a strip of tape down its edge, and a tag */
+.cut.next{box-shadow:inset 5px 0 0 var(--tape)}
+.cut .nx{display:inline-block;background:var(--tape);color:var(--tape-ink);font:800 12px/1 var(--disp);letter-spacing:.08em;text-transform:uppercase;padding:3px 5px 2px;border-radius:4px;vertical-align:1px}
 .cut.note{min-height:0;padding:8px 14px;color:var(--ink3);font-size:13px;cursor:default}
 /* sheets */
 .sheetbg{position:fixed;inset:0;background:rgba(18,20,22,.46);z-index:50;display:flex;align-items:flex-end;justify-content:center}
@@ -1632,7 +1635,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     syncTicks(tickKeys(tasks));
     if (!tasks.length) { host.innerHTML = '<div class="empty">The cutting steps show up here once there’s a plan.</div>'; return; }
     var ticked = function (t, ci) { var d = P.done[t.mid]; return !!(d && d.ticks[t.ii + '.' + ci]) && !t.cuts[ci].noCut; };
-    var h = '';
+    var h = '', next = null; // the first cut not ticked yet, marked as the next to make
     tasks.forEach(function (t) {
       var n = 0, d = 0;
       t.cuts.forEach(function (c, ci) { if (!c.noCut) { n++; if (ticked(t, ci)) d++; } });
@@ -1640,8 +1643,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       h += '<div class="stk' + (n && d === n ? ' done' : '') + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span>' + (n ? '<span class="n">' + d + '/' + n + '</span>' : '') + '</div>';
       t.cuts.forEach(function (c, ci) {
         if (c.noCut) { h += '<div class="cut note"><span>' + c.note + '</span></div>'; return; }
-        var on = ticked(t, ci);
-        h += '<button class="cut" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + t.mid + '/' + t.ii + '.' + ci + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + c.what + '<small>' + c.sub + '</small></span></button>';
+        var on = ticked(t, ci), k = t.mid + '/' + t.ii + '.' + ci, nx = !on && !next;
+        if (nx) next = k;
+        h += '<button class="cut' + (nx ? ' next' : '') + '" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + k + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + (nx ? '<span class="nx">Next</span> ' : '') + c.what + '<small>' + c.sub + '</small></span></button>';
       });
       if (t.note) h += '<div class="cut note">' + t.note + '</div>';
       h += '</div>';
@@ -2154,6 +2158,9 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   if (NARROW.addEventListener) NARROW.addEventListener('change', widthChange); else NARROW.addListener(widthChange);
   if (window.ResizeObserver) new ResizeObserver(function () { document.documentElement.style.setProperty('--hd', document.querySelector('.top').offsetHeight + 'px'); }).observe(document.querySelector('.top'));
   applyProject();
+  // Opened at the saw (say a home-screen app the phone closed overnight), Kerf starts at the next cut to make rather
+  // than at the top, three screens of finished boards above it. Only now: switching tabs later keeps each one's place.
+  if (shows('saw')) { var nx = document.querySelector('#sawOut .cut.next'); if (nx && nx.getBoundingClientRect().bottom > innerHeight) nx.scrollIntoView({ block: 'center' }); }
   storeBar();
   checkLink();
   window.addEventListener('hashchange', checkLink);
