@@ -1398,9 +1398,11 @@ for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page
   await page.evaluate(() => document.querySelectorAll('details.stock').forEach(d => { d.open = true; }));
   const named = (role, name) => page.getByRole(role, { name, exact: true }).count();
   assert.equal(await page.locator('.mat').first().getByRole('textbox', { name: 'Part A name', exact: true }).count(), 1, 'no textbox named “Part A name”');
-  for (const [role, name] of [['textbox', 'A Leg Quantity'], ['textbox', 'B Front & back rail Length'], ['textbox', 'A Shelf Width'], ['button', 'A Shelf Keep grain along the length'],
+  for (const [role, name] of [['textbox', 'A Leg Quantity'], ['textbox', 'B Front & back rail Length'], ['textbox', 'D Shelf Width'], ['button', 'D Shelf Keep grain along the length'],
     ['textbox', 'Price for the 8 ft size'], ['combobox', 'Where the 10 ft size comes from'], ['button', 'Remove the 16 ft size'], ['textbox', 'Price for the 4 ft × 8 ft size']])
     assert.equal(await named(role, name), 1, `no ${role} named “${name}”`);
+  // Letters run through the project, material after material: the example's 2×4 parts are A to C, so its shelf is D.
+  assert.deepEqual(await page.$$eval('#mats .plet', ls => ls.map(l => l.textContent)), ['A', 'B', 'C', 'D'], 'the cut list doesn’t letter the parts through the project');
   await page.fill('.prow[data-pid] >> nth=1 >> [data-f="pname"]', 'Rail');
   assert.equal(await named('textbox', 'B Rail Length'), 1, 'a part’s fields keep its old name');
   await page.fill('.srow[data-sid] >> nth=0 >> [data-f="slen"]', '7\'');
@@ -1469,7 +1471,7 @@ for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page
   await open(null);
   const plan = await page.locator('#planOut').ariaSnapshot();
   assert.ok(plan.includes('listitem: "Board 1, 10 ft: B 48 in, B 48 in, C 21 in, leaves a 2 5/8 in offcut"') && plan.includes('listitem: "Board 8, 8 ft: A 72 in, C 21 in, leaves a 2 3/4 in offcut"'), 'the boards aren’t in words:\n' + plan);
-  assert.ok(plan.includes('paragraph: "Sheet 1, 48 in × 96 in: 4 × A Shelf 47 3/4 in × 23 3/4 in"'), 'the sheet isn’t in words:\n' + plan);
+  assert.ok(plan.includes('paragraph: "Sheet 1, 48 in × 96 in: 4 × D Shelf 47 3/4 in × 23 3/4 in"'), 'the sheet isn’t in words:\n' + plan);
   assert.ok(!/- img/.test(plan), 'a drawing is still read as a picture');
   await open(saved(project('Sides', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])])));
   assert.match(await page.locator('#planOut').ariaSnapshot(), /paragraph: "Sheet 1, 48 in × 96 in: 2 × A Side 30 1\/4 in × 23 3\/4 in; left over 96 in × 24 1\/8 in and 35 1\/4 in × 23 3\/4 in"/);

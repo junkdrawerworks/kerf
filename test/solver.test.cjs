@@ -716,12 +716,17 @@ console.log('ticks stay on their cuts');
   ].join('\n'))();
   const R = rng(11), pick = a => a[Math.floor(R() * a.length)], q16 = x => Math.round(x * 16) / 16;
   let ids = 0; const id = () => 'x' + ids++;
-  // What the saw shows for each material's cuts, with every part's name left out.
+  // What the saw shows for each material's cuts, with every part's name left out. Letters run through the project, so a
+  // part added to another material moves this one's letters along while its ticks stay: each is read back as the
+  // letter it would have in its own material alone.
+  const toN = l => [...l].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1;
+  const toL = n => { let s = ''; for (; n >= 0; n = Math.floor(n / 26) - 1) s = String.fromCharCode(65 + n % 26) + s; return s; };
+  const own = (p, mid, t) => { let base = 0; for (const m of p.materials) { if (m.id === mid) break; base += m.parts.length; } return t.replace(/<b>([A-Z]+)<\/b>/g, (_, l) => '<b>' + toL(toN(l) - base) + '</b>'); };
   const text = (page, p) => {
     const names = p.materials.map(m => m.parts.map(q => q.name));
     p.materials.forEach(m => m.parts.forEach(q => { q.name = ''; }));
     const out = {};
-    try { page.solve(p).tasks.forEach(t => { (out[t.mid] = out[t.mid] || []).push(t.title + ': ' + t.cuts.map(c => c.noCut ? c.note : c.meas + ' ' + c.what + ' / ' + c.sub).join(' ; ')); }); }
+    try { page.solve(p).tasks.forEach(t => { (out[t.mid] = out[t.mid] || []).push(t.title + ': ' + own(p, t.mid, t.cuts.map(c => c.noCut ? c.note : c.meas + ' ' + c.what + ' / ' + c.sub).join(' ; '))); }); }
     finally { p.materials.forEach((m, mi) => m.parts.forEach((q, k) => { q.name = names[mi][k]; })); }
     return out;
   };
@@ -775,6 +780,23 @@ console.log('ticks stay on their cuts');
       { id: 'p', kind: 'sheet', name: 'ply', note: '', stock: [{ id: 't', len: 96, wid: 48, price: 58, have: 0 }], parts: [{ id: 'h', name: 'Shelf', qty: 3, len: 30, wid: 20, grain: true }] }] };
     const inches = page.solve(p).keys; p.units = 'mm';
     check(JSON.stringify(page.solve(p).keys) === JSON.stringify(inches), 'switching to millimetres changed a tick key');
+  }
+  // Letters run through the whole project, material after material: 2×4 A–C, ply D, 1×2 E–F. A part added to the 2×4
+  // moves the ply's letter on to E, and keeps the ply's tick key, so its ticks stay.
+  {
+    const page = saw();
+    const p = { name: 'P', units: 'in', kerf: 0.125, trim: 0, keep: 12, cur: '$', materials: [
+      { id: 'b', kind: 'board', name: '2×4', note: '', stock: [{ id: 's', len: 96, price: 4, have: 0 }], parts: [{ id: 'l', name: 'Leg', qty: 2, len: 30 }, { id: 'r', name: 'Rail', qty: 2, len: 20 }, { id: 'c', name: 'Cleat', qty: 1, len: 10 }] },
+      { id: 'p', kind: 'sheet', name: 'ply', note: '', stock: [{ id: 't', len: 96, wid: 48, price: 58, have: 0 }], parts: [{ id: 'h', name: 'Shelf', qty: 2, len: 30, wid: 20, grain: true }] },
+      { id: 'x', kind: 'board', name: '1×2', note: '', stock: [{ id: 'u', len: 96, price: 3, have: 0 }], parts: [{ id: 'e', name: 'Edge', qty: 2, len: 30 }, { id: 'f', name: 'Stop', qty: 2, len: 12 }] }] };
+    const letters = got => { const o = {}; got.tasks.forEach(t => t.cuts.forEach(c => ((c.what || c.note || '').match(/<b>[A-Z]+<\/b> \w+/g) || []).forEach(x => { (o[t.mid] = o[t.mid] || new Set()).add(x.replace(/<\/?b>/g, '')); }))); return Object.fromEntries(Object.entries(o).map(([k, v]) => [k, [...v].sort().join(', ')])); };
+    let got = page.solve(p);
+    check(JSON.stringify(letters(got)) === JSON.stringify({ b: 'A Leg, B Rail, C Cleat', p: 'D Shelf', x: 'E Edge, F Stop' }), 'the saw doesn’t letter the parts through the project: ' + JSON.stringify(letters(got)));
+    const plyKey = got.keys.p;
+    p.materials[0].parts.push({ id: 'n', name: 'Brace', qty: 1, len: 8 });
+    got = page.solve(p);
+    check(letters(got).p === 'E Shelf' && letters(got).x === 'F Edge, G Stop', 'a part added to the 2×4 didn’t move the later letters on: ' + JSON.stringify(letters(got)));
+    check(got.keys.p === plyKey, 'a part added to the 2×4 changed the ply’s tick key');
   }
 }
 
