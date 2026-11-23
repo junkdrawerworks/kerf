@@ -400,7 +400,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     <h1 class="sr" id="pTitle">Kerf</h1>
     <div class="top-in">
       <span class="brand" aria-label="Kerf">KERF</span>
-      <input class="pname" id="pname" aria-label="Project name" autocomplete="off" spellcheck="false">
+      <input class="pname" id="pname" aria-label="Project name" autocomplete="off" spellcheck="false" enterkeyhint="done">
       <button class="tbtn" id="projBtn" type="button" aria-label="Projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 6h7l2 2h9v11H3z"/></svg><span class="t">Projects</span></button>
       <button class="tbtn" id="pdfBtn" type="button" aria-label="Shop PDF" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="t">Shop PDF</span></button>
       <button class="tbtn" id="setBtn" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="t">Settings</span></button>
@@ -1297,7 +1297,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     P.materials.forEach(function (m) {
       var sheet = m.kind === 'sheet';
       h += '<article class="mat' + (sheet ? ' sheetmat' : '') + '" data-mid="' + m.id + '">' +
-        '<header class="mat-hd"><span class="mat-ic" aria-hidden="true">' + ICON[m.kind] + '</span><input class="mat-name" data-f="mname" value="' + esc(m.name) + '" aria-label="Material name" autocomplete="off"><span class="mat-note">' + noteH(m.note) + '</span><button class="icon" type="button" data-a="delmat" title="Remove this material" aria-label="Remove ' + esc(m.name) + '">✕</button></header>' +
+        '<header class="mat-hd"><span class="mat-ic" aria-hidden="true">' + ICON[m.kind] + '</span><input class="mat-name" data-f="mname" value="' + esc(m.name) + '" aria-label="Material name" autocomplete="off" enterkeyhint="next"><span class="mat-note">' + noteH(m.note) + '</span><button class="icon" type="button" data-a="delmat" title="Remove this material" aria-label="Remove ' + esc(m.name) + '">✕</button></header>' +
         '<div class="parts"><div class="prow head"><span></span><span>Part</span><span style="text-align:center">Qty</span><span>' + (sheet ? 'Length' : 'Length') + '</span>' + (sheet ? '<span>Width</span><span title="Keep the grain running along the part’s length">Grain</span>' : '') + '<span></span></div>';
       // Each field is named by its part's letter, its name as typed and its column: "B Front & back rail Length".
       m.parts.forEach(function (p, i) {
@@ -1408,12 +1408,18 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   // Enter goes along a part, name, count, length (and width), then on to the next part's name. From the last part it
   // adds one only once that part has its size, so it never leaves two blank parts. In the sizes to buy it goes on to
-  // the next field, and from the last one closes the keyboard.
+  // the next field, and from the last one closes the keyboard. From a material's name it goes to its first part.
   function onKey(e) {
     var el = e.target, f = el.dataset && el.dataset.f;
     if (e.key !== 'Enter' || !f || e.isComposing) return;
     if (f === 'len' || f === 'wid' || f === 'slen' || f === 'swid') resolveNow();
     var list = function (root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); };
+    if (f === 'mname') { // on to the first part's name, adding a part to a material that has none
+      e.preventDefault();
+      var m0 = findMat(el), first = document.querySelector('[data-mid="' + m0.id + '"] .prow[data-pid] [data-f="pname"]');
+      if (first) first.focus(); else addPart(m0, 'pname');
+      return;
+    }
     if (el.closest('.srow')) {
       e.preventDefault();
       var all = list(el.closest('.stock-bd'), '.srow[data-sid] input:not([disabled])'), after = all[all.indexOf(el) + 1];
@@ -2042,7 +2048,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function settingsSheet() {
     openSheet('<div class="hd"><h2>Settings for this project</h2><button class="btn sm sec" type="button" id="stx">Done</button></div><div class="bd">' +
       '<div class="fld"><span>Units</span><div class="seg" id="uSeg"><button type="button" data-v="in">Inches</button><button type="button" data-v="mm">Millimeters</button></div></div>' +
-      '<div class="fld-row"><label class="fld"><span>Saw kerf</span><input id="sKerf" class="mono" autocomplete="off"></label><label class="fld"><span>Trim each board end</span><input id="sTrim" class="mono" autocomplete="off"></label><label class="fld"><span>Keep offcuts over</span><input id="sKeep" class="mono" autocomplete="off"></label><label class="fld"><span>Currency</span><input id="sCur" maxlength="3" autocomplete="off"></label></div>' +
+      '<div class="fld-row"><label class="fld"><span>Saw kerf</span><input id="sKerf" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Trim each board end</span><input id="sTrim" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Keep offcuts over</span><input id="sKeep" class="mono" autocomplete="off" enterkeyhint="next"></label><label class="fld"><span>Currency</span><input id="sCur" maxlength="3" autocomplete="off" enterkeyhint="done"></label></div>' +
       '<p class="note">Kerf is the wood the blade turns to sawdust — about ' + frac(1, 8) + '″ (3&nbsp;mm) for a full-kerf table saw blade, ' + frac(3, 32) + '″ for thin-kerf ones, and about ' + frac(1, 16) + '″ for most 7&nbsp;' + frac(1, 4) + '″ circular saw blades. Trimming the ends squares up factory ends that aren’t quite square; many people skip it for studs.</p></div>');
     function draw() {
       document.querySelectorAll('#uSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === U); b.setAttribute('aria-pressed', b.dataset.v === U); });
@@ -2055,6 +2061,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       $(a[0]).addEventListener('blur', function () { resolveNow(); this.value = fmt(P[a[1]] || 0, { fine: true }); this.classList.remove('bad'); });
     });
     $('sCur').addEventListener('input', function () { P.cur = CUR = this.value.trim() || '$'; touch(); renderList(); resolve(true); });
+    // Enter goes on to the next field, and from the currency closes the keyboard, leaving focus in the dialog.
+    ['sKerf', 'sTrim', 'sKeep', 'sCur'].forEach(function (id, i, all) {
+      $(id).addEventListener('keydown', function (e) { if (e.key !== 'Enter' || e.isComposing) return; e.preventDefault(); if (all[i + 1]) $(all[i + 1]).focus(); else this.closest('.sheet').focus(); });
+    });
     $('stx').addEventListener('click', closeSheet); draw();
   }
   function newProject(units) {
@@ -2473,6 +2483,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   $('mats').addEventListener('focusin', onFocus);
   $('mats').addEventListener('keydown', onKey);
   $('mats').addEventListener('click', onClick);
+  $('pname').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); this.blur(); } });
   $('pname').addEventListener('input', function () { P.name = this.value; $('pTitle').textContent = P.name || 'Kerf'; if (P.example) { P.example = false; renderHead(); $('pname').focus(); } touch(); });
   $('setBtn').addEventListener('click', settingsSheet);
   $('projBtn').addEventListener('click', projectsSheet);

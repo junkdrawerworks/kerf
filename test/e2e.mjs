@@ -923,6 +923,32 @@ assert.match(await page.textContent('details.stock .chips'), /6′ · \$2\.38.*8
 await page.click('.pbtn >> text=Other board');
 await page.keyboard.type('Poplar 1×5');
 assert.deepEqual(await page.$$eval('#mats .mat-name', is => is.map(i => i.value)), ['1×2 board', 'Poplar 1×5'], 'Other board doesn’t start on its name');
+// Enter on its name goes on to its first part, added for it, with the keyboard saying Next; and on the 1×2's name, to
+// the part it has. The project's name says Done and Enter closes the keyboard. In Settings Enter goes from the kerf
+// to trim, keep and the currency, then closes the keyboard, leaving focus in the dialog.
+{
+  const focused = () => page.evaluate(() => { const a = document.activeElement, r = a.closest('.mat'); return (a.dataset.f || a.id || a.className) + (r ? ' in ' + r.querySelector('.mat-name').value : ''); });
+  assert.equal(await page.getAttribute('#mats .mat-name >> nth=1', 'enterkeyhint'), 'next');
+  await page.keyboard.press('Enter');
+  assert.equal(await focused(), 'pname in Poplar 1×5', 'Enter on a new material’s name doesn’t go to a part');
+  assert.equal(await page.locator('#mats .mat >> nth=1').locator('.prow[data-pid]').count(), 1, 'Enter on the name didn’t add one part');
+  await page.keyboard.type('Rail');
+  await page.focus('#mats .mat-name >> nth=0');
+  await page.keyboard.press('Enter');
+  assert.equal(await focused(), 'pname in 1×2 board', 'Enter on a material’s name doesn’t go to its first part');
+  assert.equal(await page.locator('#mats .mat >> nth=0').locator('.prow[data-pid]').count(), 1, 'Enter on the name added a part to a material that has one');
+  assert.equal(await page.getAttribute('#pname', 'enterkeyhint'), 'done');
+  await page.focus('#pname');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => document.activeElement === document.body), true, 'Enter on the project name doesn’t close the keyboard');
+  await page.click('#setBtn');
+  assert.deepEqual(await page.$$eval('#sKerf, #sTrim, #sKeep, #sCur', is => is.map(i => i.getAttribute('enterkeyhint'))), ['next', 'next', 'next', 'done']);
+  await page.focus('#sKerf');
+  const steps = [];
+  for (let i = 0; i < 4; i++) { await page.keyboard.press('Enter'); steps.push(await page.evaluate(() => document.activeElement.id || document.activeElement.className)); }
+  assert.deepEqual(steps, ['sTrim', 'sKeep', 'sCur', 'sheet'], 'Enter doesn’t go along Settings');
+  await page.click('#stx');
+}
 // Plywood's note and the Settings note typeset their fractions, as the plan does: '23/32 in actual' stood beside
 // '1½ × 3½ in', and the Settings note's ⅛ came from another font (Barlow has no ⅛), next to an ASCII 3/32″.
 await page.click('.pbtn >> text=¾ plywood');
