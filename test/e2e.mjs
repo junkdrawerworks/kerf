@@ -1394,6 +1394,22 @@ for (const c of sawCases) {
   assert.ok(await page.$$eval('#sawOut .cut.note', ns => ns.every(n => n.childNodes.length === 1 && n.firstChild.tagName === 'SPAN')), what + ': a note at the saw is spread out');
 }
 
+// A sheet's steps name the piece each cut is made on, typeset like the measurements; a rip says where to set the fence
+// and a crosscut to measure from the end, both to cut on the waste side; and a piece worth keeping gets a note. The
+// shop PDF writes the same steps in plain text.
+{
+  await open(saved(project('Sides', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])])));
+  assert.deepEqual(await page.$$eval('#planOut ol.steps li > span', ls => ls.map(l => l.textContent)), ['Crosscut the full sheet at 30 1⁄4″', 'Rip the 30 1⁄4″ × 48″ piece at 23 3⁄4″ → A Side', 'Rip the 30 1⁄4″ × 24 1⁄8″ piece at 23 3⁄4″ → A Side']);
+  const pdf = pdfRuns(await shopPdf()).map(r => r.text);
+  assert.ok(pdf.includes('2.  Rip the 30 1/4" × 48" piece at 23 3/4"  »  A Side'), 'the PDF\'s sheet steps: ' + pdf.filter(t => /^\d\./.test(t)));
+  await view('saw');
+  assert.deepEqual(await page.$$eval('#sawOut .cut[data-k] .what', ws => ws.map(w => w.textContent.replace(/^Next /, ''))), [
+    'Crosscut the full sheetAcross the grain — measure from the end, cut on the waste side',
+    'Rip the 30 1⁄4″ × 48″ piece → A SideAlong the grain — set the fence at 23 3⁄4″, or mark it and cut on the waste side',
+    'Rip the 30 1⁄4″ × 24 1⁄8″ piece → A SideAlong the grain — set the fence at 23 3⁄4″, or mark it and cut on the waste side']);
+  assert.equal(await page.textContent('#sawOut .cut.note'), 'Leaves a 65 5⁄8″ × 48″ piece — worth keeping');
+}
+
 // At the saw a measurement's fraction is nearly as big as its whole inches, and every row's text starts at the same
 // place, 47 15/16" or 9 1/2", 1213.5 mm or 150 mm.
 for (const [units, len, short] of [['in', 47 + 15 / 16, 9.5], ['mm', 1213.5 / 25.4, 150 / 25.4]]) {

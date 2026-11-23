@@ -218,7 +218,7 @@ console.log('sheets: random jobs, every layout checked');
       });
     }));
     check(count === parts.reduce((a, p) => a + p.qty, 0), `job ${t}: placed ${count} parts`);
-    check(r.items.every(sh => sh.steps.every(s => s.type === 'none' || (s.at > 0 && s.on))), `job ${t}: a cut step is incomplete`);
+    check(r.items.every(sh => sh.steps.every(s => s.type === 'none' || (s.at > 0 && (s.on === null || (s.on.w > 0 && s.on.h > 0))))), `job ${t}: a cut step is incomplete`);
   }
   console.log('  ' + n + ' jobs');
 }
@@ -364,7 +364,7 @@ console.log('ticks stay on their cuts');
   // aside: renaming a part keeps its ticks). Seeded random edits to a project with a board and a sheet material.
   const saw = () => new Function([
     ...SOLVER, 'var P = null, RES = null, CUR = "$";', line('var PLANS = '),
-    ...['plural', 'lastIsLeft', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'sawTasks', 'tickKeys'].map(fn),
+    ...['plural', 'lastIsLeft', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'pieceName', 'sawTasks', 'tickKeys'].map(fn),
     'return { solve: function (p) { P = p; U = p.units; solveAll(); var t = sawTasks(); return { keys: tickKeys(t), tasks: t }; } };'
   ].join('\n'))();
   const R = rng(11), pick = a => a[Math.floor(R() * a.length)], q16 = x => Math.round(x * 16) / 16;

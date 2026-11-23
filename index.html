@@ -1005,19 +1005,20 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var steps = [];
     (function walk(n, whole) {
       if (!n.part) return;
-      // `on` says what each cut is made on, as the saw shows it; `of` says the same in numbers, whatever the units.
-      var p = n.part, piece = whole ? 'the full sheet' : 'the ' + fmt(n.w) + ' × ' + fmt(n.h) + ' piece', pieceOf = whole ? 'sheet' : 'piece ' + n.w.toFixed(4) + '×' + n.h.toFixed(4);
+      // `on` is what each cut is made on: null for the full sheet, or its length and width (and whether it's a strip),
+      // for pieceName to write in the page's units; `of` says the same as text, whatever the units, for the ticks.
+      var p = n.part, piece = whole ? null : { w: n.w, h: n.h }, pieceOf = whole ? 'sheet' : 'piece ' + n.w.toFixed(4) + '×' + n.h.toFixed(4);
       function rip(x1, x2, y, on, of) { steps.push({ type: 'rip', at: p.w, on: on, of: of, line: [x1, y, x2, y] }); }
       function cross(x, y1, y2, on, of) { steps.push({ type: 'cross', at: p.l, on: on, of: of, line: [x, y1, x, y2] }); }
       var strip, stripOf;
       if (n.first === 'rip') {
         if (n.needH) rip(n.x, n.x + n.w, n.y + p.w, piece, pieceOf);
-        strip = n.needH ? 'the ' + fmt(n.w) + ' × ' + fmt(p.w) + ' strip' : piece;
+        strip = n.needH ? { w: n.w, h: p.w, strip: true } : piece;
         stripOf = n.needH ? 'strip ' + n.w.toFixed(4) + '×' + p.w.toFixed(4) : pieceOf;
         if (n.needV) cross(n.x + p.l, n.y, n.y + p.w, strip, stripOf);
       } else {
         if (n.needV) cross(n.x + p.l, n.y, n.y + n.h, piece, pieceOf);
-        strip = n.needV ? 'the ' + fmt(p.l) + ' × ' + fmt(n.h) + ' piece' : piece;
+        strip = n.needV ? { w: p.l, h: n.h } : piece;
         stripOf = n.needV ? 'piece ' + p.l.toFixed(4) + '×' + n.h.toFixed(4) : pieceOf;
         if (n.needH) rip(n.x, n.x + p.l, n.y + p.w, strip, stripOf);
       }
@@ -1027,6 +1028,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     })(root, true);
     return steps;
   }
+  // What a sheet's cut is made on, as text (`f` is fmt) or HTML (fmtH): "the full sheet", "the 47 3/4" × 48" piece".
+  function pieceName(on, f) { return on ? 'the ' + f(on.w) + ' × ' + f(on.h) + (on.strip ? ' strip' : ' piece') : 'the full sheet'; }
 
   // ---------- solving the whole project ----------
   var RES = null, TIPS = [], GEN = 0;
@@ -1580,7 +1583,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   function stepText(st, m) {
     var verb = st.type === 'rip' ? 'Rip' : 'Crosscut', part = st.gives ? m.mat.parts[st.gives.it.pi] : null;
-    return verb + ' ' + esc(st.on) + ' at <span class="m">' + fmtH(st.at) + '</span>' + (st.gives ? ' → ' + letter(st.gives.it.pi) + (part && part.name ? ' ' + esc(part.name) : '') : '');
+    return verb + ' ' + pieceName(st.on, fmtH) + ' at <span class="m">' + fmtH(st.at) + '</span>' + (st.gives ? ' → ' + letter(st.gives.it.pi) + (part && part.name ? ' ' + esc(part.name) : '') : '');
   }
 
   // ---------- at the saw ----------
@@ -1610,8 +1613,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           it.steps.forEach(function (st) {
             var g = st.gives, gives = g ? ' → ' + g.it.pi + ' ' + g.l.toFixed(4) + '×' + g.w.toFixed(4) + (g.rot ? ' turned' : '') : '';
             if (st.type === 'none') { t.cuts.push({ id: 'whole' + gives, noCut: true, note: 'The whole sheet is ' + name(g.it.pi) + ' — no cut needed' }); return; }
-            t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: measH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + esc(st.on) + (g ? ' → ' + name(g.it.pi) : ''), sub: (st.type === 'rip' ? 'Along the grain, ' : 'Across the grain, ') + 'measured from the edge' });
+            t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: measH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + pieceName(st.on, fmtH) + (g ? ' → ' + name(g.it.pi) : ''), sub: st.type === 'rip' ? 'Along the grain — set the fence at ' + fmtH(st.at) + ', or mark it and cut on the waste side' : 'Across the grain — measure from the end, cut on the waste side' });
           });
+          // What's left that's worth keeping, at least the smallest offcut worth keeping each way.
+          var keep = it.spare.filter(function (f) { return f.w >= P.keep && f.h >= P.keep; });
+          if (keep.length) t.note = 'Leaves ' + keep.map(function (f) { return 'a ' + fmtH(f.w) + ' × ' + fmtH(f.h) + ' piece'; }).join(' and ') + ' — worth keeping';
         }
         tasks.push(t);
       });
@@ -2068,7 +2074,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         var lines = [];
         sh.steps.filter(function (s) { return s.type !== 'none'; }).forEach(function (st, k) {
           var part = st.gives ? m.mat.parts[st.gives.it.pi] : null, no = (k + 1) + '.  ', ind = textW('H', 9, no);
-          var s = (st.type === 'rip' ? 'Rip ' : 'Crosscut ') + st.on + ' at ' + fmt(st.at) + (st.gives ? '  »  ' + letter(st.gives.it.pi) + (part && part.name ? ' ' + part.name : '') : '');
+          var s = (st.type === 'rip' ? 'Rip ' : 'Crosscut ') + pieceName(st.on, fmt) + ' at ' + fmt(st.at) + (st.gives ? '  »  ' + letter(st.gives.it.pi) + (part && part.name ? ' ' + part.name : '') : '');
           pdfLines('H', 9, s.split(' '), ' ', width - ind).forEach(function (l, i) { lines.push({ gap: i ? 11 : 12, x: M + (i ? ind : 0), text: i ? l : no + l }); });
         });
         return lines;
