@@ -489,21 +489,47 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   }
 }
 
-// On a phone a sheet part takes two lines, its name across the top, so the name isn't cut to a few letters. Enter
-// still goes on to the same field of the next part, and from the last part adds one.
+// Enter goes along a part, name, count, length (and width), then on to the next part's name; from the last part it
+// adds one only once that part has its size, so it never leaves two blank parts.
 {
-  await open(saved(project('Cabinet', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Adjustable shelf', qty: 3, len: 28.5, wid: 11.25 }, { name: 'Left side panel', qty: 2, len: 34.5, wid: 23.25 }])])));
+  await open(saved(project('Cabinet', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Adjustable shelf', qty: 3, len: 28.5, wid: 11.25 }, { name: 'Left side panel', qty: 2, len: 34.5, wid: 23.25 }]),
+    board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 4, len: 30 }])])));
   await view('list');
-  await fitsPhone('cut list with a sheet');
+  const at = () => page.evaluate(() => { const e = document.activeElement; return e.dataset.f + ':' + e.value; });
   const field = (f, i) => page.locator(`.sheetmat .prow[data-pid] input[data-f="${f}"]`).nth(i);
-  assert.ok(await field('pname', 0).evaluate(i => i.scrollWidth <= i.clientWidth), 'a sheet part’s name is cut short on a phone');
+  assert.equal(await field('pname', 0).getAttribute('enterkeyhint'), 'next');
   await field('pname', 0).focus();
+  const walk = [];
+  for (let i = 0; i < 4; i++) { await page.keyboard.press('Enter'); walk.push(await at()); }
+  assert.deepEqual(walk, ['qty:3', 'len:28 1/2"', 'wid:11 1/4"', 'pname:Left side panel'], 'Enter doesn’t walk along the part');
+  const rows = () => page.locator('.mat:not(.sheetmat) .prow[data-pid]').count();
+  await page.click('.mat:not(.sheetmat) [data-a="addpart"]');
+  assert.equal(await rows(), 2);
+  await page.keyboard.type('Apron');
   await page.keyboard.press('Enter');
-  assert.equal(await page.evaluate(() => document.activeElement.value), 'Left side panel', 'Enter didn’t go on to the next part');
-  await field('len', 1).focus();
+  await page.waitForTimeout(50);
+  await page.keyboard.type('2');
   await page.keyboard.press('Enter');
-  assert.equal(await page.locator('.sheetmat .prow[data-pid]').count(), 3, 'Enter on the last part didn’t add one');
-  assert.equal(await page.evaluate(() => document.activeElement.dataset.f), 'len', 'the new part’s length doesn’t have the focus');
+  assert.equal(await at(), 'len:', 'Enter on the count doesn’t go to the length');
+  await page.keyboard.press('Enter');
+  assert.deepEqual([await rows(), await at()], [2, 'len:'], 'Enter on a part with no length added another');
+  await page.keyboard.type('20');
+  await page.keyboard.press('Enter');
+  assert.deepEqual([await rows(), await at()], [3, 'pname:'], 'Enter after the length doesn’t add the next part');
+  for (let i = 0; i < 4; i++) await page.keyboard.press('Enter');
+  assert.equal(await rows(), 3, 'Enter on a blank part added a second blank part');
+  assert.deepEqual(await page.$$eval('.mat:not(.sheetmat) .prow[data-pid]', rs => rs.map(r => [...r.querySelectorAll('input')].map(i => i.value).join('|'))), ['Leg|4|30"', 'Apron|2|20"', '|1|']);
+  // In the sizes to buy, Enter goes on to the next field.
+  await page.click('.sheetmat details.stock summary');
+  await page.locator('.sheetmat .srow[data-sid] input[data-f="slen"]').focus();
+  const steps = [];
+  for (let i = 0; i < 2; i++) { await page.keyboard.press('Enter'); steps.push(await at()); }
+  assert.deepEqual(steps, ['swid:48"', 'price:58.00'], 'Enter doesn’t go along a size to buy');
+  // A field the keyboard moves to comes out from under the sticky top bar.
+  const name = page.locator('.mat:not(.sheetmat) .prow[data-pid] input[data-f="pname"]').first();
+  await name.evaluate(e => scrollBy(0, e.getBoundingClientRect().top - 40));
+  await name.evaluate(e => e.focus());
+  assert.ok(await name.evaluate(e => e.getBoundingClientRect().top >= document.querySelector('.top').getBoundingClientRect().bottom), 'a focused field is under the top bar');
 }
 
 // The Source menu offers every count on hand from 1 to 10, the range a planner link can carry.

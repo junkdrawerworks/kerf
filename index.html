@@ -65,6 +65,8 @@
 }
 *{box-sizing:border-box}
 html,body{height:100%}
+/* a field the keyboard moves to scrolls clear of the sticky top bar (--hd is its height, kept by the script) */
+html{scroll-padding-top:calc(var(--hd,0px) + 8px)}
 body{margin:0;background-color:var(--ground);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:24px 24px;color:var(--ink);font:15px/1.45 var(--body);-webkit-font-smoothing:antialiased}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -1056,19 +1058,19 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         '<div class="parts"><div class="prow head"><span></span><span>Part</span><span style="text-align:center">Qty</span><span>' + (sheet ? 'Length' : 'Length') + '</span>' + (sheet ? '<span>Width</span><span title="Keep the grain running along the part’s length">Grain</span>' : '') + '<span></span></div>';
       m.parts.forEach(function (p, i) {
         h += '<div class="prow" data-pid="' + p.id + '"><span class="plet">' + letter(i) + '</span>' +
-          '<input data-f="pname" value="' + esc(p.name) + '" aria-label="Part name" autocomplete="off" placeholder="Part">' +
-          '<input class="pq mono" data-f="qty" value="' + (p.qty || '') + '" inputmode="numeric" aria-label="Quantity" autocomplete="off">' +
-          '<input class="mono" data-f="len" value="' + (p.len > 0 ? esc(fieldLen(p.len)) : '') + '"' + lenMode() + ' aria-label="Length" autocomplete="off" placeholder=""' + (U === 'mm' ? '900' : '35 3/4') + '">' +
-          (sheet ? '<input class="mono" data-f="wid" value="' + (p.wid > 0 ? esc(fieldLen(p.wid)) : '') + '"' + lenMode() + ' aria-label="Width" autocomplete="off" placeholder=""' + (U === 'mm' ? '400' : '16') + '"><button class="grain" type="button" data-a="grain" aria-pressed="' + (p.grain ? 'true' : 'false') + '" title="' + (p.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned') + '" aria-label="Keep grain along the length">' + ICON.grain + '</button>' : '') +
+          '<input data-f="pname" value="' + esc(p.name) + '" aria-label="Part name" autocomplete="off" enterkeyhint="next" placeholder="Part">' +
+          '<input class="pq mono" data-f="qty" value="' + (p.qty || '') + '" inputmode="numeric" enterkeyhint="next" aria-label="Quantity" autocomplete="off">' +
+          '<input class="mono" data-f="len" value="' + (p.len > 0 ? esc(fieldLen(p.len)) : '') + '"' + lenMode() + ' enterkeyhint="next" aria-label="Length" autocomplete="off" placeholder=""' + (U === 'mm' ? '900' : '35 3/4') + '">' +
+          (sheet ? '<input class="mono" data-f="wid" value="' + (p.wid > 0 ? esc(fieldLen(p.wid)) : '') + '"' + lenMode() + ' enterkeyhint="next" aria-label="Width" autocomplete="off" placeholder=""' + (U === 'mm' ? '400' : '16') + '"><button class="grain" type="button" data-a="grain" aria-pressed="' + (p.grain ? 'true' : 'false') + '" title="' + (p.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned') + '" aria-label="Keep grain along the length">' + ICON.grain + '</button>' : '') +
           '<button class="icon" type="button" data-a="delpart" aria-label="Remove ' + esc(p.name || 'part') + '">✕</button></div>';
       });
       h += '<button class="addpart" type="button" data-a="addpart">+ Add a part</button></div><div class="perr" data-err="' + m.id + '" hidden></div>' +
         '<details class="stock" data-mid="' + m.id + '"' + (open[m.id] ? ' open' : '') + '><summary><span class="chips">' + stockSummary(m) + '</span><span class="chev" aria-hidden="true">›</span><span class="sr">Edit stock and prices</span></summary><div class="stock-bd">' +
         '<div class="srow head"><span>' + (sheet ? 'Length' : 'Length') + '</span>' + (sheet ? '<span>Width</span>' : '') + '<span>Price</span><span>Source</span><span></span></div>';
       m.stock.forEach(function (s) {
-        h += '<div class="srow" data-sid="' + s.id + '"><input class="mono" data-f="slen" value="' + esc(fieldLen(s.len, { ft: !sheet })) + '"' + lenMode() + ' aria-label="Stock length" autocomplete="off">' +
-          (sheet ? '<input class="mono" data-f="swid" value="' + esc(fieldLen(s.wid)) + '"' + lenMode() + ' aria-label="Stock width" autocomplete="off">' : '') +
-          '<span class="money"><span>' + esc(CUR) + '</span><input class="mono" data-f="price" style="padding-left:' + (12 + Array.from(CUR).length * 9) + 'px" value="' + (s.have ? '' : (+s.price || 0).toFixed(2)) + '" inputmode="decimal" aria-label="Price" autocomplete="off"' + (s.have ? ' disabled placeholder="free"' : '') + '></span>' +
+        h += '<div class="srow" data-sid="' + s.id + '"><input class="mono" data-f="slen" value="' + esc(fieldLen(s.len, { ft: !sheet })) + '"' + lenMode() + ' enterkeyhint="next" aria-label="Stock length" autocomplete="off">' +
+          (sheet ? '<input class="mono" data-f="swid" value="' + esc(fieldLen(s.wid)) + '"' + lenMode() + ' enterkeyhint="next" aria-label="Stock width" autocomplete="off">' : '') +
+          '<span class="money"><span>' + esc(CUR) + '</span><input class="mono" data-f="price" style="padding-left:' + (12 + Array.from(CUR).length * 9) + 'px" value="' + (s.have ? '' : (+s.price || 0).toFixed(2)) + '" inputmode="decimal" enterkeyhint="next" aria-label="Price" autocomplete="off"' + (s.have ? ' disabled placeholder="free"' : '') + '></span>' +
           '<select data-f="have" aria-label="Where it comes from"><option value="0"' + (s.have ? '' : ' selected') + '>Buy</option>' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return '<option value="' + n + '"' + (s.have === n ? ' selected' : '') + '>Have ' + n + '</option>'; }).join('') + '</select>' +
           '<button class="icon" type="button" data-a="delstock" aria-label="Remove this size">✕</button></div>';
       });
@@ -1135,14 +1137,29 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var el = e.target, f = el.dataset && el.dataset.f;
     if (f === 'qty' || f === 'price' || f === 'slen' || f === 'swid') setTimeout(function () { if (document.activeElement === el) el.select(); }, 0);
   }
+  // Enter goes along a part, name, count, length (and width), then on to the next part's name. From the last part it
+  // adds one only once that part has its size, so it never leaves two blank parts. In the sizes to buy it goes on to
+  // the next field, and from the last one closes the keyboard.
   function onKey(e) {
-    var el = e.target;
-    if (e.key !== 'Enter' || !el.dataset || !el.dataset.f) return;
+    var el = e.target, f = el.dataset && el.dataset.f;
+    if (e.key !== 'Enter' || !f || e.isComposing) return;
+    var list = function (root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); };
+    if (el.closest('.srow')) {
+      e.preventDefault();
+      var all = list(el.closest('.stock-bd'), '.srow[data-sid] input:not([disabled])'), after = all[all.indexOf(el) + 1];
+      if (after) after.focus(); else el.blur();
+      return;
+    }
     var row = el.closest('.prow'); if (!row) return;
     e.preventDefault();
+    var fields = list(row, 'input'), i = fields.indexOf(el);
+    if (i < fields.length - 1) { fields[i + 1].focus(); return; }
     var next = row.nextElementSibling;
-    if (next && next.classList.contains('prow')) { var t = next.querySelector('[data-f="' + el.dataset.f + '"]'); if (t) t.focus(); }
-    else { var m = findMat(el); addPart(m, el.dataset.f); }
+    if (next && next.classList.contains('prow')) { next.querySelector('[data-f="pname"]').focus(); return; }
+    var m = findMat(el), p = findPart(m, el);
+    var gap = fields.filter(function (x) { return (x.dataset.f === 'len' || x.dataset.f === 'wid') && !(p[x.dataset.f] > 0); })[0];
+    if (gap) { if (gap !== el) gap.focus(); return; }
+    addPart(m, 'pname');
   }
   function addPart(m, focusField) {
     var sheet = m.kind === 'sheet', last = m.parts[m.parts.length - 1];
@@ -1834,6 +1851,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
   var rT; window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(function () { if ($('planOut').clientWidth && Math.abs(planWidth() - W.plan) > 4) renderPlan(); }, 120); });
+  if (window.ResizeObserver) new ResizeObserver(function () { document.documentElement.style.setProperty('--hd', document.querySelector('.top').offsetHeight + 'px'); }).observe(document.querySelector('.top'));
   applyProject();
   checkLink();
   window.addEventListener('hashchange', checkLink);
