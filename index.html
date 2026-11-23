@@ -1025,10 +1025,29 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     whenIdle(step);
   }
-  var solveT;
+  // The plan and the steps at the saw are drawn at once only where they show. One that's hidden (on a phone, behind
+  // the cut list) is drawn when the page is next idle, at the width it will have, so the tap that shows it has
+  // nothing left to draw; STALE notes it until then, and showing it first draws it on the spot. The ticks are
+  // checked against a new plan straight away, so a toast says at once when an edit clears them.
+  var solveT, STALE = { plan: false, saw: false };
+  function shows(v) { return DB.rtab === v && !(NARROW.matches && $('app').dataset.tab === 'list'); }
+  function drawOne(v) { STALE[v] = false; if (v === 'plan') renderPlan(); else renderSaw(); }
+  function draw() {
+    var gen = GEN;
+    ['plan', 'saw'].forEach(function (v) {
+      if (shows(v)) { drawOne(v); return; }
+      STALE[v] = true; whenIdle(function () { if (gen === GEN && STALE[v]) drawOne(v); });
+    });
+    if (STALE.saw) syncTicks(tickKeys(sawTasks()));
+  }
+  // When a view comes into sight: drawn if it's stale, and the plan drawn again if it was drawn for another width.
+  function reveal() {
+    ['plan', 'saw'].forEach(function (v) { if (STALE[v] && shows(v)) drawOne(v); });
+    if (shows('plan') && Math.abs(planWidth() - W.plan) > 4) renderPlan();
+  }
   function resolve(soon) {
     clearTimeout(solveT);
-    var go = function () { GEN++; solveAll(); renderPlan(); renderSaw(); renderErrors(); findTips(GEN); };
+    var go = function () { GEN++; solveAll(); draw(); renderErrors(); findTips(GEN); };
     if (soon) solveT = setTimeout(go, 220); else go();
   }
 
@@ -1213,7 +1232,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
 
   // ---------- plan ----------
   var W = { plan: 640 };
-  function planWidth() { var el = $('planOut'); return Math.max(260, Math.floor((el && el.clientWidth) || 640) - 26); }
+  // The plan's width, or the width it will have where it's hidden: its pane's, or, with the pane hidden too, the page's.
+  function planWidth() {
+    var el = $('planOut'), a = $('app'), cs = getComputedStyle(a), w = el.clientWidth || el.parentNode.clientWidth;
+    if (!w) w = NARROW.matches ? a.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) : 640;
+    return Math.max(260, Math.floor(w) - 26);
+  }
   function renderPlan() {
     var host = $('planOut'), r = RES;
     if (!P.materials.length || !r.mats.some(function (m) { return m.items.length; })) {
@@ -1278,7 +1302,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     try { navigator.clipboard.writeText(t).then(done, function () { showText(t); }); } catch (e) { showText(t); }
   }
   function renderTips() {
-    var el = $('tips'); if (!el) return;
+    var el = $('tips'); if (!el || STALE.plan) return; // a stale plan's tips box; the plan shows TIPS when it's drawn
     var shown = TIPS.slice(0, 3);
     el.innerHTML = shown.map(function (t, i) {
       return '<div class="tip"><span class="tag">TIP</span><span>Make <b>' + esc(t.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and the ' + esc(t.mat) + ' costs <b>' + esc(money(t.save)) + ' less</b>.</span><button class="btn sm sec" type="button" data-tip="' + i + '">Use ' + esc(fmt(t.to)) + '</button></div>';
@@ -1512,7 +1536,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
     document.querySelectorAll('#rseg button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === DB.rtab); });
     $('planOut').hidden = DB.rtab !== 'plan'; $('sawOut').hidden = DB.rtab !== 'saw';
-    if (t === 'plan' || t === 'saw') { var w = planWidth(); if (Math.abs(w - W.plan) > 4) renderPlan(); }
+    reveal();
     if (keep) scrollTo(0, SCROLL[t] || 0);
   }
   function renderHead() {
@@ -1860,6 +1884,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
   var rT; window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(function () { if ($('planOut').clientWidth && Math.abs(planWidth() - W.plan) > 4) renderPlan(); }, 120); });
+  // A window widened past 960 px shows the plan beside the cut list: drawn before that frame, so an old plan never shows.
+  if (NARROW.addEventListener) NARROW.addEventListener('change', reveal); else NARROW.addListener(reveal);
   if (window.ResizeObserver) new ResizeObserver(function () { document.documentElement.style.setProperty('--hd', document.querySelector('.top').offsetHeight + 'px'); }).observe(document.querySelector('.top'));
   applyProject();
   checkLink();

@@ -558,6 +558,25 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   await page.setViewportSize({ width: 390, height: 844 });
 }
 
+// A plan edited from the cut list on a phone is drawn once it shows, at its own width, whether by its tab or by the
+// window widening to show both, and never left as it was before the edit.
+{
+  await open(saved({ ...project('Shelf', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 2, len: 30 }])]) }));
+  await view('list');
+  await page.fill('.prow[data-pid] input[data-f="len"]', '40');
+  await page.waitForTimeout(600);
+  await view('plan');
+  const drawn = () => page.evaluate(() => { const s = document.querySelector('#planOut svg.diag'); return [s.getAttribute('viewBox').split(' ')[2] == Math.max(260, document.getElementById('planOut').clientWidth - 26), document.querySelector('#planOut .steps').textContent]; });
+  assert.deepEqual(await drawn(), [true, 'ALeg · 2 × 40″'], 'the plan isn’t drawn anew for its tab');
+  await view('list');
+  await page.fill('.prow[data-pid] input[data-f="len"]', '35');
+  await page.waitForTimeout(600);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(50);
+  assert.deepEqual(await drawn(), [true, 'ALeg · 2 × 35″'], 'widening the window shows the plan from before the edit');
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 // The Source menu offers every count on hand from 1 to 10, the range a planner link can carry.
 await open(saved(project('Offcuts', [board('2×4', [{ len: 96, price: 4.28 }, { len: 40, have: 7 }], [{ name: 'Leg', qty: 2, len: 30 }])])));
 await view('list');
@@ -666,8 +685,9 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 // A reload plans everything afresh and finds the same plan, to the last cut.
 {
   const counted = kerfSource.replace(/function solve(Boards|Sheets)\(mat, cfg, quick\) \{/g, '$& if (!quick) planned.push(mat.name);')
-    .replace('<script>(function () {', '<script>var planned = [];</script>$&');
+    .replace('<script>(function () {', '<script>var planned = [], solves = 0;</script>$&').replace('var go = function () { GEN++;', '$& solves++;');
   assert.equal(counted.split('planned.push(').length, 3, 'the solvers aren’t where this test looks for them');
+  assert.ok(counted.includes('GEN++; solves++;'), 'the project solve isn’t where this test looks for it');
   const counting = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
   try {
     const cp = await counting.newPage();
@@ -682,22 +702,23 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
     await cp.waitForSelector('#planOut > *', { state: 'attached' });
     const newlyPlanned = () => cp.evaluate(() => planned.splice(0));
     assert.deepEqual(await newlyPlanned(), ['2×4', '¾ plywood'], 'opening the project doesn’t plan each material once');
+    // Each edit waits for the project to be solved again (on the cut list tab the plan isn't drawn until it shows).
     const edit = async (f, i, value) => {
-      await cp.evaluate(() => { window.redrawn = new Promise(done => new MutationObserver((m, o) => { o.disconnect(); done(); }).observe(document.getElementById('planOut'), { childList: true })); });
+      const before = await cp.evaluate(() => solves);
       await cp.fill(`.prow[data-pid] input[data-f="${f}"] >> nth=${i}`, value);
-      await cp.evaluate(() => Promise.race([window.redrawn, new Promise((ok, no) => setTimeout(() => no(new Error('the plan wasn’t drawn again')), 10000))]));
+      await cp.waitForFunction(n => solves > n, before, { timeout: 10000 }).catch(() => assert.fail('the project wasn’t solved again'));
       return newlyPlanned();
     };
     assert.deepEqual(await edit('qty', 2, '5'), ['¾ plywood'], 'a shelf’s count planned more than the plywood');
     assert.deepEqual(await edit('len', 0, '70 1/2'), ['2×4'], 'a leg’s length planned more than the 2×4s');
     assert.deepEqual(await edit('pname', 0, 'Long leg'), [], 'renaming a part planned again');
     assert.deepEqual(await edit('pname', 3, 'Bench top'), [], 'renaming a part too big for any sheet planned again');
-    assert.match(await cp.textContent('#planOut .mdiag'), /Long leg · 4 × 70/, 'the plan has the old name');
-    assert.match(await cp.textContent('#sawOut'), /A Long leg/, 'the steps at the saw have the old name');
     assert.match(await cp.textContent('.sheetmat .perr'), /^Bench top \(100" × 30"\) won’t fit/, 'the cut list has the old name');
-    // Both seen on the Plan tab: a plan drawn while the cut list is showing is drawn again to fit once the tab opens.
+    // Both seen on the Plan tab, where the plan is drawn once it shows.
     const plan = () => cp.evaluate(() => [...document.getElementById('planOut').children].filter(c => c.id !== 'tips').map(c => c.outerHTML).join('') + document.getElementById('sawOut').innerHTML);
     await cp.click('#tabs button[data-t="plan"]');
+    assert.match(await cp.textContent('#planOut .mdiag'), /Long leg · 4 × 70/, 'the plan has the old name');
+    assert.match(await cp.textContent('#sawOut'), /A Long leg/, 'the steps at the saw have the old name');
     const kept = await plan();
     await cp.waitForFunction(() => { const s = localStorage.getItem('kerf.v1') || ''; return s.includes('Bench top') && s.includes('"tab":"plan"'); }, null, { timeout: 5000 });
     await cp.reload();
