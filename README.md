@@ -7,7 +7,7 @@
 <p align="center">
   <img src="docs/phone-list.png" alt="The cut list for a set of garage shelves: how to type lengths, then the 2×4 legs, front and back rails and side rails, each named on one line with its quantity and length below, above the 2×4 sizes you can buy and what they cost" width="250">
   &nbsp;
-  <img src="docs/phone-plan.png" alt="The plan: $100.64 to buy for 8 boards and 1 sheet in 26 cuts, a tip that making the front and back rails 47 15/16 inches instead of 48 means spending $4.12 less on 2×4, and the shopping list" width="250">
+  <img src="docs/phone-plan.png" alt="The plan: $100.64 to buy, the 2×4s the cheapest possible, for 8 boards and 1 sheet in 26 cuts, a tip that making the front and back rails 47 15/16 inches instead of 48 means spending $4.12 less on 2×4 and leaves no spare length on the 8-foot boards, and the shopping list" width="250">
   &nbsp;
   <img src="docs/phone-saw.png" alt="At the saw, 4 of 26 cuts done: board 1, a 10-foot 2×4, with its three cuts ticked off and a 2 5/8 inch offcut left, and the first cut on board 2 ticked, with the second marked as the next cut" width="250">
 </p>
