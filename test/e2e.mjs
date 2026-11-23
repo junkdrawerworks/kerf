@@ -1102,6 +1102,71 @@ await page.click('#stx');
   assert.equal((await rows(1)).length, 3);
 }
 
+// On a touch screen an inch length takes the number pad, and while it has focus a row of keys above the keyboard types
+// ⅛ to ⅞, ′ and ″, which Kerf reads (70¾″ is 70 3/4"), keeping the focus in the field. Its last key swaps the field to
+// the letter keyboard and back. The row sits on the visual viewport's bottom edge, the top of a phone's keyboard, with
+// the field kept in sight above it. Not for a part's name, a project in mm, or a laptop with no touch screen.
+{
+  await open(null);
+  await view('list');
+  const len = '#mats .prow[data-pid] [data-f="len"] >> nth=0', focused = () => page.evaluate(() => document.activeElement.dataset.f || document.activeElement.id);
+  assert.equal(await page.getAttribute(len, 'inputmode'), 'decimal', 'an inch length doesn’t take the number pad on a phone');
+  assert.ok(await page.isHidden('#fbar'));
+  await page.fill(len, '70');
+  assert.ok(await page.isVisible('#fbar'), 'no fraction keys while an inch length has focus');
+  assert.deepEqual(await page.$$eval('#fbar button', bs => bs.map(b => b.textContent)), ['1/8⅛', '1/4¼', '3/8⅜', '1/2½', '5/8⅝', '3/4¾', '7/8⅞', '′', '″', 'abc'].map(t => t.replace(/^(\d)\/(\d)(.)$/, (m, n, d) => n + '/' + d + n + '⁄' + d)));
+  await page.click('#fbar [data-k="¾"]');
+  await page.click('#fbar [data-k="″"]');
+  assert.equal(await page.inputValue(len), '70¾″');
+  assert.equal(await focused(), 'len', 'a fraction key took the focus from the field');
+  await page.waitForFunction(() => { const d = JSON.parse(localStorage.getItem('kerf.v1') || 'null'); return d && d.projects[d.current].materials[0].parts[0].len === 70.75; }, null, { timeout: 5000 });
+  const bar = await page.$eval('#fbar', b => b.getBoundingClientRect().bottom);
+  assert.ok(Math.abs(bar - 844) < 1, `the fraction keys aren’t at the bottom of the screen: ${bar}`);
+  // The letter keyboard, for a sixteenth; and back.
+  await page.click('#fbar .abc');
+  assert.deepEqual([await focused(), await page.getAttribute(len, 'inputmode'), await page.textContent('#fbar .abc'), await page.isVisible('#fbar')], ['len', 'text', '123', true], 'the letter keyboard key');
+  await page.click('#fbar .abc');
+  assert.deepEqual([await focused(), await page.getAttribute(len, 'inputmode')], ['len', 'decimal']);
+  // Leaving the field puts the keys away, and the length reads as a tape does.
+  await page.click('#mats [data-f="pname"] >> nth=0');
+  assert.ok(await page.isHidden('#fbar'), 'fraction keys for a part’s name');
+  assert.equal(await page.inputValue(len), '70 3/4"');
+  // A fraction typed at the end of a length shown with its inch mark (48") goes before the mark.
+  const rail = '#mats .prow[data-pid] [data-f="len"] >> nth=1';
+  await page.click(rail);
+  await page.keyboard.press('End');
+  await page.click('#fbar [data-k="⅞"]');
+  assert.equal(await page.inputValue(rail), '48⅞″', 'a fraction after the inch mark');
+  assert.equal(await page.locator(rail).evaluate(i => i.classList.contains('bad')), false, '48⅞″ isn’t read as a length');
+  // With the keyboard up (a visual viewport 500 px tall), the keys sit on top of it and the field stays above them.
+  await page.evaluate(() => { const vv = new EventTarget(); Object.assign(vv, { offsetTop: 0, height: 500, width: 390 }); Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv }); });
+  await page.evaluate(() => { document.querySelector('.sheetmat .prow[data-pid] [data-f="wid"]').scrollIntoView({ block: 'end' }); document.querySelector('.sheetmat .prow[data-pid] [data-f="wid"]').focus(); });
+  assert.deepEqual(await page.evaluate(() => [Math.round(document.getElementById('fbar').getBoundingClientRect().bottom), Math.round(document.getElementById('fbar').getBoundingClientRect().top - document.activeElement.getBoundingClientRect().bottom) >= 0]), [500, true], 'the fraction keys aren’t on top of the keyboard, below the field');
+  // A board's sizes to buy take ′.
+  await page.click('#mats .mat >> nth=0 >> details.stock summary');
+  await page.click('#mats .mat >> nth=0 >> .srow[data-sid] [data-f="slen"] >> nth=0'); // a tap selects it, to type over
+  await page.waitForFunction(() => document.activeElement.selectionEnd - document.activeElement.selectionStart === 2);
+  await page.keyboard.type('9');
+  await page.click('#fbar [data-k="′"]');
+  assert.equal(await page.inputValue('#mats .mat >> nth=0 >> .srow[data-sid] [data-f="slen"] >> nth=0'), '9′');
+  await page.evaluate(() => document.activeElement.blur());
+  await page.waitForSelector('#fbar', { state: 'hidden', timeout: 2000 }).catch(() => assert.fail('the fraction keys stay once the field is left'));
+  // Not in mm, nor on a laptop.
+  await open(saved(project('Metric', [board('45×90', [{ len: 94.488, price: 6.5 }], [{ name: 'Post', qty: 2, len: 35 }])], { units: 'mm' })));
+  await view('list');
+  await page.click(len);
+  assert.ok(await page.isHidden('#fbar'), 'fraction keys in a project in mm');
+  const laptop = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  try {
+    const lp = await laptop.newPage();
+    lp.on('pageerror', e => problems.push('laptop: ' + e.message));
+    await lp.goto(base);
+    await lp.waitForSelector('#planOut > *', { state: 'attached' });
+    await lp.click(len);
+    assert.deepEqual([await lp.isHidden('#fbar'), await lp.getAttribute(len, 'inputmode')], [true, null], 'fraction keys or the number pad on a laptop');
+  } finally { await laptop.close(); }
+}
+
 // Enter goes along a part, name, count, length (and width), then on to the next part's name; from the last part it
 // adds one only once that part has its size, so it never leaves two blank parts.
 {

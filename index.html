@@ -335,6 +335,11 @@ button.stk-hd[aria-expanded="true"] .chev{transform:rotate(90deg)}
 textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surface);color:var(--ink);border:1px solid var(--line2);border-radius:7px;padding:8px}
 .note{color:var(--ink2);font-size:13.5px;margin:0}
 .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(16px);background:var(--ink);color:var(--ground);padding:8px 14px;border-radius:9px;font:600 13.5px var(--body);opacity:0;visibility:hidden;transition:.2s;pointer-events:none;z-index:80;max-width:90vw;text-align:center}
+.fbar{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;gap:4px;padding:4px max(4px,env(safe-area-inset-right)) 4px max(4px,env(safe-area-inset-left));background:var(--surface2);border-top:1px solid var(--line2)}
+.fbar[hidden]{display:none}
+.fbar button{flex:1 1 0;min-width:0;height:44px;border:1px solid var(--line2);border-radius:7px;background:var(--surface);color:var(--ink);font:600 21px var(--body);padding:0;touch-action:manipulation}
+.fbar button .fr{font-size:.82em}
+.fbar .abc{flex-grow:1.4;font-size:14px;color:var(--ink2)}
 .toast.show{opacity:1;visibility:visible;transform:translateX(-50%)}
 .toast.act{display:flex;align-items:center;gap:12px;padding:6px 6px 6px 14px;text-align:left;width:max-content}
 .toast.act.show{pointer-events:auto}
@@ -472,6 +477,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
 </footer>
 <div id="sheet" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="fbar" id="fbar" role="group" aria-label="Fractions and marks" hidden></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="dg-hbg" width="7" height="7"/><line class="dg-hatch" x1="0" y1="0" x2="0" y2="7"/></pattern>
 </defs></svg>
@@ -1600,7 +1606,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }).join('') + (m.examplePrices ? '<span class="eg">Example prices — tap to set yours</span>' : '');
   }
   // A length in a field: in mm the bare number, so the field stays short (the cut list says it's in mm) and a phone can
-  // offer its number pad; in inches as a tape reads, with the letter keyboard for the ' and " marks. Either way finely
+  // offer its number pad; in inches as a tape reads, with the fraction keys (below) above a phone's number pad for the
+  // fractions and the ′ and ″ marks. Either way finely
   // enough (fmt's `fine`) that 23 3/32 or 603.3 stays as typed when the cut list draws again.
   function fieldLen(x, o) { return U === 'mm' ? fmt(x, { bare: true, fine: true }) : fmt(x, { ft: !!(o && o.ft), fine: true }); }
   // A size to buy as a screen reader names it: the 8 ft size, the 4 ft × 8 ft size.
@@ -1611,7 +1618,46 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     row.querySelector('[data-f="have"]').setAttribute('aria-label', 'Where the ' + nm + ' size comes from');
     row.querySelector('[data-a="delstock"]').setAttribute('aria-label', 'Remove the ' + nm + ' size');
   }
-  function lenMode() { return U === 'mm' ? ' inputmode="decimal"' : ''; }
+  function lenMode() { return U === 'mm' || COARSE.matches ? ' inputmode="decimal"' : ''; }
+  // The fraction keys: on a touch screen, while an inch length in the cut list has focus, a row above the keyboard types
+  // ⅛ to ⅞, ′ and ″ (which parseLen reads: 35¾ is 35 3/4), so the field can take the number pad. The last key swaps that
+  // field to the letter keyboard and back, for a sixteenth typed as 15/16. The row sits on the visual viewport's bottom
+  // edge, which is the keyboard's top on a phone, and keeps the field in sight above it.
+  var COARSE = window.matchMedia ? matchMedia('(pointer: coarse)') : { matches: false };
+  var BAR_F = { len: 1, wid: 1, slen: 1, swid: 1, bwid: 1 }, barFor = null;
+  function barFits(el) { return U === 'in' && COARSE.matches && !!el && !!el.dataset && BAR_F[el.dataset.f] === 1 && !!el.closest('#mats'); }
+  function showBar(el) {
+    var b = $('fbar');
+    if (!b.firstChild) b.innerHTML = [[1, 8], [1, 4], [3, 8], [1, 2], [5, 8], [3, 4], [7, 8]].map(function (f) { return '<button type="button" data-k="' + VULGAR_OF[f[0] + '/' + f[1]] + '">' + frac(f[0], f[1]) + '</button>'; }).join('') +
+      '<button type="button" data-k="′" aria-label="feet">′</button><button type="button" data-k="″" aria-label="inches">″</button><button type="button" class="abc" data-k="abc"></button>';
+    barFor = el; b.hidden = false;
+    var abc = b.querySelector('.abc'), text = el.inputMode === 'text';
+    abc.textContent = text ? '123' : 'abc'; abc.setAttribute('aria-label', text ? 'Number keyboard' : 'Letter keyboard');
+    placeBar(true);
+  }
+  function hideBar() { barFor = null; $('fbar').hidden = true; }
+  function placeBar(see) {
+    var b = $('fbar'); if (b.hidden) return;
+    var vv = window.visualViewport, bottom = vv ? vv.offsetTop + vv.height : innerHeight;
+    b.style.transform = 'translateY(' + Math.min(0, bottom - innerHeight) + 'px)';
+    if (see && barFor) { var over = barFor.getBoundingClientRect().bottom + 8 - (bottom - b.offsetHeight); if (over > 0) scrollBy(0, over); }
+  }
+  var VULGAR_OF = {}; Object.keys(VULGAR).forEach(function (c) { VULGAR_OF[VULGAR[c].trim()] = c; });
+  function onBarKey(k) {
+    var el = barFor; if (!el || !el.isConnected) { hideBar(); return; }
+    if (k === 'abc') { // blurred and focused again, so the phone brings up the other keyboard
+      el.inputMode = el.inputMode === 'text' ? 'decimal' : 'text';
+      el.blur(); el.focus(); var n = el.value.length; el.setSelectionRange(n, n); showBar(el);
+      return;
+    }
+    if (document.activeElement !== el) el.focus();
+    var a = el.selectionStart == null ? el.value.length : el.selectionStart, z = el.selectionEnd == null ? a : el.selectionEnd;
+    // A fraction typed after the inch mark (the field reads 48", the caret at its end) goes before it: 48⅞".
+    var mark = VULGAR[k] && a === z && /["″] ?$/.exec(el.value.slice(0, a));
+    if (mark) { a -= mark[0].length; k += '″'; }
+    el.setRangeText(k, a, z, 'end');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
   function renderList() {
     var host = $('mats'), open = {};
     host.querySelectorAll('details.stock[open]').forEach(function (d) { open[d.dataset.mid] = 1; });
@@ -1750,6 +1796,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // selection). A part's name and length aren't: a tap there is often to fix one character.
   function onFocus(e) {
     var el = e.target, f = el.dataset && el.dataset.f;
+    if (barFits(el)) showBar(el); else hideBar();
     if (f === 'qty' || f === 'price' || f === 'slen' || f === 'swid') setTimeout(function () { if (document.activeElement === el) el.select(); }, 0);
   }
   // Enter goes along a part, name, count, length (and width), then on to the next part's name. From the last part it
@@ -3072,6 +3119,11 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   $('mats').addEventListener('keydown', onKey);
   $('mats').addEventListener('click', onClick);
   $('mats').addEventListener('paste', onPaste);
+  // The fraction keys never take the focus from the field; it goes once the focus is somewhere else.
+  $('fbar').addEventListener('mousedown', function (e) { e.preventDefault(); });
+  $('fbar').addEventListener('click', function (e) { var b = e.target.closest('[data-k]'); if (b) onBarKey(b.dataset.k); });
+  document.addEventListener('focusout', function () { setTimeout(function () { var a = document.activeElement; if (barFor && a !== barFor && !$('fbar').contains(a)) hideBar(); }, 0); });
+  if (window.visualViewport) { visualViewport.addEventListener('resize', function () { placeBar(true); }); visualViewport.addEventListener('scroll', function () { placeBar(false); }); }
   $('pname').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); this.blur(); } });
   $('pname').addEventListener('input', function () { P.name = this.value; $('pTitle').textContent = P.name || 'Kerf'; if (P.example) { P.example = false; renderHead(); $('pname').focus(); } touch(); });
   // The project's notes (hardware, glue-ups, finish) aren't anything a plan is worked out from, so they only save.
