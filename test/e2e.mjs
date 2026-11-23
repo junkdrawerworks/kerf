@@ -348,6 +348,46 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
     .catch(() => assert.fail('the projects weren’t saved when the damaged copy couldn’t be kept'));
 }
 
+// When Kerf can't save, a strip under the top bar says so until a save works, with a button to save the project as a
+// file, and Projects stops saying projects are saved here. Storage full of other things: the edit isn't kept, and once
+// there's room the next edit is. Storage blocked (cookies off): the strip is there from the start.
+{
+  const strip = () => page.evaluate(() => document.getElementById('storeBar').textContent);
+  const pjNote = async win => { await win.click('#projBtn'); const t = await win.textContent('#pjNote'); await win.click('#pjx'); return t; };
+  await open(null);
+  assert.equal(await strip(), '', 'a strip about saving shows when saving works');
+  assert.match(await pjNote(page), /^Projects are saved in this browser on this device\./);
+  await page.evaluate(() => { let chunk = 'x'.repeat(1 << 20), n = 0; for (;;) { try { localStorage.setItem('filler' + n, chunk); n++; } catch (e) { if (chunk.length < 16) break; chunk = chunk.slice(0, chunk.length >> 1); } } });
+  await page.fill('#pname', 'Too full to keep');
+  await page.waitForFunction(() => document.getElementById('storeBar').textContent, null, { timeout: 3000 }).catch(() => assert.fail('a save that failed says nothing'));
+  assert.match(await strip(), /^This browser’s storage is full, so the last change isn’t saved\. Save the project as a file\.Save as a file$/);
+  assert.equal(await page.evaluate(() => localStorage.getItem('kerf.v1')), null);
+  assert.equal(await pjNote(page), 'Projects aren’t being saved in this browser right now.', 'Projects says it saved what it couldn’t');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#storeBar button')]);
+  assert.equal(dl.suggestedFilename(), 'too-full-to-keep.kerf.json');
+  assert.equal(JSON.parse(await readFile(await dl.path(), 'utf8')).project.name, 'Too full to keep');
+  await page.evaluate(() => Object.keys(localStorage).forEach(k => { if (k.startsWith('filler')) localStorage.removeItem(k); }));
+  await page.fill('#pname', 'Room again');
+  await page.waitForFunction(() => (localStorage.getItem('kerf.v1') || '').includes('Room again'), null, { timeout: 3000 });
+  assert.equal(await strip(), '', 'the strip stays after a save that worked');
+  assert.match(await pjNote(page), /^Projects are saved in this browser/);
+
+  const blocked = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await blocked.addInitScript(() => Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new DOMException('The operation is insecure.', 'SecurityError'); } }));
+  try {
+    const win = await blocked.newPage();
+    win.on('pageerror', e => problems.push('blocked storage: ' + e.message));
+    await win.goto(base);
+    await win.waitForSelector('#planOut > *', { state: 'attached' });
+    assert.equal(await win.textContent('#storeBar'), 'This browser isn’t letting Kerf save (private browsing or cookies blocked). Your changes last until you close this tab — save the project as a file to keep it.Save as a file');
+    assert.equal(await pjNote(win), 'Projects aren’t being saved in this browser right now.');
+    await win.fill('#pname', 'Kept in this tab');
+    await win.waitForTimeout(600);
+    assert.equal(await win.textContent('.total'), '$100.64', 'the page stops working with storage blocked');
+    assert.match(await win.textContent('#storeBar'), /^This browser isn’t letting Kerf save/);
+  } finally { await blocked.close(); }
+}
+
 // Two windows open at once keep each other's work: a project added in one isn't undone when the other saves, nor
 // brought back once deleted, a tick in one and an edit in the other are both kept, and an edit still waiting to
 // be saved isn't lost when the other window saves.

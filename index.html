@@ -277,6 +277,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
 .lk{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px 14px;margin-bottom:12px}.lk b{display:block;font-size:17px}.lk ul{margin:6px 0 0;padding-left:18px;color:var(--ink2)}
 .example{display:flex;gap:10px;align-items:center;background:var(--chalk-soft);border:1px solid color-mix(in srgb,var(--chalk) 40%,var(--line));border-radius:var(--r);padding:9px 12px;font-size:14px;margin-top:14px}
 .example button{margin-left:auto;flex:none}
+/* saving trouble: the example's strip, with its text over the buttons when they don't fit beside it */
+.store{flex-wrap:wrap}
+.store span{flex:1 1 300px}
+.store .acts{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
 @media (max-width:960px){
   .work{grid-template-columns:minmax(0,1fr)}
   .tabs{display:flex}
@@ -346,6 +350,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     <nav class="tabs" id="tabs" aria-label="Views"><button type="button" data-t="list">Cut list</button><button type="button" data-t="plan">Plan</button><button type="button" data-t="saw">At the saw</button></nav>
   </header>
   <noscript><p class="empty noscript">Kerf needs JavaScript to work out what to buy and how to cut it.</p></noscript>
+  <div id="storeBar" aria-live="polite"></div>
   <div id="exampleBar"></div>
   <main class="work">
     <section class="pane list" aria-label="Cut list">
@@ -497,6 +502,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
 
   // ---------- storage (this browser only; projects export as files) ----------
   var LS = 'kerf.v1', DB = { projects: {}, order: [], current: null, tab: 'plan', rtab: 'plan', deleted: {} }, kept = false;
+  // Why this browser isn't keeping projects, while it isn't: 'blocked' (no storage at all: cookies blocked, or some
+  // private windows) or 'full'. Shown in the strip under the top bar (storeBar).
+  var UNSAVED = null;
+  function isFull(e) { return !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014); }
   // Only Kerf writes kerf.v1, but a browser add-on, a hand edit or a half-written save could leave something the
   // page would stop on. So what's stored is checked as it's read: each field of the wrong type is repaired, and
   // anything that isn't a project, material, size or part at all is dropped. Values aren't clamped, the way an
@@ -546,14 +555,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   // What can't be read, or had to be repaired, is kept as it was under kerf.v1.bad; Kerf then starts on what it
   // could read, or on the example.
+  // Then it tries writing once, so a browser that won't let it save (cookies blocked) says so before the first edit.
   try {
     var raw = localStorage.getItem(LS);
     if (raw != null) {
       var got = null; try { got = repairDB(JSON.parse(raw)); } catch (e) { }
       if (got) { DB = got.db; kept = true; }
-      if (!got || got.lost) localStorage.setItem(LS + '.bad', raw);
+      if (!got || got.lost) try { localStorage.setItem(LS + '.bad', raw); } catch (e) { }
     }
-  } catch (e) { }
+    localStorage.setItem(LS + '.probe', '1'); localStorage.removeItem(LS + '.probe');
+  } catch (e) { if (!isFull(e)) UNSAVED = 'blocked'; } // full: said once an edit can't be saved
   var P = DB.projects[DB.current];
   if (!P) { var ex = sampleProject(); DB.projects[ex.id] = ex; DB.order = [ex.id].concat(DB.order.filter(function (id) { return DB.projects[id]; })); DB.current = ex.id; P = ex; }
   // Nothing is written until something really changes; which view is showing (`view`) doesn't count until
@@ -561,6 +572,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // can still bring projects over from junkdrawer.works/kerf/ on a later visit.
   // Before writing, it takes in whatever another window has saved since (mergeDB), so two windows open at
   // once don't undo each other's new projects, edits or deletions.
+  // A save that fails says so in a strip under the top bar (storeBar), until one works.
   var saveT, pending = false, written = null;
   function save(now, view) {
     if (view && !kept) return;
@@ -574,10 +586,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
           if (!got || got.lost) try { localStorage.setItem(LS + '.bad', raw); } catch (e) { } // a full store still saves the projects
           if (got) { mergeDB(got.db); adopt(); }
         }
-        localStorage.setItem(LS, written = JSON.stringify(DB));
-      } catch (e) { }
+        var text = JSON.stringify(DB);
+        localStorage.setItem(LS, text); written = text; // only once it's there: `written` is what this window last stored
+      } catch (e) { unsaved(isFull(e) ? 'full' : 'blocked'); return false; }
+      unsaved(null); return true;
     };
-    if (now) go(); else { pending = true; saveT = setTimeout(go, 350); }
+    if (now) return go(); else { pending = true; saveT = setTimeout(go, 350); }
   }
   // When the page is hidden or closed, a save still waiting for typing to stop is written straight away.
   // Only then: a tab that changed nothing mustn't write its copy over what another tab has saved since.
@@ -1653,6 +1667,19 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     ex.innerHTML = P.example ? '<div class="example"><span>This is an example project — change anything, or start your own.</span><button class="btn sm" type="button" id="exNew">New project</button></div>' : '';
     if (P.example) $('exNew').addEventListener('click', function () { newProject(); });
   }
+  // The strip under the top bar, while saving isn't working: it stays until a save works.
+  var STORE_MSG = {
+    blocked: 'This browser isn’t letting Kerf save (private browsing or cookies blocked). Your changes last until you close this tab — save the project as a file to keep it.',
+    full: 'This browser’s storage is full, so the last change isn’t saved. Save the project as a file.'
+  };
+  function unsaved(why) { if (why !== UNSAVED) { UNSAVED = why; storeBar(); } }
+  function storeBar() {
+    var b = $('storeBar'), msg = STORE_MSG[UNSAVED];
+    b.innerHTML = msg ? '<div class="example store"><span>' + msg + '</span><div class="acts"><button class="btn sm" type="button" id="stFile">Save as a file</button></div></div>' : '';
+    if (msg) $('stFile').addEventListener('click', exportProject);
+    if ($('pjNote')) $('pjNote').textContent = projectsNote();
+  }
+  function projectsNote() { return UNSAVED ? 'Projects aren’t being saved in this browser right now.' : 'Projects are saved in this browser on this device. To use one on another phone or computer, save it as a file or copy it as text, then open or paste it there.'; }
   function applyProject() { U = P.units || 'in'; CUR = P.cur || '$'; TIPS = []; SCROLL = {}; renderHead(); renderList(); resolve(); setTab(DB.tab || 'plan', true); }
 
   // ---------- sheets (dialogs) ----------
@@ -1709,6 +1736,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     return Promise.resolve(true);
   }
   function fileName(ext) { return (P.name || 'kerf').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.' + ext; }
+  function exportProject() { saveFile(fileName('kerf.json'), JSON.stringify({ kerf: 1, project: P }, null, 1), 'application/json').then(function (ok) { if (ok) toast('Saved ' + fileName('kerf.json')); }, function (e) { toast(e.message || 'Couldn’t save the file — use Copy as text'); }); }
   function showText(t) {
     openSheet('<div class="hd"><h2>Copy this</h2><button class="btn sm sec" type="button" id="txx">Done</button></div><div class="bd"><textarea id="txt" readonly></textarea><p class="note">Select it all and copy.</p></div>');
     $('txt').value = t; $('txt').focus(); $('txt').select(); $('txx').addEventListener('click', closeSheet);
@@ -1719,10 +1747,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       '<div class="plist" id="pjList"></div>' +
       '<div class="fld"><span>Move a project between devices</span><div class="row"><button class="btn sec sm" type="button" id="pjExport">Save this project as a file</button><button class="btn sec sm" type="button" id="pjCopy">Copy as text</button><label class="btn sec sm" style="cursor:pointer">Open a project file<input type="file" id="pjFile" accept=".json,.kerf,application/json,text/plain" hidden></label></div>' +
       '<textarea id="pjPaste" placeholder="…or paste a project’s text or a Kerf link here"></textarea></div>' +
-      '<p class="note">Projects are saved in this browser on this device. To use one on another phone or computer, save it as a file or copy it as text, then open or paste it there.</p></div>');
+      '<p class="note" id="pjNote">' + projectsNote() + '</p></div>');
     $('pjNew').addEventListener('click', function () { newProject(); });
     $('pjDup').addEventListener('click', function () { var c = JSON.parse(JSON.stringify(P)); c.id = uid(); c.name = P.name.replace(/ \(example\)$/, '') + ' copy'; c.example = false; c.updated = Date.now(); DB.projects[c.id] = c; DB.order.unshift(c.id); DB.current = c.id; P = c; save(true); closeSheet(); applyProject(); toast('Duplicated'); });
-    $('pjExport').addEventListener('click', function () { saveFile(fileName('kerf.json'), JSON.stringify({ kerf: 1, project: P }, null, 1), 'application/json').then(function (ok) { if (ok) toast('Saved ' + fileName('kerf.json')); }, function (e) { toast(e.message || 'Couldn’t save the file — use Copy as text'); }); });
+    $('pjExport').addEventListener('click', exportProject);
     $('pjCopy').addEventListener('click', function () { var t = JSON.stringify({ kerf: 1, project: P }); try { navigator.clipboard.writeText(t).then(function () { toast('Project copied — paste it into Kerf on the other device'); }, function () { showText(t); }); } catch (e) { showText(t); } });
     $('pjFile').addEventListener('change', function () { var f = this.files && this.files[0]; if (!f) return; var r = new FileReader(); r.onload = function () { importText(String(r.result)); }; r.readAsText(f); });
     $('pjPaste').addEventListener('paste', function (e) { var t = (e.clipboardData || window.clipboardData).getData('text'); if (t) { e.preventDefault(); importText(t); } });
@@ -2021,6 +2049,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   if (NARROW.addEventListener) NARROW.addEventListener('change', reveal); else NARROW.addListener(reveal);
   if (window.ResizeObserver) new ResizeObserver(function () { document.documentElement.style.setProperty('--hd', document.querySelector('.top').offsetHeight + 'px'); }).observe(document.querySelector('.top'));
   applyProject();
+  storeBar();
   checkLink();
   window.addEventListener('hashchange', checkLink);
 })();
