@@ -179,6 +179,7 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .tip{display:flex;gap:10px;align-items:flex-start;background:var(--tape-soft);border:1px solid color-mix(in srgb,var(--tape) 70%,var(--line));border-radius:var(--r);padding:10px 12px;font-size:14px}
 .tip .tag{flex:none;background:var(--tape);color:var(--tape-ink);font:800 13px/1 var(--disp);letter-spacing:.08em;padding:4px 6px 3px;border-radius:4px;margin-top:1px}
 .tip button{margin-left:auto;flex:none}
+#tips:focus{outline:none} /* where focus goes once the last tip is used */
 .warn{background:var(--bad-soft);border:1px solid var(--bad);color:var(--ink);border-radius:var(--r);padding:10px 12px;font-size:14px;margin-top:12px}
 div.sec{margin-top:22px}
 .sec-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
@@ -404,15 +405,26 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
   function uid() { return Math.random().toString(36).slice(2, 9); }
-  // A toast can carry one action, { label: 'Undo', run: fn }: then it takes taps and stays for six seconds.
-  var toastT;
-  function toast(m, act) {
-    var t = $('toast'), hide = function () { clearTimeout(toastT); t.classList.remove('show'); };
-    t.textContent = m;
-    if (act) { var b = document.createElement('button'); b.type = 'button'; b.className = 'lbtn'; b.textContent = act.label; b.addEventListener('click', function () { hide(); act.run(); }); t.appendChild(b); }
-    t.classList.toggle('act', !!act); t.classList.add('show');
-    clearTimeout(toastT); toastT = setTimeout(hide, act ? 6000 : 2600);
+  // A toast can carry one action, { label: 'Undo', run: fn }: then it takes taps and stays for six seconds, and for as
+  // long as the pointer is on it or focus is in it, so its button can be reached (WCAG 2.2, 2.2.1 Timing Adjustable).
+  // The action's `run` is told whether it came from the keyboard.
+  var toastT, toastMs = 0, toastHover = false;
+  function hideToast() { clearTimeout(toastT); $('toast').classList.remove('show'); }
+  function timeToast() {
+    var t = $('toast'); clearTimeout(toastT);
+    if (t.classList.contains('show') && !toastHover && !t.contains(document.activeElement)) toastT = setTimeout(hideToast, toastMs);
   }
+  function toast(m, act) {
+    var t = $('toast');
+    t.textContent = m;
+    if (act) { var b = document.createElement('button'); b.type = 'button'; b.className = 'lbtn'; b.textContent = act.label; b.addEventListener('click', function (e) { hideToast(); act.run(e.detail === 0); }); t.appendChild(b); }
+    t.classList.toggle('act', !!act); t.classList.add('show');
+    toastMs = act ? 6000 : 2600; timeToast();
+  }
+  $('toast').addEventListener('mouseenter', function () { toastHover = true; timeToast(); });
+  $('toast').addEventListener('mouseleave', function () { toastHover = false; timeToast(); });
+  $('toast').addEventListener('focusin', timeToast);
+  $('toast').addEventListener('focusout', function () { setTimeout(timeToast, 0); });
 
   // ---------- lengths: stored in inches, shown in the project's units ----------
   var U = 'in', CUR = '$';
@@ -1242,16 +1254,22 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       else if (f === 'have') {
         // "Have 1" on a size you buy means you own one of them, not that it's all there is: the size stays on the list to
         // buy as well, so Kerf uses yours first and buys more if it needs them.
+        // The row changes where it is, so the menu keeps focus and the arrow keys can step through it (Chromium on
+        // Windows and Linux changes a closed menu one step at a time). Only a size added to buy draws the list again.
         var was = s.have, sheet = m.kind === 'sheet', same = function (o) { return o !== s && !o.have && (sheet ? (o.len === s.len && o.wid === s.wid) || (o.len === s.wid && o.wid === s.len) : o.len === s.len); };
         s.have = +el.value || 0;
+        var pr = el.closest('.srow').querySelector('[data-f="price"]');
+        pr.disabled = !!s.have; pr.placeholder = s.have ? 'free' : ''; pr.value = s.have ? '' : (+s.price || 0).toFixed(2); pr.classList.remove('bad');
         if (!was && s.have) {
-          if (!m.stock.some(same)) { var copy = { id: uid(), len: s.len, price: s.price, have: 0 }; if (sheet) copy.wid = s.wid; m.stock.splice(m.stock.indexOf(s) + 1, 0, copy); }
+          if (!m.stock.some(same)) {
+            var copy = { id: uid(), len: s.len, price: s.price, have: 0 }; if (sheet) copy.wid = s.wid; m.stock.splice(m.stock.indexOf(s) + 1, 0, copy);
+            renderList(); focusAfter(['.srow[data-sid="' + s.id + '"] [data-f="have"]'], true);
+          }
           var size = function (x) { return fmt(x, { ft: true }).replace(/'/g, '′').replace(/"/g, '″'); };
           toast('Kerf will use your ' + s.have + ' and buy more ' + (sheet ? size(s.wid) + ' × ' + size(s.len) : size(s.len)) + ' if it needs them');
         }
-        renderList();
       }
-      if (f !== 'have') refreshChips(m);
+      refreshChips(m);
     }
     touch(); resolve(true); renderTips(); // a tip for the part just edited goes at once
   }
@@ -1302,6 +1320,18 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var rows = document.querySelectorAll('[data-mid="' + m.id + '"] .prow[data-pid]'), r = rows[rows.length - 1];
     if (r) (r.querySelector('[data-f="' + (focusField === 'len' || focusField === 'wid' || focusField === 'qty' ? focusField : 'pname') + '"]') || r.querySelector('input')).focus();
   }
+  // An action that draws the cut list again would leave focus on nothing, and the next Tab at the top of the page: focus
+  // goes instead to the first of `sels` (selectors) that's on screen. A field only gets it from the keyboard (`kb`),
+  // since a tap that focused one would bring up a phone's keyboard, and then the page doesn't scroll to it either.
+  function focusAfter(sels, kb) {
+    for (var i = 0; i < sels.length; i++) {
+      var el = sels[i] && document.querySelector(sels[i]);
+      if (!el || !el.getClientRects().length || (!kb && /^(INPUT|TEXTAREA)$/.test(el.tagName))) continue;
+      el.focus(kb ? undefined : { preventScroll: true });
+      return el;
+    }
+    return null;
+  }
   // Removing something with parts in it takes two taps; the second must come a moment after the first,
   // so a double tap only asks.
   var armed = null, armedAt = 0;
@@ -1316,17 +1346,20 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     var a = b.dataset.a; if (!a) return;
     var m = findMat(b); if (!m) return;
+    var kb = e.detail === 0, inMat = '[data-mid="' + m.id + '"] ';
     if (a === 'addpart') addPart(m, 'pname');
     else if (a === 'delpart') {
       // A part goes at once, and Undo puts it back where it was, with its id: its material plans as before and the
       // ticks at the saw come back with that plan.
-      var p = findPart(m, b), at = m.parts.indexOf(p), pid = P.id, mid = m.id;
-      m.parts.splice(at, 1); touch(); renderList(); resolve();
-      toast('Removed ' + (p.name || 'a part') + (CLEARED ? ' and cleared ' + plural(CLEARED, 'ticked cut') : ''), { label: 'Undo', run: function () {
+      // Focus goes on to the next part's ✕, or the one before, or + Add a part.
+      var p = findPart(m, b), at = m.parts.indexOf(p), pid = P.id, mid = m.id, del = function (q) { return q ? inMat + '.prow[data-pid="' + q.id + '"] [data-a="delpart"]' : null; };
+      var to = [del(m.parts[at + 1]), del(m.parts[at - 1]), inMat + '[data-a="addpart"]'];
+      m.parts.splice(at, 1); touch(); renderList(); resolve(); focusAfter(to, kb);
+      toast('Removed ' + (p.name || 'a part') + (CLEARED ? ' and cleared ' + plural(CLEARED, 'ticked cut') : ''), { label: 'Undo', run: function (kb) {
         var q = DB.projects[pid], mm = q && q.materials.filter(function (x) { return x.id === mid; })[0];
         if (!mm || mm.parts.some(function (x) { return x.id === p.id; })) return;
         mm.parts.splice(Math.min(at, mm.parts.length), 0, p); touch(q);
-        if (q === P) { renderList(); resolve(); }
+        if (q === P) { renderList(); resolve(); if (kb) focusAfter([del(p)], kb); } // from the keyboard, back to the part
       } });
     }
     else if (a === 'grain') { var q = findPart(m, b); q.grain = !q.grain; b.setAttribute('aria-pressed', q.grain ? 'true' : 'false'); b.title = q.grain ? 'Grain runs along the length — the part won’t be turned' : 'Grain doesn’t matter — the part may be turned'; touch(); resolve(); }
@@ -1337,11 +1370,19 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       m.stock.push(s); touch(); renderList(); resolve();
       var rows = document.querySelectorAll('details.stock[data-mid="' + m.id + '"] .srow[data-sid]'); if (rows.length) rows[rows.length - 1].querySelector('input').focus();
     }
-    else if (a === 'delstock') { var st = findStock(m, b); if (m.stock.length < 2) { toast('Keep at least one size — change its length instead'); return; } m.stock.splice(m.stock.indexOf(st), 1); touch(); renderList(); resolve(); }
+    else if (a === 'delstock') {
+      var st = findStock(m, b), si = m.stock.indexOf(st), after = m.stock[si + 1];
+      if (m.stock.length < 2) { toast('Keep at least one size — change its length instead'); return; }
+      m.stock.splice(si, 1); touch(); renderList(); resolve();
+      focusAfter([after ? inMat + '.srow[data-sid="' + after.id + '"] [data-a="delstock"]' : null, 'details' + inMat + '[data-a="addstock"]'], kb);
+    }
     else if (a === 'delmat') {
       if (m.parts.some(function (p) { return p.len > 0; }) && armed !== b) { armed = b; armedAt = Date.now(); b.textContent = 'Remove?'; b.style.width = 'auto'; b.style.padding = '0 8px'; b.style.color = 'var(--bad)'; setTimeout(function () { if (armed === b) { armed = null; if (b.isConnected) { b.textContent = '✕'; b.removeAttribute('style'); } } }, 3000); return; }
       if (armed === b && Date.now() - armedAt < 500) return;
+      // Focus goes on to the next material's name, or to the buttons that add one.
+      var nm = P.materials[P.materials.indexOf(m) + 1];
       armed = null; P.materials.splice(P.materials.indexOf(m), 1); touch(); renderList(); resolve();
+      focusAfter([nm ? '.mat[data-mid="' + nm.id + '"] .mat-name' : null, '.addmat .pbtn'], kb);
     }
   }
 
@@ -1370,7 +1411,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     h += '</div>';
     if (r.boards && !r.sheets) h += '<div class="yield" role="img" aria-label="' + Math.round(r.boardYield * 100) + '% parts, ' + Math.round(r.boardKerf * 100) + '% sawdust, the rest offcuts"><i style="width:' + (r.boardYield * 100).toFixed(1) + '%"></i><i class="k" style="width:' + (r.boardKerf * 100).toFixed(1) + '%"></i></div><div class="ylegend"><span>parts</span><span class="k">saw kerf</span><span class="w">offcuts</span></div>';
     if (r.sheets && !r.boards) h += '<div class="yield" role="img" aria-label="' + Math.round(r.sheetYield * 100) + '% of the sheet area becomes parts"><i style="width:' + (r.sheetYield * 100).toFixed(1) + '%"></i></div>';
-    h += '</div><div class="tips" id="tips"></div>' + leftOut(r);
+    h += '</div><div class="tips" id="tips" tabindex="-1"></div>' + leftOut(r);
     h += '<div class="sec"><div class="sec-hd"><h3>Shopping list</h3><button class="lbtn" type="button" id="copyList">Copy as text</button></div><div class="shop"><table><thead><tr><th>Qty</th><th>What</th><th style="text-align:right">Each</th><th style="text-align:right">Total</th></tr></thead><tbody>';
     r.mats.forEach(function (m) {
       if (!m.items.length) return;
@@ -1432,10 +1473,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }).join('');
     el.querySelectorAll('[data-tip]').forEach(function (b) {
       var t = shown[+b.dataset.tip]; // the tip this button shows, whatever the next check finds
-      b.addEventListener('click', function () {
-        var at = tipFor(t), p = at && at.p;
+      b.addEventListener('click', function (e) {
+        var at = tipFor(t), p = at && at.p, i = +b.dataset.tip;
         if (!p) return; // that part has changed since (and the tip should have gone with it)
         p[t.dim] = t.to; touch(); renderList(); resolve(); toast((p.name || 'Part') + ' is now ' + fmt(t.to) + (t.dim === 'wid' ? ' wide' : ''));
+        // Focus goes to the field just changed, where the cut list shows beside the plan, or else to the next tip.
+        focusAfter(['.prow[data-pid="' + p.id + '"] [data-f="' + t.dim + '"]', '#tips [data-tip="' + i + '"]', '#tips [data-tip="' + (i - 1) + '"]', '#tips'], e.detail === 0);
       });
     });
   }

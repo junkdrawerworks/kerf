@@ -1084,6 +1084,61 @@ await page.keyboard.press('Enter');
 assert.equal(await page.evaluate(() => document.activeElement.dataset.k.split('/')[1]), '0.0', 'focus after Start over');
 assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
+// An action that draws the cut list again leaves keyboard focus where the work is, not on the page itself with the
+// next Tab at the top: a part's ✕ moves it to the next part's ✕ (or the one before, or + Add a part), a size's ✕ to
+// the next size's, a material's ✕ to the next material's name (or the buttons that add one), a tip's Use to the field
+// it changed, and the arrow keys step a size's Source menu through Buy, Have 1, Have 2 without losing it. Undo waits
+// while focus is on it, and from the keyboard puts focus back on the part.
+{
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await open(null);
+  const focused = () => page.evaluate(() => { const a = document.activeElement; return [a.dataset.a || a.dataset.f || a.tagName, a.tagName === 'INPUT' ? a.value : a.getAttribute('aria-label') || a.textContent]; });
+  const press = async (sel, key = 'Enter') => { await page.locator(sel).focus(); await page.keyboard.press(key); };
+  const delPart = n => `.mat >> nth=0 >> .prow[data-pid] >> nth=${n} >> [data-a="delpart"]`;
+  await press(delPart(0));
+  assert.deepEqual(await focused(), ['delpart', 'Remove Front & back rail'], 'focus after removing a part');
+  await page.locator('#toast button').waitFor({ state: 'visible' });
+  await page.locator('#toast button').focus();
+  await page.waitForTimeout(6500);
+  assert.ok(await page.evaluate(() => document.getElementById('toast').classList.contains('show')), 'the toast went while its Undo had focus');
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await focused(), ['delpart', 'Remove Leg'], 'focus after Undo from the keyboard');
+  await press(delPart(2));
+  assert.deepEqual(await focused(), ['delpart', 'Remove Front & back rail'], 'focus after removing the last part');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await focused(), ['addpart', '+ Add a part'], 'focus after removing every part');
+  await open(null);
+  await page.evaluate(() => document.querySelectorAll('details.stock').forEach(d => { d.open = true; }));
+  const sizeIds = () => page.evaluate(() => [...document.querySelector('.mat').querySelectorAll('.srow[data-sid]')].map(r => r.dataset.sid));
+  const before = await sizeIds();
+  await press('.mat >> nth=0 >> .srow[data-sid] >> nth=0 >> [data-a="delstock"]');
+  assert.deepEqual([await focused(), await page.evaluate(() => document.activeElement.closest('.srow').dataset.sid)], [['delstock', 'Remove this size'], before[1]], 'focus after removing a size');
+  await press('.mat >> nth=0 >> .srow[data-sid] >> nth=2 >> [data-a="delstock"]');
+  assert.deepEqual(await focused(), ['addstock', '+ Size to buy'], 'focus after removing the last size');
+  const menu = '.mat >> nth=0 >> .srow[data-sid] >> nth=0 >> select';
+  const sid = await page.locator(menu).evaluate(s => s.closest('.srow').dataset.sid);
+  await page.locator(menu).focus();
+  for (const want of ['1', '2', '3']) {
+    await page.keyboard.press('ArrowDown');
+    assert.deepEqual(await page.evaluate(() => [document.activeElement.dataset.f, document.activeElement.value, document.activeElement.closest('.srow').dataset.sid]), ['have', want, sid], 'the Source menu lost focus at Have ' + want);
+  }
+  assert.ok(await page.locator('.mat >> nth=0 >> .srow[data-sid] >> nth=0 >> [data-f="price"]').isDisabled(), 'a size you have still has a price');
+  await press('.mat >> nth=0 >> [data-a="delmat"]');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await focused(), ['mname', '¾ plywood'], 'focus after removing a material');
+  await press('[data-a="delmat"]');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await focused(), ['BUTTON', '2×4'], 'focus after removing the last material');
+  await open(null);
+  await page.waitForSelector('[data-tip]', { timeout: 30000 });
+  await press('[data-tip]');
+  assert.deepEqual(await focused(), ['len', '47 15/16"'], 'focus after using a tip');
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 // A tip goes as soon as it's out of date: the frame after it's applied, or after its part is removed, the tips box
 // no longer offers it, though Kerf is still looking for new tips. Side by side on a wide screen, so the plan shows.
 {
