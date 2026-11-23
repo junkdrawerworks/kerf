@@ -312,5 +312,79 @@ console.log('plans kept between edits');
   run('another window’s copy with a size put back', []);
 }
 
+console.log('ticks stay on their cuts');
+{
+  // Ticks at the saw are kept per material, under a key made of what each of its cuts is. Wherever an edit keeps a
+  // material's key, its ticks stay put, so every cut the saw shows for it must read exactly as before (part names
+  // aside: renaming a part keeps its ticks). Seeded random edits to a project with a board and a sheet material.
+  const saw = () => new Function([
+    ...SOLVER, 'var P = null, RES = null, CUR = "$";', line('var PLANS = '),
+    ...['plural', 'lastIsLeft', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'letter', 'sawTasks', 'tickKeys'].map(fn),
+    'return { solve: function (p) { P = p; U = p.units; solveAll(); var t = sawTasks(); return { keys: tickKeys(t), tasks: t }; } };'
+  ].join('\n'))();
+  const R = rng(11), pick = a => a[Math.floor(R() * a.length)], q16 = x => Math.round(x * 16) / 16;
+  let ids = 0; const id = () => 'x' + ids++;
+  // What the saw shows for each material's cuts, with every part's name left out.
+  const text = (page, p) => {
+    const names = p.materials.map(m => m.parts.map(q => q.name));
+    p.materials.forEach(m => m.parts.forEach(q => { q.name = ''; }));
+    const out = {};
+    try { page.solve(p).tasks.forEach(t => { (out[t.mid] = out[t.mid] || []).push(t.title + ': ' + t.cuts.map(c => c.noCut ? c.note : c.meas + ' ' + c.what + ' / ' + c.sub).join(' ; ')); }); }
+    finally { p.materials.forEach((m, mi) => m.parts.forEach((q, k) => { q.name = names[mi][k]; })); }
+    return out;
+  };
+  let kept = 0, changed = 0, drift = 0;
+  for (let seq = 0; seq < 10; seq++) {
+    const page = saw();
+    const studs = { id: 'studs', kind: 'board', name: '2×4', note: '', stock: LUMBER.map(st => ({ id: id(), len: st[0], price: st[1], have: 0 })), parts: [] };
+    const ply = { id: 'ply', kind: 'sheet', name: '¾ ply', note: '', stock: [{ id: id(), len: 96, wid: 48, price: 58, have: 0 }, { id: id(), len: 48, wid: 24, price: 21, have: 0 }], parts: [] };
+    for (let k = 0; k < 3; k++) studs.parts.push({ id: id(), name: 'B' + k, qty: 1 + Math.floor(R() * 4), len: q16(10 + R() * 70) });
+    for (let k = 0; k < 3; k++) ply.parts.push({ id: id(), name: 'S' + k, qty: 1 + Math.floor(R() * 2), len: q16(8 + R() * 30), wid: q16(6 + R() * 16), grain: R() < 0.5 });
+    const p = { name: 'P', units: 'in', kerf: 0.125, trim: 0, keep: 12, cur: '$', materials: [studs, ply] };
+    let keys = page.solve(p).keys, shown = text(page, p);
+    for (let e = 0; e < 40; e++) {
+      const m = pick(p.materials), sheet = m.kind === 'sheet', q = m.parts.length ? pick(m.parts) : null;
+      const [what, edit] = pick([
+        ['a new part', () => m.parts.push(sheet ? { id: id(), name: 'n', qty: 1, len: q16(5 + R() * 30), wid: q16(4 + R() * 16), grain: true } : { id: id(), name: 'n', qty: 1, len: q16(5 + R() * 60) })],
+        ['a part taken away', () => m.parts.length > 1 && m.parts.splice(m.parts.indexOf(q), 1)],
+        ['a part moved', () => { if (m.parts.length > 1) { m.parts.splice(m.parts.indexOf(q), 1); m.parts.splice(Math.floor(R() * (m.parts.length + 1)), 0, q); } }],
+        ['a count', () => q && (q.qty = Math.floor(R() * 4))],
+        ['a length', () => q && (q.len = q16(R() < 0.1 ? 0 : 5 + R() * (sheet ? 40 : 60)))],
+        ['a length resized where it sits', () => q && (q.len = q16(q.len + (R() < 0.5 ? -1 : 1) * (1 + Math.floor(R() * 8))))],
+        ['a width', () => q && sheet && (q.wid = q16(4 + R() * 20))],
+        ['a name', () => q && (q.name = 'r' + Math.floor(R() * 99))],
+        ['grain', () => q && sheet && (q.grain = !q.grain)],
+        ['the kerf', () => (p.kerf = pick([0.125, 0.09375, 0.1875]))],
+        ['trim', () => (p.trim = pick([0, 0, 0.25, 0.5]))],
+        ['a price', () => (pick(m.stock).price = Math.round(R() * 6000) / 100)],
+        ['a size on hand', () => (pick(m.stock).have = pick([0, 0, 1, 2]))],
+        ['a size’s length', () => { const st = pick(m.stock); st.len = q16(st.len + pick([-6, -1, 1, 6])); }],
+        ['offcuts worth keeping', () => (p.keep = pick([6, 12, 18, 24]))],
+      ]);
+      edit();
+      const keys2 = page.solve(p).keys, shown2 = text(page, p);
+      for (const mid of Object.keys(keys2)) {
+        if (keys2[mid] !== keys[mid]) { changed++; continue; }
+        kept++;
+        const a = JSON.stringify(shown[mid] || []), b = JSON.stringify(shown2[mid] || []);
+        if (a !== b && drift++ < 3) check(false, `${what} kept the ${mid} tick key, but a cut at the saw changed:\n    before ${a.slice(0, 200)}\n    after  ${b.slice(0, 200)}`);
+      }
+      keys = keys2; shown = shown2;
+    }
+  }
+  check(drift === 0, `${drift} edits kept a tick key while a cut changed`);
+  check(kept > 200 && changed > 100, `too few edits kept (${kept}) or changed (${changed}) a tick key to tell`);
+  console.log(`  ${kept} times a material's tick key was kept, ${changed} times it changed`);
+  // A cut is the same cut whatever the units: switching to millimetres plans the sheets again, the same, and keeps both keys.
+  {
+    const page = saw();
+    const p = { name: 'P', units: 'in', kerf: 0.125, trim: 0.25, keep: 12, cur: '$', materials: [
+      { id: 'b', kind: 'board', name: '2×4', note: '', stock: [{ id: 's', len: 96, price: 4, have: 0 }], parts: [{ id: 'l', name: 'Leg', qty: 3, len: 30 }] },
+      { id: 'p', kind: 'sheet', name: 'ply', note: '', stock: [{ id: 't', len: 96, wid: 48, price: 58, have: 0 }], parts: [{ id: 'h', name: 'Shelf', qty: 3, len: 30, wid: 20, grain: true }] }] };
+    const inches = page.solve(p).keys; p.units = 'mm';
+    check(JSON.stringify(page.solve(p).keys) === JSON.stringify(inches), 'switching to millimetres changed a tick key');
+  }
+}
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall good');
 process.exit(failed ? 1 : 0);

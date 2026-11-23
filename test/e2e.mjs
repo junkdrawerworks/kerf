@@ -120,6 +120,77 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   assert.ok((await page.textContent('#sawOut')).includes('What’s left is B Front & back rail — no cut needed'), 'no note for a rail that needs no cut');
 }
 
+// Ticks stay on the cut they were made on. Each material keeps its own, keyed to what its cuts are, so an edit to
+// another material leaves them be, and a change that comes back (a count changed and changed back) brings them back.
+// When a material's plan does change, its ticks clear and a toast says so; none ever lands on a different cut.
+{
+  const tickedRows = () => page.$$eval('#sawOut .cut[data-k]', els => els.filter(e => e.getAttribute('aria-checked') === 'true').map(e => e.dataset.k));
+  const toastNow = () => page.evaluate(() => { const t = document.getElementById('toast'); return t.classList.contains('show') ? t.firstChild.textContent : ''; });
+  const part = (mat, i, f) => page.locator(`#mats .mat >> nth=${mat}`).locator(`.prow[data-pid] input[data-f="${f}"] >> nth=${i}`);
+  const settle = () => page.waitForTimeout(600);
+  await open(null);
+  await view('saw');
+  for (let i = 0; i < 4; i++) await cuts.nth(i).click();
+  const four = await tickedRows();
+  assert.equal(four.length, 4);
+  await view('list');
+  await part(1, 0, 'wid').fill('23 1/2');
+  await settle();
+  await view('saw');
+  assert.deepEqual(await tickedRows(), four, 'an edit to the plywood moved or cleared the 2×4 ticks');
+  assert.equal(await page.textContent('.saw-bar b'), '4 of 26 cuts');
+  assert.equal(await toastNow(), '', 'a toast for ticks that weren’t cleared');
+  // Side rails 8, then 9: the 2×4 plan changes, so its ticks clear and a toast says so. Back to 8, and they're back.
+  await view('list');
+  await part(0, 2, 'qty').fill('9');
+  await settle();
+  assert.equal(await toastNow(), 'The 2×4 plan changed, so its 4 ticked cuts were cleared');
+  await view('saw');
+  assert.deepEqual(await tickedRows(), [], 'ticks stayed on a plan that changed');
+  await view('list');
+  await part(0, 2, 'qty').fill('8');
+  await settle();
+  assert.equal(await toastNow(), 'The 2×4 plan is back, and so are its 4 ticked cuts');
+  await view('saw');
+  assert.deepEqual(await tickedRows(), four, 'the ticks didn’t come back with their plan');
+  // Renaming a part keeps them.
+  await view('list');
+  await part(0, 1, 'pname').fill('Long rail');
+  await settle();
+  await view('saw');
+  assert.deepEqual(await tickedRows(), four, 'renaming a part cleared the ticks');
+
+  // Trimming each board end adds a cut to every board: the two rails ticked on board 1 clear, with a toast, and
+  // nothing is ticked on the new "Square up one end" or anywhere else.
+  await open(null);
+  await view('saw');
+  await cuts.nth(0).click();
+  await cuts.nth(1).click();
+  assert.equal(await page.textContent('.saw-bar b'), '2 of 27 cuts');
+  await page.click('#setBtn');
+  await page.fill('#sTrim', '1/4');
+  await page.click('#stx');
+  await settle();
+  assert.equal(await toastNow(), 'The 2×4 plan changed, so its 2 ticked cuts were cleared');
+  assert.deepEqual(await tickedRows(), [], 'a tick moved onto another cut when trim was turned on');
+  assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Square up one end/);
+  assert.match(await page.textContent('.saw-bar b'), /^0 of /);
+
+  // A sheet part resized where it sits: the full sheet's crosscut moves from 30" to 40", so its tick clears.
+  await open(saved(project('One shelf', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Shelf', qty: 1, len: 30, wid: 20 }])])));
+  await view('saw');
+  assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Crosscut the full sheet/);
+  assert.equal(await page.textContent('#sawOut .cut[data-k] .meas'), '30″');
+  await cuts.nth(0).click();
+  await view('list');
+  await part(0, 0, 'len').fill('40');
+  await settle();
+  assert.equal(await toastNow(), 'The ¾ plywood plan changed, so its ticked cut was cleared');
+  await view('saw');
+  assert.equal(await page.textContent('#sawOut .cut[data-k] .meas'), '40″');
+  assert.deepEqual(await tickedRows(), [], 'the tick on the 30" crosscut moved to the 40" one');
+}
+
 // A link from the kerf-planner skill shows what's in it and comes in as a new project once you say so.
 await open(null, linkTo(MUDROOM));
 await page.waitForSelector('#lkAdd');
@@ -187,7 +258,7 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   const p = project('Opened', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 2, len: 30 }])]);
   await open(saved(p));
   await page.waitForTimeout(600);
-  assert.equal('doneKey' in (await stored()).projects[p.id], false, 'opening a project saved it');
+  assert.deepEqual((await stored()).projects[p.id].done, {}, 'opening a project saved it');
 }
 
 // Saving waits a moment for typing to stop, but an edit made just before the page closes is still kept.
@@ -281,7 +352,8 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
     .catch(() => assert.fail('a tick in one window doesn’t show in the other'));
   await page.fill('#pname', 'Garage shelves 3');
   await storedHas(page, 'Garage shelves 3');
-  assert.deepEqual([(await stored()).projects[shelves.id].name, (await stored()).projects[shelves.id].done], ['Garage shelves 3', { '0.0': 1 }], 'an edit in one window undid a tick in the other');
+  const kept = (await stored()).projects[shelves.id];
+  assert.deepEqual([kept.name, kept.done[shelves.materials[0].id].ticks], ['Garage shelves 3', { '0.0': 1 }], 'an edit in one window undid a tick in the other');
 
   // Another window's save arriving while an edit here waits for typing to stop (written and announced at once).
   await page.waitForTimeout(600);
@@ -378,10 +450,10 @@ for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page
 await view('saw');
 await page.locator('#sawOut .cut[data-k]').nth(1).focus();
 await page.keyboard.press('Space');
-assert.deepEqual(await page.evaluate(() => [document.activeElement.dataset.k, document.activeElement.getAttribute('aria-checked')]), ['0.1', 'true'], 'focus left the cut just ticked');
+assert.deepEqual(await page.evaluate(() => [document.activeElement.dataset.k.split('/')[1], document.activeElement.getAttribute('aria-checked')]), ['0.1', 'true'], 'focus left the cut just ticked');
 await page.focus('#sawReset');
 await page.keyboard.press('Enter');
-assert.equal(await page.evaluate(() => document.activeElement.dataset.k), '0.0', 'focus after Start over');
+assert.equal(await page.evaluate(() => document.activeElement.dataset.k.split('/')[1]), '0.0', 'focus after Start over');
 assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
 // A tip does what it says even when it's tapped while Kerf is still looking for new tips after an edit (a slow

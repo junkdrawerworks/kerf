@@ -463,13 +463,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     function toNum(d) { return function (v) { v = v == null || v === '' ? NaN : +v; return isFinite(v) ? v : d; }; }
     function toStr(d) { return function (v) { return v == null ? d : String(v); }; }
     function list(o, k) { var a = Array.isArray(o[k]) ? o[k].filter(obj) : []; if (!Array.isArray(o[k]) || a.length < o[k].length) lost = true; return (o[k] = a); }
+    // The ticks at the saw: for each material, the key of its plan, its ticks ('item.cut': 1) and up to three earlier sets.
+    function goodSet(s) { return obj(s) && str(s.key) && obj(s.ticks) && Object.keys(s.ticks).every(function (k) { return /^\d+\.\d+$/.test(k) && s.ticks[k] === 1; }); }
+    function goodDone(d) { return obj(d) && Object.keys(d).every(function (id) { return goodId(id) && goodSet(d[id]) && Array.isArray(d[id].was) && d[id].was.length <= 3 && d[id].was.every(goodSet); }); }
     function ids(a) { var seen = {}; a.forEach(function (x) { if (!goodId(x.id) || seen[x.id]) { x.id = uid(); lost = true; } seen[x.id] = 1; }); }
     function project(p, id) {
       if (p.id !== id) { p.id = id; lost = true; }
       fix(p, 'name', str, toStr('Untitled project'));
       fix(p, 'units', function (v) { return v === 'in' || v === 'mm'; }, function () { return 'in'; });
       fix(p, 'kerf', num, toNum(0.125)); fix(p, 'trim', num, toNum(0)); fix(p, 'keep', num, toNum(12));
-      fix(p, 'cur', str, toStr('$')); fix(p, 'updated', num, toNum(0)); fix(p, 'done', obj, function () { return {}; });
+      fix(p, 'cur', str, toStr('$')); fix(p, 'updated', num, toNum(0)); fix(p, 'done', goodDone, function () { return {}; });
       list(p, 'materials').forEach(function (m) {
         fix(m, 'kind', function (v) { return v === 'board' || v === 'sheet'; }, function () { return 'board'; });
         fix(m, 'name', str, toStr('')); fix(m, 'note', str, toStr(''));
@@ -880,21 +883,24 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var steps = [];
     (function walk(n, whole) {
       if (!n.part) return;
-      var p = n.part, piece = whole ? 'the full sheet' : 'the ' + fmt(n.w) + ' × ' + fmt(n.h) + ' piece';
-      function rip(x1, x2, y, on, why) { steps.push({ type: 'rip', at: p.w, on: on, line: [x1, y, x2, y], why: why }); }
-      function cross(x, y1, y2, on, why) { steps.push({ type: 'cross', at: p.l, on: on, line: [x, y1, x, y2], why: why }); }
-      var strip;
+      // `on` says what each cut is made on, as the saw shows it; `of` says the same in numbers, whatever the units.
+      var p = n.part, piece = whole ? 'the full sheet' : 'the ' + fmt(n.w) + ' × ' + fmt(n.h) + ' piece', pieceOf = whole ? 'sheet' : 'piece ' + n.w.toFixed(4) + '×' + n.h.toFixed(4);
+      function rip(x1, x2, y, on, of) { steps.push({ type: 'rip', at: p.w, on: on, of: of, line: [x1, y, x2, y] }); }
+      function cross(x, y1, y2, on, of) { steps.push({ type: 'cross', at: p.l, on: on, of: of, line: [x, y1, x, y2] }); }
+      var strip, stripOf;
       if (n.first === 'rip') {
-        if (n.needH) rip(n.x, n.x + n.w, n.y + p.w, piece);
+        if (n.needH) rip(n.x, n.x + n.w, n.y + p.w, piece, pieceOf);
         strip = n.needH ? 'the ' + fmt(n.w) + ' × ' + fmt(p.w) + ' strip' : piece;
-        if (n.needV) cross(n.x + p.l, n.y, n.y + p.w, strip);
+        stripOf = n.needH ? 'strip ' + n.w.toFixed(4) + '×' + p.w.toFixed(4) : pieceOf;
+        if (n.needV) cross(n.x + p.l, n.y, n.y + p.w, strip, stripOf);
       } else {
-        if (n.needV) cross(n.x + p.l, n.y, n.y + n.h, piece);
+        if (n.needV) cross(n.x + p.l, n.y, n.y + n.h, piece, pieceOf);
         strip = n.needV ? 'the ' + fmt(p.l) + ' × ' + fmt(n.h) + ' piece' : piece;
-        if (n.needH) rip(n.x, n.x + p.l, n.y + p.w, strip);
+        stripOf = n.needV ? 'piece ' + p.l.toFixed(4) + '×' + n.h.toFixed(4) : pieceOf;
+        if (n.needH) rip(n.x, n.x + p.l, n.y + p.w, strip, stripOf);
       }
       if (steps.length) steps[steps.length - 1].gives = p;
-      else steps.push({ type: 'none', gives: p, on: piece });
+      else steps.push({ type: 'none', gives: p, on: piece, of: pieceOf });
       (n.kids || []).forEach(function (k) { if (!k.dust) walk(k, false); });
     })(root, true);
     return steps;
@@ -1304,33 +1310,31 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
 
   // ---------- at the saw ----------
-  function planKey() {
-    return RES.mats.map(function (m) { return m.mat.id + ':' + m.items.map(function (it) { return it.stock.id + '[' + (it.pieces ? it.pieces.map(function (p) { return p.pi + '@' + p.len.toFixed(3); }).join(',') : it.placed.map(function (p) { return p.pi + '@' + p.x.toFixed(2) + ',' + p.y.toFixed(2); }).join(',')) + ']'; }).join('|'); }).join('#');
-  }
-  // A part that needs no cut (a board's last part with nothing left past it, a sheet that is all one part) keeps
-  // its place in the list, so the cuts after it keep their numbers, but it's a note, not a cut to tick.
+  // Each board and sheet in the order the plan lists them, with its cuts in cutting order. Each cut also says what it
+  // is (`id`): its measurement, what it's made on and what it gives, never a name, so renaming a part keeps its ticks.
+  // A part that needs no cut (a board's last part with nothing left past it, a sheet that is all one part) keeps its
+  // place in the list, so the cuts after it keep their numbers, but it's a note, not a cut to tick.
   function sawTasks() {
     var tasks = [];
     RES.mats.forEach(function (m) {
       m.items.forEach(function (it, ii) {
-        var t = { m: m, it: it, title: (m.kind === 'sheet' ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (m.kind === 'sheet' ? fmtH(it.stock.wid) + ' × ' + fmtH(it.stock.len) : fmtH(it.stock.len, { ft: true })) + (it.stock.have ? ' · yours' : ''), cuts: [] };
-        if (m.kind === 'board') {
-          if (it.trim > 0) t.cuts.push({ meas: fmtH(it.trim), what: 'Square up one end', sub: 'Trim off ' + fmt(it.trim) + ' and measure every part from this fresh end' });
+        var s = it.stock, sheet = m.kind === 'sheet';
+        var t = { m: m, it: it, mid: m.mat.id, ii: ii, id: s.id + ' ' + (sheet ? s.len + '×' + s.wid : s.len), title: (sheet ? 'Sheet ' : 'Board ') + (ii + 1), sub: esc(m.mat.name) + ' · ' + (sheet ? fmtH(s.wid) + ' × ' + fmtH(s.len) : fmtH(s.len, { ft: true })) + (s.have ? ' · yours' : ''), cuts: [] };
+        var name = function (pi) { var part = m.mat.parts[pi]; return '<b>' + letter(pi) + '</b> ' + esc(part && part.name || 'Part'); };
+        if (!sheet) {
+          if (it.trim > 0) t.cuts.push({ id: 'trim ' + it.trim.toFixed(4), meas: fmtH(it.trim), what: 'Square up one end', sub: 'Trim off ' + fmt(it.trim) + ' and measure every part from this fresh end' });
           it.pieces.forEach(function (p, k) {
-            var part = m.mat.parts[p.pi], last = k === it.pieces.length - 1, sub;
-            if (last && lastIsLeft(it)) { t.cuts.push({ noCut: true, note: 'What’s left is <b>' + letter(p.pi) + '</b> ' + esc(part && part.name || 'Part') + ' — no cut needed' }); return; }
-            else {
-              sub = k === 0 ? 'Measure from the end, cut on the waste side of the mark' : 'Measure from the fresh end';
-              if (last && it.trim > 0 && it.offcut <= 0) sub += ' — this cut squares up the far end too';
-            }
-            t.cuts.push({ meas: fmtH(p.len), what: '<b>' + letter(p.pi) + '</b> ' + esc(part && part.name || 'Part'), sub: sub });
+            var last = k === it.pieces.length - 1, left = last && lastIsLeft(it), far = last && it.trim > 0 && it.offcut <= 0;
+            var id = p.pi + '@' + p.len.toFixed(4) + (left ? ' left' : k === 0 ? ' first' : '') + (far ? ' far' : '');
+            if (left) { t.cuts.push({ id: id, noCut: true, note: 'What’s left is ' + name(p.pi) + ' — no cut needed' }); return; }
+            t.cuts.push({ id: id, meas: fmtH(p.len), what: name(p.pi), sub: (k === 0 ? 'Measure from the end, cut on the waste side of the mark' : 'Measure from the fresh end') + (far ? ' — this cut squares up the far end too' : '') });
           });
-          if (it.offcut > 0) t.note = 'Leaves a ' + fmt(it.offcut) + ' offcut' + (it.offcut >= P.keep ? ' — worth keeping' : '');
+          if (it.offcut > 0) t.note = esc('Leaves a ' + fmt(it.offcut) + ' offcut' + (it.offcut >= P.keep ? ' — worth keeping' : ''));
         } else {
-          it.steps.forEach(function (st, k) {
-            var part = st.gives ? m.mat.parts[st.gives.it.pi] : null;
-            if (st.type === 'none') { t.cuts.push({ noCut: true, note: 'The whole sheet is <b>' + letter(st.gives.it.pi) + '</b> ' + esc(part && part.name || 'Part') + ' — no cut needed' }); return; }
-            t.cuts.push({ meas: fmtH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + esc(st.on) + (st.gives ? ' → <b>' + letter(st.gives.it.pi) + '</b> ' + esc(part && part.name || '') : ''), sub: (st.type === 'rip' ? 'Along the grain, ' : 'Across the grain, ') + 'measured from the edge' });
+          it.steps.forEach(function (st) {
+            var g = st.gives, gives = g ? ' → ' + g.it.pi + ' ' + g.l.toFixed(4) + '×' + g.w.toFixed(4) + (g.rot ? ' turned' : '') : '';
+            if (st.type === 'none') { t.cuts.push({ id: 'whole' + gives, noCut: true, note: 'The whole sheet is ' + name(g.it.pi) + ' — no cut needed' }); return; }
+            t.cuts.push({ id: st.type + ' at ' + st.at.toFixed(4) + ' on ' + st.of + gives, meas: fmtH(st.at), what: (st.type === 'rip' ? 'Rip' : 'Crosscut') + ' ' + esc(st.on) + (g ? ' → ' + name(g.it.pi) : ''), sub: (st.type === 'rip' ? 'Along the grain, ' : 'Across the grain, ') + 'measured from the edge' });
           });
         }
         tasks.push(t);
@@ -1338,30 +1342,72 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     });
     return tasks;
   }
+  // The key of each material's plan at the saw: every board and sheet it uses, and what each cut on it is, in order.
+  function tickKeys(tasks) {
+    var keys = {};
+    RES.mats.forEach(function (m) { keys[m.mat.id] = ''; });
+    tasks.forEach(function (t) { keys[t.mid] += (keys[t.mid] ? ' | ' : '') + t.id + ': ' + t.cuts.map(function (c) { return c.id; }).join(', '); });
+    return keys;
+  }
+  // Ticks are kept for each material with the key of the plan they were made on: project.done[material id] is
+  // { key, ticks: { 'item.cut': 1 }, was: [up to three earlier { key, ticks }] }. When a material's plan changes, its
+  // ticks are put aside and a toast says so; other materials keep theirs. When that plan comes back (an Undo, a count
+  // changed and changed back, a length passing through a half-typed value), its ticks come back too.
+  var TKEYS = {}, CLEARED = 0;
+  function syncTicks(keys) {
+    var D = P.done, names = [], back = [], moved = false, name = function (mid) { var m = P.materials.filter(function (x) { return x.id === mid; })[0]; return m && m.name || (m && m.kind === 'sheet' ? 'sheet' : 'board'); };
+    TKEYS = keys; CLEARED = 0;
+    Object.keys(D).forEach(function (mid) {
+      var d = D[mid], key = keys[mid];
+      if (key == null) { delete D[mid]; return; } // its material is gone
+      if (d.key === key) return;
+      var had = Object.keys(d.ticks).length, kept = null;
+      var was = d.was.filter(function (w) { if (w.key === key) kept = w; return w.key !== key; });
+      if (had) was.unshift({ key: d.key, ticks: d.ticks });
+      D[mid] = { key: key, ticks: kept ? kept.ticks : {}, was: was.slice(0, 3) };
+      if (!kept && !was.length) delete D[mid];
+      if (had && !kept) { names.push(name(mid)); CLEARED += had; }
+      if (kept) back.push([name(mid), Object.keys(kept.ticks).length]);
+      if (had || kept) moved = true;
+    });
+    var cuts = function (n, one, many) { return n === 1 ? 'ticked cut ' + one : n + ' ticked cuts ' + many; };
+    if (CLEARED) toast('The ' + (names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' plans changed, so their ' : names[0] + ' plan changed, so its ') + cuts(CLEARED, 'was', 'were') + ' cleared');
+    else if (back.length === 1) toast('The ' + back[0][0] + ' plan is back, and so ' + (back[0][1] === 1 ? 'is its ticked cut' : 'are its ' + back[0][1] + ' ticked cuts'));
+    if (moved) save();
+  }
   function renderSaw() {
     var host = $('sawOut');
-    if (!RES || !RES.mats.some(function (m) { return m.items.length; })) { host.innerHTML = '<div class="empty">The cutting steps show up here once there’s a plan.</div>'; return; }
-    var key = planKey();
-    if (!P.done || P.doneKey !== key) { P.done = {}; P.doneKey = key; }
+    if (!RES) { host.innerHTML = ''; return; }
     var tasks = sawTasks(), total = 0, done = 0;
-    tasks.forEach(function (t, ti) { t.cuts.forEach(function (c, ci) { if (!c.noCut) { total++; if (P.done[ti + '.' + ci]) done++; } }); });
-    var h = '<div class="saw-bar"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div><b>' + done + '<small> of </small>' + total + '<small> ' + (total === 1 ? 'cut' : 'cuts') + '</small></b>' + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>';
-    tasks.forEach(function (t, ti) {
-      var real = t.cuts.filter(function (c) { return !c.noCut; }), n = real.length, d = t.cuts.filter(function (c, ci) { return !c.noCut && P.done[ti + '.' + ci]; }).length;
+    syncTicks(tickKeys(tasks));
+    if (!tasks.length) { host.innerHTML = '<div class="empty">The cutting steps show up here once there’s a plan.</div>'; return; }
+    var ticked = function (t, ci) { var d = P.done[t.mid]; return !!(d && d.ticks[t.ii + '.' + ci]) && !t.cuts[ci].noCut; };
+    var h = '';
+    tasks.forEach(function (t) {
+      var n = 0, d = 0;
+      t.cuts.forEach(function (c, ci) { if (!c.noCut) { n++; if (ticked(t, ci)) d++; } });
+      total += n; done += d;
       h += '<div class="stk' + (n && d === n ? ' done' : '') + '"><div class="stk-hd"><b>' + t.title + '</b><span>' + t.sub + '</span>' + (n ? '<span class="n">' + d + '/' + n + '</span>' : '') + '</div>';
       t.cuts.forEach(function (c, ci) {
         if (c.noCut) { h += '<div class="cut note">' + c.note + '</div>'; return; }
-        var on = !!P.done[ti + '.' + ci];
-        h += '<button class="cut" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + ti + '.' + ci + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + c.what + '<small>' + c.sub + '</small></span></button>';
+        var on = ticked(t, ci);
+        h += '<button class="cut" type="button" role="checkbox" aria-checked="' + on + '" data-k="' + t.mid + '/' + t.ii + '.' + ci + '"><span class="box" aria-hidden="true">✓</span><span class="meas">' + c.meas + '</span><span class="what">' + c.what + '<small>' + c.sub + '</small></span></button>';
       });
-      if (t.note) h += '<div class="cut note">' + esc(t.note) + '</div>';
+      if (t.note) h += '<div class="cut note">' + t.note + '</div>';
       h += '</div>';
     });
-    host.innerHTML = h;
+    host.innerHTML = '<div class="saw-bar"><div class="prog" aria-hidden="true"><i style="width:' + (total ? done / total * 100 : 0).toFixed(1) + '%"></i></div><b>' + done + '<small> of </small>' + total + '<small> ' + (total === 1 ? 'cut' : 'cuts') + '</small></b>' + (done ? '<button class="lbtn" type="button" id="sawReset">Start over</button>' : '') + '</div>' + h;
     // The list is drawn again after each tick, so focus goes back to the same cut (or the first, after Start over).
     // A tick changes the project like any edit, so another open window keeps it.
     var refocus = function (k) { var c = host.querySelector('.cut[data-k' + (k ? '="' + k + '"' : '') + ']'); if (c) c.focus({ preventScroll: true }); };
-    host.querySelectorAll('.cut[data-k]').forEach(function (b) { b.addEventListener('click', function () { var k = b.dataset.k; if (P.done[k]) delete P.done[k]; else P.done[k] = 1; touch(); renderSaw(); refocus(k); }); });
+    host.querySelectorAll('.cut[data-k]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var k = b.dataset.k, mid = k.slice(0, k.indexOf('/')), ck = k.slice(mid.length + 1);
+        var d = P.done[mid] || (P.done[mid] = { key: TKEYS[mid], ticks: {}, was: [] });
+        if (d.ticks[ck]) delete d.ticks[ck]; else d.ticks[ck] = 1;
+        touch(); renderSaw(); refocus(k);
+      });
+    });
     var rs = $('sawReset'); if (rs) rs.addEventListener('click', function () { P.done = {}; touch(); renderSaw(); refocus(); });
   }
 
