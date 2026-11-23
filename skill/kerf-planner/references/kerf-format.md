@@ -34,11 +34,11 @@ Kerf reads a project as JSON: from a file (**Projects → Open a project file**)
 | `materials[]` | Up to 100 materials | — |
 | `materials[].kind` | `"board"` (one cross-section; parts have a length) or `"sheet"` (parts have a length and a width) | `"board"` |
 | `materials[].name`, `note` | Shown as the material's title and subtitle, up to 200 characters each | `"Board"` or `"Sheet"`, and no note |
-| `stock[]` | Up to 50 sizes per material, to buy or already on hand: `len` (and `wid` for sheets) in inches, up to 1200; `price` each, up to 100000; `have` = pieces on hand (0 = buy; on-hand pieces are free and used whenever they save buying; at most 10) | `price` 0, which makes the size free, so always give one; `have` 0 |
+| `stock[]` | Up to 50 sizes per material, to buy or already on hand: `len` (and `wid` for sheets) in inches, up to 1200, a sheet's `len` being the way its grain runs (a 4×8 sheet is `len` 96, `wid` 48); `price` each, up to 100000; `have` = pieces on hand (0 = buy; on-hand pieces are free and used whenever they save buying; at most 10) | `price` 0, which makes the size free, so always give one; `have` 0 |
 | `parts[]` | Up to 1000 rows per material: `name` (up to 200 characters), `qty` (whole number 1–500), `len` (inches, up to 1200), and for sheets `wid` and `grain` | `qty` 1 |
 | `grain` | `true` keeps the grain along the part's `len`, and Kerf won't turn the part | `true` |
 
-For a grain-locked sheet part, `len` must fit along the sheet's long side and `wid` across it.
+A sheet's `len` is the way its grain runs, as a part's is, and Kerf plans and draws the sheet that way round. A grain-locked sheet part's `len` must fit along the sheet's `len` and its `wid` across the sheet's `wid`. Give store sheets long side first, the way their grain runs: `len` 96, `wid` 48.
 
 Kerf plans at most 300 of one sheet part; for more, split it into two rows.
 

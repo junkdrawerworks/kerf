@@ -215,6 +215,21 @@ console.log('sheets: two half sheets beat one full sheet');
   check(Math.abs(r.cost - 48) < 1e-6, `bench seat and shelf cost $${r.cost}, want $48 (two half sheets)`);
 }
 
+console.log('sheets: a sheet’s length is the way its grain runs');
+{
+  // A sheet's Length is the way its grain runs, as a part's is: a sheet typed 48" long and 96" wide has its grain
+  // across the 96" side. Kerf used to take the longer side as the grain whatever was typed, so a grain-locked 90" part
+  // planned on it with its grain across the sheet's.
+  const crossGrain = [{ len: 48, wid: 96, price: 58, have: 0 }];
+  let r = K.solveSheets({ stock: crossGrain, parts: [{ len: 90, wid: 20, qty: 1, grain: true }] }, { kerf: 0.125 });
+  check(r.errors.length === 1 && r.errors[0].pi === 0 && !r.items.length, 'a grain-locked 90" part on a sheet 48" along the grain: ' + JSON.stringify(r.errors.map(e => e.pi)));
+  r = K.solveSheets({ stock: crossGrain, parts: [{ len: 40, wid: 90, qty: 1, grain: true }] }, { kerf: 0.125 });
+  check(!r.errors.length && r.items.length === 1 && r.items[0].L === 48 && r.items[0].W === 96 && !r.items[0].placed[0].rot, 'a 40" × 90" part along that sheet’s grain: ' + JSON.stringify(r.items.map(it => [it.L, it.W])));
+  // A part free to turn still fits either way.
+  r = K.solveSheets({ stock: crossGrain, parts: [{ len: 90, wid: 20, qty: 1, grain: false }] }, { kerf: 0.125 });
+  check(!r.errors.length && r.items[0].placed[0].rot, 'a 90" part free to turn on that sheet');
+}
+
 console.log('sheets: one on hand and more to buy');
 {
   // "Have 1" on the 4×8 keeps a 4×8 to buy as well: six 72" sides need two sheets, one yours and one bought.

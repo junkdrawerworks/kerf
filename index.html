@@ -1027,7 +1027,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function evalSheets(sheets) { var cost = 0; sheets.forEach(function (s) { cost += s.st.price; }); return cost; }
   function solveSheets(mat, cfg, quick) {
     var kerf = cfg.kerf, out = { kind: 'sheet', mat: mat, items: [], errors: [], cost: 0 };
-    var stocks = mat.stock.filter(function (s) { return s.len > 0 && s.wid > 0; }).map(function (s) { var L = Math.max(s.len, s.wid), W = Math.min(s.len, s.wid); return { s: s, L: L, W: W, price: s.have ? 0 : Math.max(0, +s.price || 0), left: s.have ? Math.max(0, s.have | 0) : Infinity }; }).filter(function (st) { return st.left > 0; });
+    var stocks = mat.stock.filter(function (s) { return s.len > 0 && s.wid > 0; }).map(function (s) { return { s: s, L: s.len, W: s.wid, price: s.have ? 0 : Math.max(0, +s.price || 0), left: s.have ? Math.max(0, s.have | 0) : Infinity }; }).filter(function (st) { return st.left > 0; });
     var items = [];
     mat.parts.forEach(function (p, pi) {
       if (!(p.len > 0) || !(p.wid > 0) || !(p.qty > 0)) return;
@@ -1302,7 +1302,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       var sheet = m.kind === 'sheet';
       h += '<article class="mat' + (sheet ? ' sheetmat' : '') + '" data-mid="' + m.id + '">' +
         '<header class="mat-hd"><span class="mat-ic" aria-hidden="true">' + ICON[m.kind] + '</span><input class="mat-name" data-f="mname" value="' + esc(m.name) + '" aria-label="Material name" autocomplete="off" enterkeyhint="next"><span class="mat-note">' + noteH(m.note) + '</span><button class="icon" type="button" data-a="delmat" title="Remove this material" aria-label="Remove ' + esc(m.name) + '">✕</button></header>' +
-        '<div class="parts"><div class="prow head"><span></span><span>Part</span><span style="text-align:center">Qty</span><span>' + (sheet ? 'Length' : 'Length') + '</span>' + (sheet ? '<span>Width</span><span title="Keep the grain running along the part’s length">Grain</span>' : '') + '<span></span></div>';
+        '<div class="parts"><div class="prow head"><span></span><span>Part</span><span style="text-align:center">Qty</span><span>Length</span>' + (sheet ? '<span>Width</span><span title="Keep the grain running along the part’s length">Grain</span>' : '') + '<span></span></div>';
       // Each field is named by its part's letter, its name as typed and its column: "B Front & back rail Length".
       m.parts.forEach(function (p, i) {
         var by = function (col) { return ' aria-labelledby="L-' + p.id + ' n-' + p.id + ' ' + col + '"'; };
@@ -1315,10 +1315,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       });
       h += '<button class="addpart" type="button" data-a="addpart">+ Add a part</button></div><div class="perr" data-err="' + m.id + '" hidden></div>' +
         '<details class="stock" data-mid="' + m.id + '"' + (open[m.id] ? ' open' : '') + '><summary><span class="chips">' + stockSummary(m) + '</span><span class="chev" aria-hidden="true">›</span><span class="sr">Edit stock and prices</span></summary><div class="stock-bd">' +
-        '<div class="srow head"><span>' + (sheet ? 'Length' : 'Length') + '</span>' + (sheet ? '<span>Width</span>' : '') + '<span>Price</span><span>Source</span><span></span></div>';
+        '<div class="srow head"><span>' + (sheet ? 'Length (grain)' : 'Length') + '</span>' + (sheet ? '<span>Width</span>' : '') + '<span>Price</span><span>Source</span><span></span></div>';
       m.stock.forEach(function (s) {
         var nm = sizeName(m, s);
-        h += '<div class="srow" data-sid="' + s.id + '"><input class="mono" data-f="slen" value="' + esc(fieldLen(s.len, { ft: !sheet })) + '"' + lenMode() + ' enterkeyhint="next" aria-label="Stock length" autocomplete="off">' +
+        h += '<div class="srow" data-sid="' + s.id + '"><input class="mono" data-f="slen" value="' + esc(fieldLen(s.len, { ft: !sheet })) + '"' + lenMode() + ' enterkeyhint="next" aria-label="' + (sheet ? 'Stock length, along the grain' : 'Stock length') + '" autocomplete="off">' +
           (sheet ? '<input class="mono" data-f="swid" value="' + esc(fieldLen(s.wid)) + '"' + lenMode() + ' enterkeyhint="next" aria-label="Stock width" autocomplete="off">' : '') +
           '<span class="money"><span>' + esc(CUR) + '</span><input class="mono" data-f="price" style="padding-left:' + (12 + Array.from(CUR).length * 9) + 'px" value="' + (s.have ? '' : (+s.price || 0).toFixed(2)) + '" inputmode="decimal" enterkeyhint="next" aria-label="Price for the ' + nm + ' size" autocomplete="off"' + (s.have ? ' disabled placeholder="free"' : '') + '></span>' +
           '<select data-f="have" aria-label="Where the ' + nm + ' size comes from"><option value="0"' + (s.have ? '' : ' selected') + '>Buy</option>' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return '<option value="' + n + '"' + (s.have === n ? ' selected' : '') + '>Have ' + n + '</option>'; }).join('') + '</select>' +
@@ -1347,7 +1347,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         if (e.max) return (e.part.name || 'A part') + ' × ' + e.part.qty + ': Kerf plans at most ' + e.max + ' of one ' + r.kind + ' part — split it into two rows.';
         var p = e.part, dims = r.kind === 'sheet' ? fmtT(p.len) + ' × ' + fmtT(p.wid) : fmtT(p.len);
         // The grain is only worth a mention when turning the part would let it fit, by the planner's own test.
-        var turn = r.kind === 'sheet' && p.grain && r.mat.stock.some(function (st) { return st.len > 0 && st.wid > 0 && fitsStock({ l: p.len, w: p.wid, rot: true }, { L: Math.max(st.len, st.wid), W: Math.min(st.len, st.wid) }); });
+        var turn = r.kind === 'sheet' && p.grain && r.mat.stock.some(function (st) { return st.len > 0 && st.wid > 0 && fitsStock({ l: p.len, w: p.wid, rot: true }, { L: st.len, W: st.wid }); });
         return (p.name || 'A part') + ' (' + dims + ') won’t fit on any ' + (r.kind === 'sheet' ? 'sheet' : 'board') + ' listed below' + (turn ? ' with the grain along its length' : '') + '. Add a bigger size' + (turn ? ' or let it turn' : '') + '.';
       });
       el.hidden = !msgs.length; el.textContent = msgs.join(' ');
@@ -1379,7 +1379,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         // buy as well, so Kerf uses yours first and buys more if it needs them.
         // The row changes where it is, so the menu keeps focus and the arrow keys can step through it (Chromium on
         // Windows and Linux changes a closed menu one step at a time). Only a size added to buy draws the list again.
-        var was = s.have, sheet = m.kind === 'sheet', same = function (o) { return o !== s && !o.have && (sheet ? (o.len === s.len && o.wid === s.wid) || (o.len === s.wid && o.wid === s.len) : o.len === s.len); };
+        var was = s.have, sheet = m.kind === 'sheet', same = function (o) { return o !== s && !o.have && o.len === s.len && (!sheet || o.wid === s.wid); };
         s.have = +el.value || 0;
         var pr = el.closest('.srow').querySelector('[data-f="price"]');
         pr.disabled = !!s.have; pr.placeholder = s.have ? 'free' : ''; pr.value = s.have ? '' : (+s.price || 0).toFixed(2); pr.classList.remove('bad');
@@ -1586,7 +1586,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       return r.errors.some(function (e) {
         var p = e.pi >= 0 ? e.part : r.mat.parts[e.only], f = 'len';
         if (e.max) f = 'qty';
-        else if (r.kind === 'sheet' && p && r.mat.stock.some(function (st) { return Math.min(p.len, p.wid) <= Math.min(st.len, st.wid) + 1e-9 && p.len <= Math.max(st.len, st.wid) + 1e-9; })) f = 'wid';
+        else if (r.kind === 'sheet' && p && r.mat.stock.some(function (st) { return p.len <= (p.grain ? st.len : Math.max(st.len, st.wid)) + 1e-9; })) f = 'wid';
         var root = '[data-mid="' + r.mat.id + '"] ';
         el = (p && document.querySelector(root + '.prow[data-pid="' + p.id + '"] [data-f="' + f + '"]')) || document.querySelector(root + '[data-f="mname"]');
         return !!el;

@@ -59,6 +59,7 @@ Name parts by what they are ("Front rail", "Left side"), not "Part A". The names
 How Kerf sees materials, so the plan maps cleanly:
 - **Boards.** Each board material is one cross-section: "2×4", "1×6 pine", "5/4 × 6 decking". Board parts have only a length. A strip ripped narrower from a board is still a board part; say so in its name ("Cleat — rip to 1½").
 - **Sheets.** Plywood, MDF and so on. Parts have a length and a width.
+  - A sheet size's `len` is the way its grain runs, as a part's is: a 4×8 sheet is `len` 96, `wid` 48.
   - Set `grain: true` on visible parts (tops, sides, doors), so the grain runs along the part's length.
   - Use `false` for hidden parts (backs, drawer bottoms, cleats) and for MDF. That lets Kerf turn them to fit better.
 - **Leave the kerf out.** Kerf adds the saw kerf between parts itself; don't add it to part sizes.
@@ -99,9 +100,9 @@ Optional top-level settings: `"kerf"` (default ⅛″, or 3 mm in a metric plan)
 
 The script does five things:
 - converts everything to inches, which is how Kerf stores lengths;
-- checks every part fits some stock (a grain-locked sheet part must fit with its length along the sheet's long side);
+- checks every part fits some stock (a grain-locked sheet part must fit with its length along the sheet's length, the way its grain runs);
 - checks the plan is within what Kerf opens: names up to 200 characters, 100 materials, 50 sizes and 1000 parts per material, lengths up to 1200″, and at most 300 of one sheet part;
-- warns about likely slips, such as a grain-locked part whose length is shorter than its width;
+- warns about likely slips, such as a grain-locked part whose length is shorter than its width, or a sheet size typed short side first;
 - prints a summary, a **link** and its length, the **paste text**, and writes a `.kerf.json` file.
 
 If it reports errors, fix the plan, not the script, and run it again. The summary's "no fewer than" lines are floors from length and area alone; real layouts usually need more. Don't quote them as what to buy. If a part doesn't fit, that's a design conversation: add a longer board, a bigger sheet, or a glue-up.

@@ -157,6 +157,9 @@ def build(plan):
             st = {'len': ln, 'price': float(price or 0), 'have': have}
             if sheet:
                 st['wid'] = wd
+                if ln < wd:
+                    warnings.append(f'{mname}: stock size {si + 1} has "len" {show(ln, units)}, shorter than "wid" {show(wd, units)}. Kerf runs a '
+                                    f'sheet\'s grain along "len" — swap them unless the grain really runs the short way.')
             out['stock'].append(st)
         if not out['stock']:
             errors.append(f'{mname}: list at least one size to buy (or have)')
@@ -188,9 +191,10 @@ def build(plan):
                     warnings.append(f'{mname} / {label}: qty {qty}. Kerf plans at most {SHEET_QTY} of one sheet part — split it into two rows.')
                 grain = bool(p.get('grain', True))
                 q.update({'wid': wd, 'grain': grain})
+                # a sheet's len is the way its grain runs, as a part's is
                 fits = any(
-                    (ln <= max(s['len'], s['wid']) + 1e-9 and wd <= min(s['len'], s['wid']) + 1e-9) or
-                    (not grain and wd <= max(s['len'], s['wid']) + 1e-9 and ln <= min(s['len'], s['wid']) + 1e-9)
+                    (ln <= s['len'] + 1e-9 and wd <= s['wid'] + 1e-9) or
+                    (not grain and wd <= s['len'] + 1e-9 and ln <= s['wid'] + 1e-9)
                     for s in out['stock'])
                 if not fits:
                     errors.append(f'{mname} / {label} ({show(ln, units)} × {show(wd, units)}) won\'t fit on any sheet listed'
