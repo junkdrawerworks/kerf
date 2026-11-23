@@ -23,7 +23,7 @@ const SOLVER = [
   "var U = 'in';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
   ...['esc', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'orientations', 'newSheet',
-    'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
+    'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'sawScore', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
 ];
 const K = new Function([
   ...SOLVER,
@@ -228,6 +228,25 @@ console.log('sheets: a sheet’s length is the way its grain runs');
   // A part free to turn still fits either way.
   r = K.solveSheets({ stock: crossGrain, parts: [{ len: 90, wid: 20, qty: 1, grain: false }] }, { kerf: 0.125 });
   check(!r.errors.length && r.items[0].placed[0].rot, 'a 90" part free to turn on that sheet');
+}
+
+console.log('sheets: of plans that cost the same, the one kinder to a table saw');
+{
+  // Among layouts that cost the same, Kerf takes one that starts by ripping the sheet rather than crosscutting a whole
+  // 4×8, with as few fence settings as it can. The example's four shelves started with a crosscut across the sheet and
+  // took 7 cuts; two cabinet sides did too, then ripped each half.
+  const full = [{ len: 96, wid: 48, price: 58, have: 0 }], ply = [...full, { len: 48, wid: 48, price: 34, have: 0 }, { len: 48, wid: 24, price: 21, have: 0 }];
+  const steps = r => r.items.map(sh => sh.steps.map(s => s.type + ' ' + s.at + (s.on ? '' : ' (sheet)')));
+  const jobs = [
+    ['the example’s shelves', ply, [{ len: 47.75, wid: 23.75, qty: 4, grain: true }], 6],
+    ['two cabinet sides', full, [{ len: 30.25, wid: 23.75, qty: 2, grain: true }], 3],
+    ['six 30 × 12 shelves', full, [{ len: 30, wid: 12, qty: 6, grain: true }], 8],
+  ];
+  for (const [what, stock, parts, cuts] of jobs) {
+    const r = K.solveSheets({ stock, parts }, { kerf: 0.125 }), s = steps(r)[0];
+    const rips = new Set(s.filter(x => x.startsWith('rip')).map(x => x.split(' ')[1]));
+    check(r.items.length === 1 && s[0].startsWith('rip ') && s[0].endsWith('(sheet)') && rips.size === 1 && s.length === cuts, `${what}: ${JSON.stringify(s)}, want a rip of the full sheet first, one fence setting and ${cuts} cuts`);
+  }
 }
 
 console.log('sheets: one on hand and more to buy');

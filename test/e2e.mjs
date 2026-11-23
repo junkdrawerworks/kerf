@@ -113,7 +113,7 @@ const pdfWidth = r => [...r.text].reduce((w, ch) => { const c = ch.charCodeAt(0)
 await open(null);
 await page.evaluate(() => document.fonts.ready);
 assert.equal(await page.textContent('.total'), '$100.64');
-assert.match(await page.textContent('.facts'), /8\s*boards\s*1\s*sheet\s*27\s*cuts/);
+assert.match(await page.textContent('.facts'), /8\s*boards\s*1\s*sheet\s*26\s*cuts/);
 await fitsPhone('plan');
 await view('list');
 await fitsPhone('cut list');
@@ -123,11 +123,11 @@ await fitsPhone('saw checklist');
 // Ticks at the saw are kept: three cuts done, a reload, and they're still done.
 const cuts = page.locator('#sawOut .cut[data-k]');
 for (let i = 0; i < 3; i++) await cuts.nth(i).click();
-assert.equal(await page.textContent('.saw-bar b'), '3 of 27 cuts');
+assert.equal(await page.textContent('.saw-bar b'), '3 of 26 cuts');
 await page.waitForTimeout(600);
 await page.reload();
 await page.waitForSelector('#sawOut .cut[data-k]');
-assert.equal(await page.textContent('.saw-bar b'), '3 of 27 cuts', 'ticks survive a reload');
+assert.equal(await page.textContent('.saw-bar b'), '3 of 26 cuts', 'ticks survive a reload');
 assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
 
 // The screen stays on while the checklist at the saw is in sight: Kerf asks for a screen wake lock there, lets go of it
@@ -202,8 +202,8 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   await page.waitForSelector('[data-tip]', { timeout: 30000 });
   await page.click('[data-tip]');
   await page.waitForTimeout(600);
-  assert.equal(parseInt(await cutsFact()), 23);
-  assert.equal(await sawTotal(), 23, 'after the tip, the saw counts more cuts than the plan');
+  assert.equal(parseInt(await cutsFact()), 22);
+  assert.equal(await sawTotal(), 22, 'after the tip, the saw counts more cuts than the plan');
   assert.ok(shown(await page.textContent('#sawOut')).includes('What’s left should be B Front & back rail (47 15⁄16″). Measure it, and trim it if the board ran long.'), 'no note for a rail that needs no cut');
   // It reads as a line of text: the letter sits a space after "is", not spread out like the parts of a cut's row.
   await view('saw');
@@ -256,7 +256,7 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   await view('saw');
   await cuts.nth(0).click();
   await cuts.nth(1).click();
-  assert.equal(await page.textContent('.saw-bar b'), '2 of 27 cuts');
+  assert.equal(await page.textContent('.saw-bar b'), '2 of 26 cuts');
   await page.click('#setBtn');
   await page.fill('#sTrim', '1/4');
   await page.click('#stx');
@@ -266,18 +266,18 @@ assert.equal(await cuts.nth(2).getAttribute('aria-checked'), 'true');
   assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Next Square up one end/);
   assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
-  // A sheet part resized where it sits: the full sheet's crosscut moves from 30" to 40", so its tick clears.
+  // A sheet part resized where it sits: the full sheet's rip moves from 20" to 25", so its tick clears.
   await open(saved(project('One shelf', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Shelf', qty: 1, len: 30, wid: 20 }])])));
   await view('saw');
-  assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Next Crosscut the full sheet/);
-  assert.equal(await page.textContent('#sawOut .cut[data-k] .meas'), '30″');
+  assert.match(await page.textContent('#sawOut .cut[data-k] .what'), /^Next Rip the full sheet/);
+  assert.equal(await page.textContent('#sawOut .cut[data-k] .meas'), '20″');
   await cuts.nth(0).click();
   await view('list');
-  await part(0, 0, 'len').fill('40');
+  await part(0, 0, 'wid').fill('25');
   await settle();
   assert.equal(await toastNow(), 'The ¾ plywood plan changed, so its ticked cut was cleared');
   await view('saw');
-  assert.equal(await page.textContent('#sawOut .cut[data-k] .meas'), '40″');
+  assert.equal(await page.textContent('#sawOut .cut[data-k] .meas'), '25″');
   assert.deepEqual(await tickedRows(), [], 'the tick on the 30" crosscut moved to the 40" one');
 }
 
@@ -754,18 +754,18 @@ await page.waitForFunction(() => /My shelves/.test(localStorage.getItem('kerf.v1
   await other.click('#projBtn');
   assert.deepEqual(await other.$$eval('#sheet .pitem b', bs => bs.map(b => b.textContent)), ['Garage shelves (example)'], 'Projects lists the example twice');
   await other.click('#pjx');
-  await page.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '2 of 27 cuts', null, { timeout: 5000 })
+  await page.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '2 of 26 cuts', null, { timeout: 5000 })
     .catch(() => assert.fail('a tick in one window’s example doesn’t show in the other’s'));
 
   await page.click('#projBtn');
   await page.click('#sheet .btn.danger');
   await page.waitForTimeout(600);
   await page.click('#sheet .btn.danger');
-  await other.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '0 of 27 cuts', null, { timeout: 5000 })
+  await other.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '0 of 26 cuts', null, { timeout: 5000 })
     .catch(() => assert.fail('the new example doesn’t show in the other window'));
   assert.ok(!(await other.textContent('#toast')).includes('deleted in another window'), 'the other window took the new example as deleted');
   await other.locator('#sawOut .cut[data-k]').first().click();
-  await page.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '1 of 27 cuts', null, { timeout: 5000 })
+  await page.waitForFunction(() => document.querySelector('.saw-bar b').textContent === '1 of 26 cuts', null, { timeout: 5000 })
     .catch(() => assert.fail('the new example went missing from the window that deleted the old one'));
   assert.deepEqual(await examples(), ['Garage shelves (example)'], 'the new example is missing from storage');
   await other.close();
@@ -1458,7 +1458,7 @@ for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page
   assert.ok(plan.includes('paragraph: "Sheet 1, 48 in × 96 in: 4 × A Shelf 47 3/4 in × 23 3/4 in"'), 'the sheet isn’t in words:\n' + plan);
   assert.ok(!/- img/.test(plan), 'a drawing is still read as a picture');
   await open(saved(project('Sides', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])])));
-  assert.match(await page.locator('#planOut').ariaSnapshot(), /paragraph: "Sheet 1, 48 in × 96 in: 2 × A Side 30 1\/4 in × 23 3\/4 in; left over 65 5\/8 in × 48 in"/);
+  assert.match(await page.locator('#planOut').ariaSnapshot(), /paragraph: "Sheet 1, 48 in × 96 in: 2 × A Side 30 1\/4 in × 23 3\/4 in; left over 96 in × 24 1\/8 in and 35 1\/4 in × 23 3\/4 in"/);
 }
 
 // Ticking a cut from the keyboard keeps focus on that cut, and Start over moves it to the first one.
@@ -2098,19 +2098,19 @@ for (const c of sawCases) {
 // shop PDF writes the same steps in plain text.
 {
   await open(saved(project('Sides', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])])));
-  assert.deepEqual(await page.$$eval('#planOut ol.steps li > span', ls => ls.map(l => l.textContent)).then(a => a.map(shown)), ['Crosscut the full sheet at 30 1⁄4″', 'Rip the 30 1⁄4″ × 48″ piece at 23 3⁄4″ → A Side', 'Rip the 30 1⁄4″ × 24 1⁄8″ piece at 23 3⁄4″ → A Side']);
+  assert.deepEqual(await page.$$eval('#planOut ol.steps li > span', ls => ls.map(l => l.textContent)).then(a => a.map(shown)), ['Rip the full sheet at 23 3⁄4″', 'Crosscut the 96″ × 23 3⁄4″ strip at 30 1⁄4″ → A Side', 'Crosscut the 65 5⁄8″ × 23 3⁄4″ piece at 30 1⁄4″ → A Side']);
   const raw = await shopPdf(), pdf = pdfRuns(raw).map(r => r.text);
-  assert.ok(pdf.includes('2.  Rip the 30 1/4" × 48" piece at 23 3/4"  »  A Side'), 'the PDF\'s sheet steps: ' + pdf.filter(t => /^\d\./.test(t)));
+  assert.ok(pdf.includes('2.  Crosscut the 96" × 23 3/4" strip at 30 1/4"  »  A Side'), 'the PDF\'s sheet steps: ' + pdf.filter(t => /^\d\./.test(t)));
   // Printed in black and white, parts are white and waste is hatched, not three tans and greys that print alike; the
   // piece left over is labelled with its size, as on screen.
-  assert.ok(pdf.includes('65 5/8" × 48"'), 'no size on the piece left over in the PDF');
+  assert.ok(pdf.includes('96" × 24 1/8"'), 'no size on the piece left over in the PDF');
   assert.ok(!/0\.92 0\.83 0\.65 rg|0\.91 0\.84 0\.7 rg|0\.8 0\.82 0\.79 rg/.test(raw) && / re W n /.test(raw), 'the PDF fills parts and waste in colours that print as the same grey');
   await view('saw');
   assert.deepEqual(await page.$$eval('#sawOut .cut[data-k] .what', ws => ws.map(w => w.textContent.replace(/^Next /, ''))).then(a => a.map(shown)), [
-    'Crosscut the full sheetAcross the grain — measure from the end, cut on the waste side',
-    'Rip the 30 1⁄4″ × 48″ piece → A SideAlong the grain — set the fence at 23 3⁄4″, or mark it and cut on the waste side',
-    'Rip the 30 1⁄4″ × 24 1⁄8″ piece → A SideAlong the grain — set the fence at 23 3⁄4″, or mark it and cut on the waste side']);
-  assert.equal(shown(await page.textContent('#sawOut .cut.note')), 'Leaves a 65 5⁄8″ × 48″ piece — worth keeping');
+    'Rip the full sheetAlong the grain — set the fence at 23 3⁄4″, or mark it and cut on the waste side',
+    'Crosscut the 96″ × 23 3⁄4″ strip → A SideAcross the grain — measure from the end, cut on the waste side',
+    'Crosscut the 65 5⁄8″ × 23 3⁄4″ piece → A SideAcross the grain — measure from the end, cut on the waste side']);
+  assert.equal(shown(await page.textContent('#sawOut .cut.note')), 'Leaves a 96″ × 24 1⁄8″ piece and a 35 1⁄4″ × 23 3⁄4″ piece — worth keeping');
 }
 
 // At the saw a measurement's fraction is nearly as big as its whole inches, and every row's text starts at the same

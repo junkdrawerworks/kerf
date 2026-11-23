@@ -1078,6 +1078,19 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     return { sheets: sheets, left: left, order: list };
   }
+  // How much a layout asks of someone at a table saw, lower being better: for each sheet, one for starting with a crosscut
+  // across the whole sheet (a 4×8 is far easier to rip than to crosscut), and one for each width it's ripped at, each
+  // a different fence setting. Strips ripped one after another at one setting cost nothing more.
+  function sawScore(sheets) {
+    var score = 0;
+    sheets.forEach(function (sh) {
+      var r = sh.root, widths = {};
+      if (r.part && r.needV && (r.first === 'cross' || !r.needH)) score++;
+      (function walk(n) { if (!n.part) return; if (n.needH) widths[n.part.w.toFixed(3)] = 1; (n.kids || []).forEach(function (k) { if (!k.dust) walk(k); }); })(r);
+      score += Object.keys(widths).length;
+    });
+    return score;
+  }
   function freeArea(sh) { return sh.free.reduce(function (a, f) { return Math.max(a, f.w * f.h); }, 0); }
   function evalSheets(sheets) { var cost = 0; sheets.forEach(function (s) { cost += s.st.price; }); return cost; }
   function solveSheets(mat, cfg, quick) {
@@ -1119,8 +1132,10 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         alt.sheets.forEach(function (x) { x.st = alt.st; kept.push(x); });
       });
       r.sheets = kept;
-      var cost = evalSheets(r.sheets), spare = r.sheets.length ? Math.max.apply(null, r.sheets.map(freeArea)) : 0;
-      if (!best || cost < best.cost - 1e-6 || (Math.abs(cost - best.cost) < 1e-6 && (r.sheets.length < best.sheets.length || (r.sheets.length === best.sheets.length && spare > best.spare + 1e-6)))) best = { cost: cost, sheets: r.sheets, spare: spare, order: r.order, how: how };
+      // Among plans that cost the same: fewer sheets, then the friendlier at a table saw (sawScore), then the biggest piece left.
+      var cost = evalSheets(r.sheets), spare = r.sheets.length ? Math.max.apply(null, r.sheets.map(freeArea)) : 0, saw = null, tie = best && Math.abs(cost - best.cost) < 1e-6 && r.sheets.length === best.sheets.length;
+      if (tie) { saw = sawScore(r.sheets); if (best.saw == null) best.saw = sawScore(best.sheets); }
+      if (!best || cost < best.cost - 1e-6 || (Math.abs(cost - best.cost) < 1e-6 && r.sheets.length < best.sheets.length) || (tie && (saw < best.saw || (saw === best.saw && spare > best.spare + 1e-6)))) best = { cost: cost, sheets: r.sheets, spare: spare, saw: saw, order: r.order, how: how };
     }
     // `cfg.replay` packs the parts once, in the order and by the rules of another plan's winning run (its `run`): the
     // tips use it to see whether the parts as they are could already be cut that way.
