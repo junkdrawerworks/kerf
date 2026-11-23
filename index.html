@@ -183,6 +183,9 @@ input.bad{border-color:var(--bad);background:var(--bad-soft)}
 .tip button{margin-left:auto;flex:none}
 #tips:focus{outline:none} /* where focus goes once the last tip is used */
 .warn{background:var(--bad-soft);border:1px solid var(--bad);color:var(--ink);border-radius:var(--r);padding:10px 12px;font-size:14px;margin-top:12px}
+/* "see the cut list", a button where the cut list is a tab of its own: a link in a sentence (which WCAG's target size
+   leaves out), underlined in the warning's own ink, as blue on its pink reads under 4.5:1 */
+.warn .lbtn{display:inline;padding:0;min-height:0;color:inherit;font-size:inherit;text-decoration:underline;text-underline-offset:2px}
 div.sec{margin-top:22px}
 .sec-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
 .sec-hd h3{margin:0;font:700 12px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
@@ -1531,7 +1534,6 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var host = $('planOut'), r = RES;
     if (!P.materials.length || !r.mats.some(function (m) { return m.items.length; })) {
       host.innerHTML = '<h2 class="sr">Plan</h2>' + (leftOut(r) || '<div class="empty"><b>Nothing to cut yet.</b><br>Add a material in the cut list, then the parts you need from it — Kerf works out what to buy and how to cut it.<br><button class="btn" type="button" data-go="list">Go to the cut list</button></div>');
-      var go = host.querySelector('[data-go]'); if (go) go.addEventListener('click', function () { setTab('list'); });
       return;
     }
     W.plan = planWidth();
@@ -1573,8 +1575,27 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (many.length) has.push(plural(many.length, 'part') + ' with more than ' + many[0].max + ' pieces');
       var short = 'the ' + (m.kind === 'sheet' ? 'sheets' : 'boards') + ' you have can’t hold ';
       return esc(m.mat.name) + (has.length ? ' has ' + has.join(' and ') + (rest ? ', and ' + short + 'the rest' : '') : ': ' + short + 'every part');
-    }).join('; ') + ' — see the cut list.</div>' : '';
+    }).join('; ') + ' — ' + (NARROW.matches ? '<button class="lbtn" type="button" data-go="err">see the cut list</button>' : 'see the cut list') + '.</div>' : '';
   }
+  // On a phone the cut list is a tab of its own: its button goes there, to the field of the first part left out (the
+  // size that's too big, or the count that's too many), or to the material when no one part is to blame.
+  function goToError() {
+    setTab('list');
+    var el = null;
+    (RES ? RES.mats : []).some(function (r) {
+      return r.errors.some(function (e) {
+        var p = e.pi >= 0 ? e.part : r.mat.parts[e.only], f = 'len';
+        if (e.max) f = 'qty';
+        else if (r.kind === 'sheet' && p && r.mat.stock.some(function (st) { return Math.min(p.len, p.wid) <= Math.min(st.len, st.wid) + 1e-9 && p.len <= Math.max(st.len, st.wid) + 1e-9; })) f = 'wid';
+        var root = '[data-mid="' + r.mat.id + '"] ';
+        el = (p && document.querySelector(root + '.prow[data-pid="' + p.id + '"] [data-f="' + f + '"]')) || document.querySelector(root + '[data-f="mname"]');
+        return !!el;
+      });
+    });
+    if (el) el.focus();
+  }
+  // The buttons to the cut list in the plan and at the saw, drawn again with them.
+  function onGo(e) { var b = e.target.closest('[data-go]'); if (!b) return; if (b.dataset.go === 'err') goToError(); else setTab('list'); }
   function shopLines(m) {
     var map = {}, lines = [];
     m.items.forEach(function (it) {
@@ -1913,7 +1934,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (!RES) { host.innerHTML = ''; return; }
     var tasks = sawTasks(), total = 0, done = 0;
     syncTicks(tickKeys(tasks));
-    if (!tasks.length) { host.innerHTML = '<h2 class="sr">At the saw</h2><div class="empty">The cutting steps show up here once there’s a plan.</div>'; return; }
+    if (!tasks.length) { host.innerHTML = '<h2 class="sr">At the saw</h2><div class="empty">The cutting steps show up here once there’s a plan.<br><button class="btn" type="button" data-go="list">Go to the cut list</button></div>'; return; }
     var ticked = function (t, ci) { var d = P.done[t.mid]; return !!(d && d.ticks[t.ii + '.' + ci]) && !t.cuts[ci].noCut; };
     host.dataset.u = U;
     var h = '', next = null; // the first cut not ticked yet, marked as the next to make
@@ -2503,6 +2524,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); awake(); });
+  $('planOut').addEventListener('click', onGo); $('sawOut').addEventListener('click', onGo);
   var rT; window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(function () { if ($('planOut').clientWidth && Math.abs(planWidth() - W.plan) > 4) renderPlan(); }, 120); });
   // A window widened past 960 px shows the plan beside the cut list: drawn before that frame, so an old plan never shows.
   var widthChange = function () { reveal(); awake(); }; // the cut list's tab shows the saw beside it, or hides it

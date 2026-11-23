@@ -1886,6 +1886,37 @@ await open(saved(project('Tabletop', [sheet('¾ plywood', [{ len: 96, wid: 48, p
 await view('list');
 assert.equal(await page.textContent('.perr'), 'Huge tabletop (100″ × 50″) won’t fit on any sheet listed below. Add a bigger size. Cross panel (40″ × 60″) won’t fit on any sheet listed below with the grain along its length. Add a bigger size or let it turn.');
 
+// On a phone the plan's "see the cut list" is a button: it opens the cut list at the first part left out, at the size
+// that doesn't fit (the width when the length would), clear of the top bar. On a laptop, where the cut list is
+// beside the plan, it's words. At the saw, with nothing to cut, a button goes to the cut list as well.
+await open(saved({ ...project('Tabletop', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Shelf', qty: 1, len: 30, wid: 20 }, { name: 'Cross panel', qty: 1, len: 40, wid: 60 }])]) }));
+{
+  const focusedField = () => page.evaluate(() => { const a = document.activeElement; return a.closest('.prow').querySelector('[data-f="pname"]').value + ' ' + a.dataset.f; });
+  const clear = () => page.evaluate(() => document.activeElement.getBoundingClientRect().top >= document.querySelector('.top').getBoundingClientRect().bottom);
+  assert.equal(await page.textContent('#planOut .warn'), 'Some parts are left out. ¾ plywood has 1 part too big for any size listed — see the cut list.');
+  await page.click('#planOut .warn button');
+  assert.equal(await page.getAttribute('#tabs button[data-t="list"]', 'aria-current'), 'page', 'see the cut list doesn’t open the cut list');
+  assert.equal(await focusedField(), 'Cross panel wid', 'see the cut list doesn’t go to the width that doesn’t fit');
+  assert.ok(await clear(), 'the field is under the top bar');
+  await page.fill('.prow[data-pid] input[data-f="wid"] >> nth=1', '30');
+  await page.fill('.prow[data-pid] input[data-f="len"] >> nth=1', '100');
+  await page.locator('.prow[data-pid] input[data-f="len"] >> nth=1').press('Enter');
+  await view('plan');
+  await page.click('#planOut .warn button');
+  assert.equal(await focusedField(), 'Cross panel len', 'see the cut list doesn’t go to the length that doesn’t fit');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForFunction(() => !document.querySelector('#planOut .warn button'), null, { timeout: 3000 }).catch(() => assert.fail('on a laptop "see the cut list" is still a button'));
+  assert.match(await page.textContent('#planOut .warn'), /— see the cut list\.$/);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await view('plan');
+  await page.waitForSelector('#planOut .warn button', { timeout: 3000 });
+}
+await open(saved(project('Too big', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Huge tabletop', qty: 1, len: 100, wid: 50 }])])));
+await view('saw');
+assert.equal(await page.textContent('#sawOut .empty'), 'The cutting steps show up here once there’s a plan.Go to the cut list');
+await page.click('#sawOut .empty button');
+assert.equal(await page.getAttribute('#tabs button[data-t="list"]', 'aria-current'), 'page', 'the saw’s button doesn’t open the cut list');
+
 // An empty plan points to the cut list (a phone has no left side), and when every part is left out it says why.
 await open(saved(project('Nothing yet', [])));
 assert.match(await page.textContent('#planOut .empty'), /^Nothing to cut yet\.Add a material in the cut list, then the parts you need from it/);
