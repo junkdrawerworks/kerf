@@ -1000,8 +1000,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
   // Would shaving a hair off one part buy less material? Checked quietly after each change, one quick solve
   // at a time and only while the page is idle, so typing never waits for it. A material of more than 60 sheet
-  // pieces or 500 board pieces is skipped: each quick solve of it takes a phone too long. The tips on screen
-  // stay until this check is done, then TIPS is replaced in one go.
+  // pieces or 500 board pieces is skipped: each quick solve of it takes a phone too long. TIPS is replaced in one go
+  // when this check is done; until then a tip shows only while its part and its material's plan are as they were.
   var whenIdle = window.requestIdleCallback ? function (f) { requestIdleCallback(f, { timeout: 1000 }); } : function (f) { setTimeout(f, 0); };
   function findTips(gen) {
     var found = [];
@@ -1012,7 +1012,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (pieces > (sheet ? 60 : 500)) return;
       m.parts.forEach(function (p, pi) {
         if (!(p.qty > 0)) return;
-        (sheet ? ['len', 'wid'] : ['len']).forEach(function (dim) { if (p[dim] > 0) jobs.push({ mi: mi, pi: pi, dim: dim, base: base.cost }); });
+        (sheet ? ['len', 'wid'] : ['len']).forEach(function (dim) { if (p[dim] > 0) jobs.push({ mi: mi, pi: pi, dim: dim, base: base.cost, key: PLANS[m.id] && PLANS[m.id].key }); });
       });
     });
     // Each step tries one shave of one part: the next size down, until one saves money or none is left.
@@ -1023,7 +1023,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (v > 0) {
         var clone = Object.assign({}, m, { parts: m.parts.map(function (q, k) { return k === j.pi ? Object.assign({}, q, (function () { var o = {}; o[j.dim] = v; return o; })()) : q; }) });
         var r = solveMat(clone, true);
-        if (!r.errors.length && r.cost < j.base - 0.005) { found.push({ mi: j.mi, pid: p.id, dim: j.dim, from: p[j.dim], to: v, save: j.base - r.cost, name: p.name, mat: m.name }); d = deltas.length; }
+        if (!r.errors.length && r.cost < j.base - 0.005) { found.push({ mid: m.id, pid: p.id, dim: j.dim, from: p[j.dim], to: v, save: j.base - r.cost, key: j.key }); d = deltas.length; }
         else d++;
       } else d = deltas.length;
       if (d >= deltas.length) { i++; d = 0; }
@@ -1162,7 +1162,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       }
       if (f !== 'have') refreshChips(m);
     }
-    touch(); resolve(true);
+    touch(); resolve(true); renderTips(); // a tip for the part just edited goes at once
   }
   function refreshChips(m) { var d = document.querySelector('details.stock[data-mid="' + m.id + '"] .chips'); if (d) d.innerHTML = stockSummary(m); }
   function onBlur(e) {
@@ -1326,17 +1326,24 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var done = function () { toast('Shopping list copied'); };
     try { navigator.clipboard.writeText(t).then(done, function () { showText(t); }); } catch (e) { showText(t); }
   }
+  // The tip's material and part, while the part is the size the tip starts from and the material's plan is the one
+  // the tip was found against; an applied tip, or one for a part edited or removed since, is out of date.
+  function tipFor(t) {
+    var m = P.materials.filter(function (x) { return x.id === t.mid; })[0], p = m && m.parts.filter(function (q) { return q.id === t.pid; })[0];
+    return p && p[t.dim] === t.from && PLANS[m.id] && PLANS[m.id].key === t.key ? { m: m, p: p } : null;
+  }
   function renderTips() {
     var el = $('tips'); if (!el || STALE.plan) return; // a stale plan's tips box; the plan shows TIPS when it's drawn
-    var shown = TIPS.slice(0, 3);
+    var shown = TIPS.filter(tipFor).slice(0, 3);
     el.innerHTML = shown.map(function (t, i) {
-      return '<div class="tip"><span class="tag">TIP</span><span>Make <b>' + esc(t.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and the ' + esc(t.mat) + ' costs <b>' + esc(money(t.save)) + ' less</b>.</span><button class="btn sm sec" type="button" data-tip="' + i + '">Use ' + esc(fmt(t.to)) + '</button></div>';
+      var at = tipFor(t);
+      return '<div class="tip"><span class="tag">TIP</span><span>Make <b>' + esc(at.p.name || 'that part') + '</b> ' + fmtH(t.to) + ' instead of ' + fmtH(t.from) + (t.dim === 'wid' ? ' wide' : '') + ' and the ' + esc(at.m.name) + ' costs <b>' + esc(money(t.save)) + ' less</b>.</span><button class="btn sm sec" type="button" data-tip="' + i + '">Use ' + esc(fmt(t.to)) + '</button></div>';
     }).join('');
     el.querySelectorAll('[data-tip]').forEach(function (b) {
       var t = shown[+b.dataset.tip]; // the tip this button shows, whatever the next check finds
       b.addEventListener('click', function () {
-        var m = P.materials[t.mi], p = m && m.parts.filter(function (q) { return q.id === t.pid; })[0];
-        if (!p || Math.abs(p[t.dim] - t.from) > 1e-9) return; // that part has changed since
+        var at = tipFor(t), p = at && at.p;
+        if (!p) return; // that part has changed since (and the tip should have gone with it)
         p[t.dim] = t.to; touch(); renderList(); resolve(); toast((p.name || 'Part') + ' is now ' + fmt(t.to) + (t.dim === 'wid' ? ' wide' : ''));
       });
     });

@@ -705,6 +705,31 @@ await page.keyboard.press('Enter');
 assert.equal(await page.evaluate(() => document.activeElement.dataset.k.split('/')[1]), '0.0', 'focus after Start over');
 assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
+// A tip goes as soon as it's out of date: the frame after it's applied, or after its part is removed, the tips box
+// no longer offers it, though Kerf is still looking for new tips. Side by side on a wide screen, so the plan shows.
+{
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const RAIL_TIP = 'Make Front & back rail 47 15⁄16″ instead of 48″';
+  // The tips on screen in the frame after the next tap, once its handler has run.
+  const tipsAfterTap = async tap => {
+    await page.evaluate(() => { window.tipsAfter = null; document.addEventListener('click', () => requestAnimationFrame(() => { window.tipsAfter = [...document.querySelectorAll('#tips .tip')].map(t => t.textContent); }), { once: true, capture: true }); });
+    await tap();
+    await page.waitForFunction(() => window.tipsAfter);
+    return page.evaluate(() => window.tipsAfter);
+  };
+  await open(null);
+  await page.waitForSelector('[data-tip]', { timeout: 30000 });
+  assert.ok((await page.textContent('#tips')).includes(RAIL_TIP));
+  const applied = await tipsAfterTap(() => page.click('[data-tip]'));
+  assert.equal(await page.inputValue('.prow[data-pid] >> nth=1 >> [data-f="len"]'), '47 15/16"');
+  assert.ok(!applied.some(t => t.includes(RAIL_TIP)), 'the tip just applied is still offered: ' + applied.join(' / '));
+  await open(null);
+  await page.waitForSelector('[data-tip]', { timeout: 30000 });
+  const removed = await tipsAfterTap(() => page.click('.prow[data-pid] >> nth=1 >> [data-a="delpart"]'));
+  assert.ok(!removed.some(t => t.includes('Front & back rail')), 'a removed part’s tip is still offered: ' + removed.join(' / '));
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 // A tip does what it says even when it's tapped while Kerf is still looking for new tips after an edit (a slow
 // sheet job keeps it looking for a while). Side by side on a wide screen, so the edit and the tap are quick.
 {
