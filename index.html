@@ -766,6 +766,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var g1 = fresh(); consider((function () { var b = greedy(C0.slice(), g1, [], 0, 1); return b && settle(b, g1); })());
     var ex = exact(quick ? 3000 : 40000, quick ? EFFORT.quickExact : EFFORT.exact);
     consider(ex);
+    out.exact = !!ex; // the exact search finished, so no plan costs less
     if (!ex && (!quick || total <= 40)) consider(pilot());
     for (var it = 0; !ex && it < (quick ? 20 : 60); it++) {
       if (work > budget) break;
@@ -864,7 +865,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       }
       placeIn(best.sh, best.f, it, best.o[0], best.o[1], split, kerf);
     }
-    return { sheets: sheets, left: left };
+    return { sheets: sheets, left: left, order: list };
   }
   function freeArea(sh) { return sh.free.reduce(function (a, f) { return Math.max(a, f.w * f.h); }, 0); }
   function evalSheets(sheets) { var cost = 0; sheets.forEach(function (s) { cost += s.st.price; }); return cost; }
@@ -881,7 +882,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       for (var i = 0; i < Math.min(p.qty, 300); i++) items.push({ pi: pi, l: p.len, w: p.wid, rot: !p.grain });
     });
     if (!items.length) return out;
-    var best = null, runs = 0, cap = quick ? 40 : 999, work = { n: 0 };
+    var best = null, runs = 0, cap = quick ? 40 : 999, work = { n: 0 }, same = function () { return 0; };
     function keep(sortFn, fitFn, split, pref, list) {
       var r = packRun(list || items, stocks, kerf, sortFn, fitFn, split, pref, work);
       if (!r) return;
@@ -903,7 +904,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       });
       r.sheets = kept;
       var cost = evalSheets(r.sheets), spare = r.sheets.length ? Math.max.apply(null, r.sheets.map(freeArea)) : 0;
-      if (!best || cost < best.cost - 1e-6 || (Math.abs(cost - best.cost) < 1e-6 && (r.sheets.length < best.sheets.length || (r.sheets.length === best.sheets.length && spare > best.spare + 1e-6)))) best = { cost: cost, sheets: r.sheets, spare: spare };
+      if (!best || cost < best.cost - 1e-6 || (Math.abs(cost - best.cost) < 1e-6 && (r.sheets.length < best.sheets.length || (r.sheets.length === best.sheets.length && spare > best.spare + 1e-6)))) best = { cost: cost, sheets: r.sheets, spare: spare, run: [r.order, FITS.indexOf(fitFn), split, pref] };
+    }
+    // `cfg.replay` packs the parts once, in the order and by the rules of another plan's winning run (its `run`): the
+    // tips use it to see whether the parts as they are could already be cut that way.
+    var rp = cfg.replay;
+    if (rp) {
+      if (rp.order.length === items.length) keep(same, FITS[rp.fit], rp.split, rp.pref, rp.order.map(function (k) { return items[k]; }));
+      if (best) out.cost = best.cost; else out.errors.push({ pi: -1 });
+      return out;
     }
     var prefs = (stocks.some(function (s) { return s.price === 0; }) ? ['free', 'area', 'big'] : ['area', 'big']).concat(stocks.length > 1 ? ['cheap'] : []);
     outer: for (var pf = 0; pf < prefs.length; pf++) for (var a = 0; a < SORTS.length; a++) for (var b = 0; b < FITS.length; b++) for (var c = 0; c < SPLITS.length; c++) {
@@ -915,7 +924,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var area = items.reduce(function (a, x) { return a + x.l * x.w; }, 0);
     var floor = stocks.length === 1 ? Math.ceil(area / (stocks[0].L * stocks[0].W) - 1e-9) : 0;
     if (!quick && best && best.sheets.length > Math.max(1, floor)) {
-      var rnd = mulberry(4242), same = function () { return 0; };
+      var rnd = mulberry(4242);
       for (var it = 0; it < 4000 && work.n < EFFORT.shake && best.sheets.length > floor; it++) {
         var noise = 0.2 + 0.6 * rnd(), keyed = items.map(function (x) { return { x: x, k: x.l * x.w * (1 + noise * (rnd() - 0.5)) }; });
         keyed.sort(function (p, q) { return q.k - p.k; });
@@ -924,6 +933,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     if (!best) { out.errors.push({ pi: -1, only: onlyHave(mat, function (p) { return stocks.some(function (st) { return !isFinite(st.left) && fitsStock({ l: p.len, w: p.wid, rot: !p.grain }, st); }); }) }); return out; }
     out.cost = best.cost;
+    // The winning run, to pack the same way again: the parts' order (as places in the list of parts to place) and its rules.
+    out.run = { order: best.run[0].map(function (it) { return items.indexOf(it); }), fit: best.run[1], split: best.run[2], pref: best.run[3] };
     out.items = best.sheets.map(function (sh) {
       return { stock: sh.st.s, price: sh.st.price, L: sh.st.L, W: sh.st.W, placed: sh.placed, root: sh.root, steps: sheetSteps(sh.root), spare: sh.free.filter(function (f) { return f.w >= 3 && f.h >= 3; }) };
     }).sort(function (a, b) { return (a.stock.have ? 1 : 0) - (b.stock.have ? 1 : 0) || b.L * b.W - a.L * a.W; });
@@ -998,16 +1009,19 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     RES = { mats: mats, cost: cost, boards: boards, sheets: sheets, cuts: cuts, boardYield: stockLen ? partLen / stockLen : 0, boardKerf: stockLen ? kerfLen / stockLen : 0, sheetYield: sheetArea ? partArea / sheetArea : 0 };
     return RES;
   }
-  // Would shaving a hair off one part buy less material? Checked quietly after each change, one quick solve
-  // at a time and only while the page is idle, so typing never waits for it. A material of more than 60 sheet
-  // pieces or 500 board pieces is skipped: each quick solve of it takes a phone too long. TIPS is replaced in one go
-  // when this check is done; until then a tip shows only while its part and its material's plan are as they were.
+  // Would shaving a hair off one part buy less material? Checked quietly after each change, one solve at a time
+  // and only while the page is idle, so typing never waits for it. A material of more than 16 parts, 60 sheet pieces
+  // or 500 board pieces is skipped: each quick solve of it takes a phone too long. A tip has to beat a plan that can't
+  // be bettered without it: boards only when their plan is the cheapest possible (the exact search finished), and
+  // sheets only when the parts as they are, packed the way the shaved plan was, cost more. Each tip found by a quick
+  // solve is checked with a full one, the plan the page would show, and says what that saves. TIPS is replaced in
+  // one go when this check is done; until then a tip shows only while its part and material's plan are as they were.
   var whenIdle = window.requestIdleCallback ? function (f) { requestIdleCallback(f, { timeout: 1000 }); } : function (f) { setTimeout(f, 0); };
   function findTips(gen) {
     var found = [];
     var jobs = [], deltas = U === 'mm' ? [1, 2, 3, 5].map(function (d) { return d / 25.4; }) : [1 / 16, 1 / 8, 3 / 16, 1 / 4];
     P.materials.forEach(function (m, mi) {
-      var base = RES.mats[mi], sheet = m.kind === 'sheet'; if (!base || !base.items.length || m.parts.length > 16) return;
+      var base = RES.mats[mi], sheet = m.kind === 'sheet'; if (!base || !base.items.length || m.parts.length > 16 || (!sheet && !base.exact)) return;
       var pieces = m.parts.reduce(function (a, p) { return a + (p.qty > 0 ? Math.min(p.qty, sheet ? 300 : 500) : 0); }, 0);
       if (pieces > (sheet ? 60 : 500)) return;
       m.parts.forEach(function (p, pi) {
@@ -1015,18 +1029,32 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         (sheet ? ['len', 'wid'] : ['len']).forEach(function (dim) { if (p[dim] > 0) jobs.push({ mi: mi, pi: pi, dim: dim, base: base.cost, key: PLANS[m.id] && PLANS[m.id].key }); });
       });
     });
-    // Each step tries one shave of one part: the next size down, until one saves money or none is left.
-    var i = 0, d = 0;
+    // Whether the sheet parts of `m`, as they are, packed in the order and by the rules that won plan `r`, cost no more.
+    function replays(m, r) {
+      if (m.kind !== 'sheet' || !r.run) return false;
+      var again = solveSheets(m, Object.assign(cfg(), { replay: r.run }));
+      return !again.errors.length && again.cost <= r.cost + 0.005;
+    }
+    // Each step tries one shave of one part with a quick solve: the next size down, until one saves money or none is
+    // left. One that does gets a step of its own for the full solve that confirms it.
+    var i = 0, d = 0, cand = null;
     function step() {
       if (gen !== GEN) return;
-      var j = jobs[i], m = j && P.materials[j.mi], p = m && m.parts[j.pi], v = p ? p[j.dim] - deltas[d] : 0;
-      if (v > 0) {
-        var clone = Object.assign({}, m, { parts: m.parts.map(function (q, k) { return k === j.pi ? Object.assign({}, q, (function () { var o = {}; o[j.dim] = v; return o; })()) : q; }) });
-        var r = solveMat(clone, true);
-        if (!r.errors.length && r.cost < j.base - 0.005) { found.push({ mid: m.id, pid: p.id, dim: j.dim, from: p[j.dim], to: v, save: j.base - r.cost, key: j.key }); d = deltas.length; }
-        else d++;
-      } else d = deltas.length;
-      if (d >= deltas.length) { i++; d = 0; }
+      var j = jobs[i], m = j && P.materials[j.mi], p = m && m.parts[j.pi];
+      if (cand) {
+        var full = solveMat(cand.clone);
+        if (!full.errors.length && full.cost < j.base - 0.005 && !replays(m, full) && planInputs(m) === j.key) found.push({ mid: m.id, pid: p.id, dim: j.dim, from: p[j.dim], to: cand.to, save: j.base - full.cost, key: j.key });
+        cand = null; d = deltas.length;
+      } else {
+        var v = p ? p[j.dim] - deltas[d] : 0;
+        if (v > 0) {
+          var clone = Object.assign({}, m, { parts: m.parts.map(function (q, k) { return k === j.pi ? Object.assign({}, q, (function () { var o = {}; o[j.dim] = v; return o; })()) : q; }) });
+          var r = solveMat(clone, true);
+          if (!r.errors.length && r.cost < j.base - 0.005) { if (replays(m, r)) d = deltas.length; else cand = { clone: clone, to: v }; }
+          else d++;
+        } else d = deltas.length;
+      }
+      if (!cand && d >= deltas.length) { i++; d = 0; }
       if (i < jobs.length) whenIdle(step);
       else { TIPS = found.sort(function (a, b) { return b.save - a.save; }); renderTips(); }
     }

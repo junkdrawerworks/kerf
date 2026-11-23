@@ -41,6 +41,15 @@ function planner() {
   ].join('\n'))();
 }
 
+// The page's tips search, run to its end: each idle step at once, in turn. Returns the plan's cost and the tips found.
+function tipper() {
+  return new Function([
+    ...SOLVER, 'var P = null, RES = null, TIPS = [], GEN = 0, queue = [];', line('var PLANS = '), ...['lastIsLeft', 'cfg', 'solveMat', 'planInputs', 'solveAll', 'findTips'].map(fn),
+    'function whenIdle(f) { queue.push(f); } function renderTips() {}',
+    'return function (p) { P = p; U = p.units; solveAll(); GEN++; TIPS = []; findTips(GEN); while (queue.length) queue.shift()(); return { res: RES, tips: TIPS }; };'
+  ].join('\n'))();
+}
+
 let failed = 0;
 function check(ok, what) { if (!ok) { failed++; console.log('  FAIL ' + what); } }
 function rng(seed) { let a = seed; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -214,6 +223,31 @@ console.log('sheets: random jobs, every layout checked');
   console.log('  ' + n + ' jobs');
 }
 
+console.log('tips that are worth taking');
+{
+  const proj = (kind, stock, parts) => ({ name: 'T', units: 'in', kerf: 0.125, trim: 0, keep: 12, cur: '$', materials: [{ id: 'm', kind, name: kind, note: '',
+    stock: stock.map(([len, a, b], i) => kind === 'sheet' ? { id: 's' + i, len, wid: a, price: b, have: 0 } : { id: 's' + i, len, price: a, have: 0 }),
+    parts: parts.map(([name, qty, len, wid, grain], i) => kind === 'sheet' ? { id: 'p' + i, name, qty, len, wid, grain: grain !== false } : { id: 'p' + i, name, qty, len }) }] });
+  // What a tip promises against what using it does: the plan for the part at its new size, solved afresh.
+  const applied = (p, t) => { const q = JSON.parse(JSON.stringify(p)); q.materials[0].parts.find(x => x.id === t.pid)[t.dim] = t.to; return tipper()(q).res.cost; };
+  // The example's 2×4s: a rail at 47 15/16" fills an 8' board two at a time, $4.12 less.
+  let p = proj('board', LUMBER, [['Leg', 4, 72], ['Front & back rail', 8, 48], ['Side rail', 8, 21]]), got = tipper()(p);
+  check(got.tips.length === 1 && got.tips[0].pid === 'p1' && got.tips[0].to === 47.9375 && Math.abs(got.tips[0].save - 4.12) < 0.005, 'the example’s tip: ' + JSON.stringify(got.tips));
+  // The workbench: 40 pieces in 11 lengths, too many for the exact search. Kerf's plan is $67.52, and the parts as they
+  // are fit 14 8' boards and one 10' for $66.30, so shaving one never needed to promise $66.72.
+  p = proj('board', LUMBER, [['Leg', 4, 33.25], ['Long apron', 2, 72], ['Short apron', 2, 24.25], ['Top frame long', 2, 72], ['Top frame short', 2, 27.25], ['Top joist', 8, 24.25],
+    ['Shelf long', 2, 65], ['Shelf short', 4, 24.25], ['Shelf joist', 6, 24.25], ['Leg doubler', 4, 30.75], ['Brace', 4, 15.5]]);
+  got = tipper()(p);
+  const promised = got.tips.map(t => got.res.cost - t.save);
+  check(promised.every(c => c < 66.30 - 0.005), `the workbench: a tip promises $${promised.map(c => c.toFixed(2)).join(', $')}, which the parts as they are can cost ($66.30)`);
+  // Two 24" seats from the ¾ plywood sizes, free to turn: either one shaved a sixteenth fits a half sheet, $21 less. The
+  // wide one said $8, what a quick solve found; using it saved $21.
+  p = proj('sheet', [[96, 48, 58], [48, 48, 34], [48, 24, 21]], [['Seat', 2, 24, 24, false]]);
+  got = tipper()(p);
+  check(got.tips.length === 2, 'the seats: ' + got.tips.length + ' tips');
+  for (const t of got.tips) check(Math.abs(t.save - (got.res.cost - applied(p, t))) < 0.005, `the seats: the ${t.dim} tip says $${t.save.toFixed(2)} less, using it saves $${(got.res.cost - applied(p, t)).toFixed(2)}`);
+}
+
 console.log('the same plan on a slow or busy device');
 {
   // Each search stops after a fixed amount of work, not time, so a clock that crawls (as on a slow phone, or a busy
@@ -260,7 +294,7 @@ console.log('plans kept between edits');
   const own = (yes, id) => (yes ? id : 'another copy of ' + id);
   const shown = (res, proj) => JSON.stringify([res.cost, res.boards, res.sheets, res.cuts, res.boardYield, res.boardKerf, res.sheetYield, res.mats.map((r, mi) => {
     const m = proj.materials[mi];
-    return [own(r.mat === m, m.id), r.cost, r.errors.map(e => [e.pi, e.max, e.only, e.pi < 0 || own(e.part === m.parts[e.pi], m.parts[e.pi].id)]),
+    return [own(r.mat === m, m.id), r.cost, r.exact, r.run, r.errors.map(e => [e.pi, e.max, e.only, e.pi < 0 || own(e.part === m.parts[e.pi], m.parts[e.pi].id)]),
       r.items.map(it => [own(m.stock.includes(it.stock), it.stock.id), it.price, it.cap, it.trim, it.need, it.offcut, it.pieces, it.L, it.W, it.placed, it.spare,
         it.steps && it.steps.map(s => [s.type, s.at, s.on, s.line, s.gives && [s.gives.it.pi, s.gives.l, s.gives.w, s.gives.rot]])])];
   })]);

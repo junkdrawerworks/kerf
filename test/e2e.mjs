@@ -767,11 +767,11 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 }
 
 // An edit plans again only the materials it changes. In a copy of the page that notes each material it plans (a full
-// solve; the quick ones that look for tips aren't plans), a part's count or length plans only its own material, and
+// solve of the material itself; the tips search's solves of shaved copies aren't plans), a part's count or length plans only its own material, and
 // renaming a part plans nothing, yet the plan, the steps at the saw and the cut list's notes all use the new name.
 // A reload plans everything afresh and finds the same plan, to the last cut.
 {
-  const counted = kerfSource.replace(/function solve(Boards|Sheets)\(mat, cfg, quick\) \{/g, '$& if (!quick) planned.push(mat.name);')
+  const counted = kerfSource.replace(/function solve(Boards|Sheets)\(mat, cfg, quick\) \{/g, '$& if (!quick && !cfg.replay && P.materials.indexOf(mat) >= 0) planned.push(mat.name);')
     .replace('<script>(function () {', '<script>var planned = [], solves = 0;</script>$&').replace('var go = function () { GEN++;', '$& solves++;');
   assert.equal(counted.split('planned.push(').length, 3, 'the solvers aren’t where this test looks for them');
   assert.ok(counted.includes('GEN++; solves++;'), 'the project solve isn’t where this test looks for it');
