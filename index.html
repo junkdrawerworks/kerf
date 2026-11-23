@@ -1790,6 +1790,56 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var rows = document.querySelectorAll('[data-mid="' + m.id + '"] .prow[data-pid]'), r = rows[rows.length - 1];
     if (r) (r.querySelector('[data-f="' + (focusField === 'len' || focusField === 'wid' || focusField === 'qty' ? focusField : 'pname') + '"]') || r.querySelector('input')).focus();
   }
+  // Rows pasted into a part's name from a spreadsheet (Sheets, Excel, Numbers: a tab between cells, a row to a line)
+  // come in as parts: name, count, length, and width for a sheet or a board with a width. A first row that names its
+  // columns (Part, Qty, Length, Width, in any order) says which is which, and with none a count first is taken as one.
+  // They go after the part pasted into, or in its place while it's blank, and a toast's Undo takes them out again.
+  // One line with no tab is a name, pasted as usual.
+  function pastedRows(t, sheet) {
+    var cell = function (c) { c = c.trim(); return /^"[\s\S]*"$/.test(c) ? c.slice(1, -1).replace(/""/g, '"').trim() : c; };
+    var rows = String(t).replace(/\r\n?/g, '\n').split('\n').map(function (r) { return r.split('\t').map(cell); }).filter(function (r) { return r.some(Boolean); });
+    if (!rows.length || (rows.length === 1 && rows[0].length === 1)) return null;
+    var number = function (c) { return /^\d/.test(c) && (parseInt(c, 10) > 0 || parseLen(c) > 0); };
+    var NAMES = [['qty', /^(qty|quantity|count|number|no\b|#|pcs|pieces|how many)/], ['len', /^(length|len\b|l\b|long)/], ['wid', /^(width|wid\b|w\b|wide)/], ['name', /(part|name|item|desc|piece|label|what)/]];
+    var head = rows[0].map(function (c) { var n = c.toLowerCase().replace(/[(\[].*$/, '').trim(), f = NAMES.filter(function (x) { return x[1].test(n); })[0]; return f ? f[0] : null; });
+    var cols;
+    if (head.some(Boolean) && !rows[0].some(number)) { // a row naming its columns
+      cols = {}; head.forEach(function (f, i) { if (f && !(f in cols)) cols[f] = i; }); rows.shift();
+      if (!('name' in cols)) { var free = head.indexOf(null); if (free >= 0) cols.name = free; }
+    } else {
+      var r0 = rows[0], countFirst = r0.length > 1 && /^\d+$/.test(r0[0]) && !number(r0[1]);
+      cols = countFirst ? { qty: 0, name: 1, len: 2, wid: 3 } : { name: 0, qty: 1, len: 2, wid: 3 };
+    }
+    return rows.map(function (r) {
+      var get = function (f) { return f in cols ? r[cols[f]] || '' : ''; };
+      var q = get('qty'), qty = q ? parseInt(q, 10) : 1, len = parseLen(get('len')), wid = parseLen(get('wid'));
+      return { name: get('name').slice(0, LIMITS.name), qty: qty > 0 ? Math.min(qty, MAXQTY) : 0, len: len > 0 ? len : 0, wid: wid > 0 ? wid : 0 };
+    });
+  }
+  function onPaste(e) {
+    var el = e.target; if (!el.dataset || el.dataset.f !== 'pname') return;
+    var m = findMat(el), p = m && findPart(m, el), data = e.clipboardData || window.clipboardData, t = data && data.getData('text');
+    if (!p || !t) return;
+    var sheet = m.kind === 'sheet', rows = pastedRows(t, sheet); if (!rows) return;
+    e.preventDefault();
+    var room = LIMITS.parts - m.parts.length, at = m.parts.indexOf(p), blank = !p.name.trim() && !(p.len > 0) && !(p.wid > 0) ? p : null;
+    if (blank) room++;
+    var over = Math.max(0, rows.length - room), grain = p.grain != null ? p.grain : true;
+    var added = rows.slice(0, Math.max(0, room)).map(function (r) { return part(r.name, r.qty, r.len, sheet ? r.wid : m.wid > 0 && r.wid > 0 ? r.wid : null, sheet ? grain : null); });
+    if (!added.length) { toast(m.name + ' has ' + LIMITS.parts + ' parts, as many as Kerf takes'); return; }
+    var pid = P.id, mid = m.id, ids = added.map(function (x) { return x.id; });
+    m.parts.splice.apply(m.parts, [blank ? at : at + 1, blank ? 1 : 0].concat(added));
+    touch(); renderList(); resolve();
+    var last = document.querySelector('[data-mid="' + mid + '"] .prow[data-pid="' + added[added.length - 1].id + '"] [data-f="pname"]'); if (last) last.focus();
+    toast('Added ' + plural(added.length, 'part') + (over ? ' (' + over + ' more left out: ' + LIMITS.parts + ' is as many as Kerf takes)' : '') + (CLEARED ? ' and cleared ' + plural(CLEARED, 'ticked cut') : ''), { label: 'Undo', run: function (kb) {
+      var q = DB.projects[pid], mm = q && q.materials.filter(function (x) { return x.id === mid; })[0]; if (!mm) return;
+      var put = mm.parts.findIndex(function (x) { return x.id === ids[0]; });
+      mm.parts = mm.parts.filter(function (x) { return ids.indexOf(x.id) < 0; });
+      if (blank && !mm.parts.some(function (x) { return x.id === blank.id; })) mm.parts.splice(put >= 0 ? Math.min(put, mm.parts.length) : mm.parts.length, 0, blank);
+      touch(q);
+      if (q === P) { renderList(); resolve(); if (kb) focusAfter(['[data-mid="' + mid + '"] [data-a="addpart"]'], kb); }
+    } });
+  }
   // An action that draws the cut list again would leave focus on nothing, and the next Tab at the top of the page: focus
   // goes instead to the first of `sels` (selectors) that's on screen. A field only gets it from the keyboard (`kb`),
   // since a tap that focused one would bring up a phone's keyboard, and then the page doesn't scroll to it either.
@@ -3021,6 +3071,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   $('mats').addEventListener('focusin', onFocus);
   $('mats').addEventListener('keydown', onKey);
   $('mats').addEventListener('click', onClick);
+  $('mats').addEventListener('paste', onPaste);
   $('pname').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); this.blur(); } });
   $('pname').addEventListener('input', function () { P.name = this.value; $('pTitle').textContent = P.name || 'Kerf'; if (P.example) { P.example = false; renderHead(); $('pname').focus(); } touch(); });
   // The project's notes (hardware, glue-ups, finish) aren't anything a plan is worked out from, so they only save.

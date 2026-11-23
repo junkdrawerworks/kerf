@@ -1067,6 +1067,41 @@ await page.click('#stx');
   }
 }
 
+// Rows pasted into a part's name from a spreadsheet (a tab between cells) come in as parts: name, count, length and
+// width, after the part pasted into, or in its place while it's blank. A first row naming the columns says which is
+// which. The toast's Undo takes them out again, and puts back the blank part. One plain line is pasted as a name.
+{
+  const pasteInto = (sel, text) => page.evaluate(([sel, t]) => {
+    document.getElementById('toast').classList.remove('show');
+    const data = new DataTransfer(); data.setData('text/plain', t);
+    const el = document.querySelector(sel); el.focus();
+    return el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, [sel, text]);
+  const rows = m => page.$$eval(`#mats .mat:nth-of-type(${m}) .prow[data-pid]`, rs => rs.map(r => [...r.querySelectorAll('input')].filter(i => i.getClientRects().length).map(i => i.value).join(' / ')));
+  await open(saved(project('Cabinet', [
+    board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 4, len: 30 }]),
+    sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: '', qty: 1, len: 0, wid: 0, grain: false }])])));
+  await view('list');
+  // Into a board part that has a name: after it, with the count first as some sheets have it.
+  await pasteInto('#mats .mat:nth-of-type(1) .prow[data-pid] [data-f="pname"]', '2\tRail\t21 1/2\n3\tStretcher\t18-3/4"\n');
+  assert.deepEqual(await rows(1), ['Leg / 4 / 30"', 'Rail / 2 / 21 1/2"', 'Stretcher / 3 / 18 3/4"'], 'rows pasted into a board part');
+  assert.equal(await page.textContent('#toast'), 'Added 2 partsUndo');
+  assert.equal(await page.evaluate(() => document.activeElement.value), 'Stretcher', 'focus isn’t on the last part pasted');
+  // Into the blank sheet part, with a row naming the columns in another order: it takes the blank part's place.
+  await pasteInto('#mats .mat:nth-of-type(2) .prow[data-pid] [data-f="pname"]', 'Width (in)\tLength (in)\tQty\tPart\r\n11.25\t34.5\t2\tSide\r\n11\t"33,0"\t\tShelf\r\n');
+  assert.deepEqual(await rows(2), ['Side / 2 / 34 1/2" / 11 1/4"', 'Shelf / 1 / 33" / 11"'], 'rows pasted into a blank sheet part');
+  await page.waitForFunction(() => (localStorage.getItem('kerf.v1') || '').includes('"Shelf"'), null, { timeout: 5000 });
+  const ply = (await stored()).projects[(await stored()).current].materials[1].parts;
+  assert.deepEqual(ply.map(p => [p.name, p.qty, p.len, p.wid, p.grain]), [['Side', 2, 34.5, 11.25, false], ['Shelf', 1, 33, 11, false]], 'pasted sheet parts take the grain of the part pasted into');
+  assert.match(await page.textContent('.total'), /^\$/);
+  await page.click('#toast button');
+  assert.deepEqual(await rows(2), [' / 1 /  / '], 'Undo didn’t put back the blank part');
+  assert.deepEqual(await rows(1), ['Leg / 4 / 30"', 'Rail / 2 / 21 1/2"', 'Stretcher / 3 / 18 3/4"'], 'Undo took out another material’s parts');
+  // A single line with no tab is a name, pasted as usual.
+  assert.equal(await pasteInto('#mats .mat:nth-of-type(1) .prow[data-pid] [data-f="pname"]', 'Long leg'), true, 'a name pasted as a name was taken over');
+  assert.equal((await rows(1)).length, 3);
+}
+
 // Enter goes along a part, name, count, length (and width), then on to the next part's name; from the last part it
 // adds one only once that part has its size, so it never leaves two blank parts.
 {
