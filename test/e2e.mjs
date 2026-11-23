@@ -537,6 +537,8 @@ assert.deepEqual(await page.$$eval('#mats .mat-name', is => is.map(i => i.value)
   for (let i = 0; i < 4; i++) await page.keyboard.press('Enter');
   assert.equal(await rows(), 3, 'Enter on a blank part added a second blank part');
   assert.deepEqual(await page.$$eval('.mat:not(.sheetmat) .prow[data-pid]', rs => rs.map(r => [...r.querySelectorAll('input')].map(i => i.value).join('|'))), ['Leg|4|30"', 'Apron|2|20"', '|1|']);
+  // A blank part's length (and a sheet part's width) shows an example of how to type it.
+  assert.deepEqual(await page.$$eval('.prow[data-pid] input', is => [...new Set(is.map(i => i.dataset.f + ':' + i.placeholder))]), ['pname:Part', 'qty:', 'len:35 3/4', 'wid:16'], 'a length field’s example is broken');
   // In the sizes to buy, Enter goes on to the next field.
   await page.click('.sheetmat details.stock summary');
   await page.locator('.sheetmat .srow[data-sid] input[data-f="slen"]').focus();
@@ -905,6 +907,7 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   await view('list');
   const fields = () => page.$$eval('#mats input.mono:not([data-f="qty"]):not([data-f="price"])', is => is.map(i => i.dataset.f + ' ' + i.value + ' ' + i.inputMode));
   assert.deepEqual(await fields(), ['len 1233.5 decimal', 'slen 2400 decimal', 'len 2033.5 decimal', 'wid 1210 decimal', 'slen 2440 decimal', 'swid 1220 decimal']);
+  assert.deepEqual(await page.$$eval('.prow[data-pid] input[data-f="len"], .prow[data-pid] input[data-f="wid"]', is => is.map(i => i.placeholder)), ['900', '900', '400'], 'an mm length field’s example is broken');
   const len = page.locator('.prow[data-pid] input[data-f="len"]').first();
   await len.fill('1250');
   await len.blur();
