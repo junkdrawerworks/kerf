@@ -9,7 +9,7 @@
   &nbsp;
   <img src="docs/phone-plan.png" alt="The plan: $100.64 to buy for 8 boards and 1 sheet in 27 cuts, a tip that making the front and back rails 47 15/16 inches instead of 48 makes the 2×4s $4.12 cheaper, and the shopping list" width="250">
   &nbsp;
-  <img src="docs/phone-saw.png" alt="At the saw, 4 of 27 cuts done: board 1, a 10-foot 2×4, with its three cuts ticked off and a 2 5/8 inch offcut left, and the first cut on board 2 ticked" width="250">
+  <img src="docs/phone-saw.png" alt="At the saw, 4 of 27 cuts done: board 1, a 10-foot 2×4, with its three cuts ticked off and a 2 5/8 inch offcut left, and the first cut on board 2 ticked, with the second marked as the next cut" width="250">
 </p>
 
 ## How it works
