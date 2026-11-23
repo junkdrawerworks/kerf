@@ -1366,6 +1366,40 @@ await page.keyboard.press('Enter');
 assert.equal(await page.evaluate(() => document.activeElement.dataset.k.split('/')[1]), '0.0', 'focus after Start over');
 assert.match(await page.textContent('.saw-bar b'), /^0 of /);
 
+// The last tick of the job says so: the bar reads "All 2 cuts done" in green, with Start over after it, and a toast
+// says the project is ready to put together. That toast comes from the tick, so a reload of a finished job doesn't
+// show it again, and unticking and ticking the last cut does.
+{
+  await open(saved(project('Bench', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 3, len: 30 }])])));
+  await view('saw');
+  const toastSays = () => page.evaluate(() => { const t = document.getElementById('toast'); return t.classList.contains('show') ? t.textContent : ''; });
+  const hush = () => page.evaluate(() => document.getElementById('toast').classList.remove('show'));
+  const done = page.locator('#sawOut .cut[data-k]');
+  assert.equal(await done.count(), 3);
+  await done.nth(0).click();
+  await done.nth(1).click();
+  assert.equal(await toastSays(), '', 'a toast before the job is done');
+  await done.nth(2).click();
+  assert.equal(await toastSays(), 'That’s every cut. Bench is ready to put together.');
+  assert.deepEqual(await page.$eval('.saw-bar b', b => [b.textContent, getComputedStyle(b).color === getComputedStyle(document.querySelector('.cut[aria-checked="true"] .box')).backgroundColor, b.nextElementSibling.id]),
+    ['All 3 cuts done', true, 'sawReset'], 'the bar doesn’t say the job is done');
+  await page.waitForTimeout(600);
+  await page.reload();
+  await page.waitForSelector('#sawOut .cut[data-k]');
+  await page.waitForTimeout(300);
+  assert.equal(await page.textContent('.saw-bar b'), 'All 3 cuts done');
+  assert.equal(await toastSays(), '', 'a reload of a finished job toasts');
+  await done.nth(2).click();
+  assert.equal(await page.textContent('.saw-bar b'), '2 of 3 cuts');
+  await hush();
+  await done.nth(2).click();
+  assert.equal(await toastSays(), 'That’s every cut. Bench is ready to put together.', 'ticking the last cut again doesn’t say so');
+  // A long material name wraps beside "Board 1"; it used to split it into "Board" over "1".
+  await open(saved(project('Bench', [board('1×6 board — select pine, kiln dried, from the big orange store', [{ len: 96, price: 8.28 }], [{ name: 'Slat', qty: 2, len: 46 }])])));
+  await view('saw');
+  assert.ok(await page.$$eval('#sawOut .stk-hd b', bs => bs.every(b => b.getClientRects().length === 1 && b.getBoundingClientRect().height < 26)), 'a board’s name splits over two lines');
+}
+
 // At the saw on a short screen (a phone on its side, or 200% zoom), each board's heading stays in sight under the top
 // bar while its cuts scroll by, and Shift+Tab up the list never leaves the focused cut under either. Their cards don't
 // clip, so a focus ring shows whole.
