@@ -22,7 +22,7 @@ const SOLVER = [
   "var U = 'in', CUR = '$';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
   ...['esc', 'plural', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'sayLen', 'parseLen', 'money', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'lastIsLeft', 'orientations',
-    'newSheet', 'placeIn', 'fitsStock', 'packRun', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
+    'newSheet', 'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
 ];
 const K = new Function([...SOLVER, 'return { fmt: fmt, parseLen: parseLen, solveBoards: solveBoards, solveSheets: solveSheets, units: function (u) { U = u; } };'].join('\n'))();
 // The page without its DOM: the plans it keeps between edits, the saw's checklist and its tick keys, the tips search
@@ -156,7 +156,7 @@ console.log('sheets: random jobs, the steps replayed at the saw');
 {
   // Parts that tile a sheet exactly, full-length strips and the strip a rip leaves, inches or millimetres.
   const R = rng(37), pick = a => a[Math.floor(R() * a.length)];
-  let n = 0, steps = 0, left = 0;
+  let n = 0, steps = 0, left = 0, strips = 0;
   for (let t = 0; t < 100; t++) {
     const metric = R() < 0.3;
     const kerf = metric ? pick([3, 2.5, 4]) / 25.4 : pick([0.125, 0.09375, 0.25, 0]);
@@ -178,6 +178,7 @@ console.log('sheets: random jobs, the steps replayed at the saw');
     K.units('in');
     if (r.errors.some(e => e.pi === -1)) continue;
     n++;
+    if (r.run && r.run.strip) strips++;
     r.items.forEach((sh, si) => {
       const id = `sheet job ${t}, sheet ${si + 1} (${metric ? 'mm' : 'in'})`;
       // Saw it as the steps say, a piece at a time: each cut runs edge to edge across one piece, at the distance it
@@ -214,7 +215,7 @@ console.log('sheets: random jobs, the steps replayed at the saw');
       for (const f of sh.spare) check(pieces.some(p => Math.abs(p.x - f.x) < E && Math.abs(p.y - f.y) < E && Math.abs(p.w - f.w) < E && Math.abs(p.h - f.h) < E), 'labelled offcuts are real', `${id}: offcut ${f.w}×${f.h} at ${f.x},${f.y}`);
     });
   }
-  console.log(`  ${n} jobs, ${steps} cuts replayed, ${left} parts named as what a cut leaves`);
+  console.log(`  ${n} jobs (${strips} planned as strip layouts), ${steps} cuts replayed, ${left} parts named as what a cut leaves`);
 }
 
 console.log('a long run of edits: plans, tips and ticks');

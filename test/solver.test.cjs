@@ -23,7 +23,7 @@ const SOLVER = [
   "var U = 'in';",
   line('var VULGAR = '), line('var EFFORT = '), line('var SPLITS = '), line('var MINR = '), list('SORTS'), list('FITS'),
   ...['esc', 'sixteenths', 'mmOf', 'fmt', 'frac', 'fmtH', 'parseLen', 'mulberry', 'bestFill', 'onlyHave', 'solveBoards', 'orientations', 'newSheet',
-    'placeIn', 'fitsStock', 'packRun', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
+    'placeIn', 'fitsStock', 'packRun', 'stripSheet', 'stripRun', 'freeArea', 'evalSheets', 'sheetSteps', 'solveSheets'].map(fn),
 ];
 const K = new Function([
   ...SOLVER,
@@ -257,6 +257,33 @@ console.log('boards: more than 500 of one part');
   const n = r.items.reduce((a, b) => a + b.pieces.length, 0);
   check(n === 500, '600 pegs: planned ' + n + ', want 500');
   check(r.errors.length === 1 && r.errors[0].pi === 0 && r.errors[0].max === 500, '600 pegs: the plan doesn’t say it’s short: ' + JSON.stringify(r.errors.map(e => ({ pi: e.pi, max: e.max }))));
+}
+
+console.log('sheets: strip layouts, as a shop cuts plywood');
+{
+  // Two jobs the free-rectangle packing alone bought more for: three 78 3/4 × 15 shelves and a few small parts took a
+  // 4×8 and a half sheet ($79) where ripping three 15" strips and cutting the small parts from the end takes one 4×8;
+  // and a job of full sheets only took six where strips fit it on five. Each plan is a strip layout, every part on
+  // its sheet at its size, none overlapping once the kerf is counted, and packing that way again costs the same.
+  const P34 = [{ len: 96, wid: 48, price: 58, have: 0 }, { len: 48, wid: 48, price: 34, have: 0 }, { len: 48, wid: 24, price: 21, have: 0 }];
+  const parts = l => l.map(([qty, len, wid, grain]) => ({ qty, len, wid, grain }));
+  const jobs = [
+    ['shelves and small parts', 58, 79, P34, parts([[3, 15.125, 8.625, true], [1, 19.5, 13.875, false], [3, 78.75, 15, false]])],
+    ['full sheets only', 290, 348, [P34[0]], parts([[5, 33.5, 10.375, false], [4, 33.125, 12, true], [2, 33.375, 16.625, false], [2, 19.875, 15.625, false], [2, 71.25, 22.5, true], [5, 80.375, 20.25, true], [3, 29.875, 20.375, true]])],
+  ];
+  for (const [what, want, was, stock, ps] of jobs) {
+    const kerf = 0.125, r = K.solveSheets({ stock, parts: ps }, { kerf });
+    check(Math.abs(r.cost - want) < 1e-6 && r.run && r.run.strip, `${what}: $${r.cost} (${JSON.stringify(r.run && Object.assign({}, r.run, { order: undefined }))}), want $${want} from a strip layout (it was $${was})`);
+    r.items.forEach((sh, si) => sh.placed.forEach((p, i) => {
+      const part = ps[p.pi];
+      check(p.x > -1e-9 && p.y > -1e-9 && p.x + p.l <= sh.L + 1e-9 && p.y + p.w <= sh.W + 1e-9, `${what}, sheet ${si + 1}: part off the sheet`);
+      check((Math.abs(p.l - part.len) < 1e-9 && Math.abs(p.w - part.wid) < 1e-9) || (!part.grain && Math.abs(p.l - part.wid) < 1e-9 && Math.abs(p.w - part.len) < 1e-9), `${what}: a part at the wrong size or turned against its grain`);
+      sh.placed.forEach((q, j) => { if (j > i) check(p.x + p.l + kerf <= q.x + 1e-9 || q.x + q.l + kerf <= p.x + 1e-9 || p.y + p.w + kerf <= q.y + 1e-9 || q.y + q.w + kerf <= p.y + 1e-9, `${what}, sheet ${si + 1}: parts overlap`); });
+    }));
+    check(r.items.reduce((a, sh) => a + sh.placed.length, 0) === ps.reduce((a, p) => a + p.qty, 0), `${what}: not every part placed`);
+    const again = K.solveSheets({ stock, parts: ps }, { kerf, replay: r.run });
+    check(Math.abs(again.cost - r.cost) < 1e-6 && !again.errors.length, `${what}: packed that way again costs $${again.cost}`);
+  }
 }
 
 console.log('sheets: shuffling long enough to find the cheaper plan');

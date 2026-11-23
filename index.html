@@ -761,7 +761,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // quarters) on a phone five times slower, and a quick solve of it (for tips) after up to a sixth. Shuffling
   // sheet orders gets the most: with half as much, 1 in 10 random ¾ plywood jobs cost more than the old 120 ms
   // limit found on a laptop; with this much, 1 or 2 in 100 still do.
-  var EFFORT = { exact: 150000, boards: 400000, quickExact: 30000, quickBoards: 80000, shake: 1200000 };
+  var EFFORT = { exact: 150000, boards: 400000, quickExact: 30000, quickBoards: 80000, shake: 1200000, strip: 150000, quickStrip: 40000 };
   function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   // The fullest pattern of pieces that fits `cap` (kerf between pieces), as counts per distinct length.
   // With `lead`, the pattern must include the longest piece still to cut.
@@ -969,7 +969,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function newSheet(st) { var root = { x: 0, y: 0, w: st.L, h: st.W }; return { st: st, root: root, free: [root], placed: [] }; }
   function placeIn(sheet, f, it, l, w, split, kerf) {
     var rw = f.w - l, bh = f.h - w, first;
-    if (split === 'short') first = rw <= bh ? 'rip' : 'cross';
+    if (split === 'rip' || split === 'cross') first = split; // a strip layout says which cut comes first
+    else if (split === 'short') first = rw <= bh ? 'rip' : 'cross';
     else if (split === 'long') first = rw > bh ? 'rip' : 'cross';
     else {
       var ripA = Math.max(f.w * (bh - kerf), (rw - kerf) * w), crossA = Math.max(f.h * (rw - kerf), (bh - kerf) * l);
@@ -1023,6 +1024,60 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     }
     return { sheets: sheets, left: left, order: list };
   }
+  // A strip layout, the way a shop breaks down a sheet: rip it into strips (or, `cross`, crosscut it into panels), crosscut
+  // each strip into stacks, and rip each stack into parts. A strip is as wide as the first part that opens it, turned to
+  // its narrowest (or, `wide`, its widest); each stack takes the next part that fits the strip, then any parts under it
+  // that fit. It's built with placeIn, so its steps come out of sheetSteps as any layout's do. `pool` is the parts not
+  // yet placed, in the order to try them; returns the sheet, which of them it took and their area. `work.n` counts steps,
+  // and once it passes `work.max` the sheet stops taking parts.
+  function stripSheet(pool, st, cross, wide, kerf, work) {
+    var sheet = newSheet(st), A = cross ? 'h' : 'w', B = cross ? 'w' : 'h', along = cross ? 'b' : 'r', across = cross ? 'r' : 'b';
+    var taken = new Uint8Array(pool.length), area = 0, n = 0;
+    // a part's ways round as [along the strip, across it]
+    function ab(it) { return orientations(it).map(function (o) { return cross ? [o[1], o[0]] : o; }); }
+    function fits(f, i) { work.n++; return taken[i] ? [] : ab(pool[i]).filter(function (o) { return o[0] <= f[A] + 1e-9 && o[1] <= f[B] + 1e-9; }); }
+    // place part i in space f, its first cut `cut`; returns the spaces left to its right (r) and below it (b)
+    function put(f, i, o, cut) {
+      var l = cross ? o[1] : o[0], w = cross ? o[0] : o[1], k = { r: null, b: null };
+      placeIn(sheet, f, pool[i], l, w, cut, kerf); taken[i] = 1; area += l * w; n++;
+      f.kids.forEach(function (c) { if (!c.dust) k[c.x > f.x + 1e-9 ? 'r' : 'b'] = c; });
+      return k;
+    }
+    function first(f, by) { if (work.n > work.max) return null; for (var i = 0; i < pool.length; i++) { var os = fits(f, i); if (os.length) return { i: i, o: os.sort(by)[0] }; } return null; }
+    var S = sheet.root, narrow = function (p, q) { return wide ? q[1] - p[1] : p[1] - q[1]; };
+    while (S) {
+      var open = first(S, narrow); if (!open) break;
+      var k = put(S, open.i, open.o, cross ? 'cross' : 'rip'), T = k[along]; S = k[across];
+      while (T) {
+        var stack = first(T, function (p, q) { return q[1] - p[1]; }); if (!stack) break;
+        var k2 = put(T, stack.i, stack.o, cross ? 'rip' : 'cross'), D = k2[across]; T = k2[along];
+        for (var more; D && (more = first(D, function (p, q) { return q[0] * q[1] - p[0] * p[1]; }));) D = put(D, more.i, more.o, cross ? 'cross' : 'rip')[across];
+      }
+    }
+    return { sheet: sheet, taken: taken, n: n, area: area };
+  }
+  // Strip layouts for all the parts, a sheet at a time: each sheet is the size and way of breaking it down (rips or
+  // crosscuts first) that places the most part area for its price, or the cheapest that places every part left. A run
+  // that passes `work.max` steps is dropped, so no run goes far past the work allowed.
+  function stripRun(list, stocks, kerf, wide, work) {
+    var pool = list.slice(), sheets = [], left = stocks.map(function (s) { return s.left; });
+    work.n += 20;
+    while (pool.length) {
+      var pick = null;
+      stocks.forEach(function (st, si) {
+        if (left[si] <= 0) return;
+        [false, true].forEach(function (cross) {
+          var f = stripSheet(pool, st, cross, wide, kerf, work); if (!f.n || work.n > work.max) return;
+          var score = f.n === pool.length ? -1e9 + st.price : st.price / f.area;
+          if (!pick || score < pick.score - 1e-12) pick = { si: si, f: f, score: score };
+        });
+      });
+      if (!pick || work.n > work.max) return null;
+      left[pick.si]--; sheets.push(pick.f.sheet);
+      pool = pool.filter(function (x, i) { return !pick.f.taken[i]; });
+    }
+    return { sheets: sheets, left: left, order: list };
+  }
   function freeArea(sh) { return sh.free.reduce(function (a, f) { return Math.max(a, f.w * f.h); }, 0); }
   function evalSheets(sheets) { var cost = 0; sheets.forEach(function (s) { cost += s.st.price; }); return cost; }
   function solveSheets(mat, cfg, quick) {
@@ -1041,7 +1096,12 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var best = null, runs = 0, cap = quick ? 40 : 999, work = { n: 0 }, same = function () { return 0; };
     function keep(sortFn, fitFn, split, pref, list) {
       var r = packRun(list || items, stocks, kerf, sortFn, fitFn, split, pref, work);
-      if (!r) return;
+      if (r) consider(r, { fit: FITS.indexOf(fitFn), split: split, pref: pref });
+    }
+    // A strip layout of the parts in the order `list`.
+    function strips(list, wide) { var r = stripRun(list, stocks, kerf, wide, work); if (r) consider(r, { strip: 1, wide: wide ? 1 : 0 }); }
+    // `how` says how run `r` was packed, to pack the same way again.
+    function consider(r, how) {
       // Try each sheet's parts on a cheaper stock size, packed on their own: one smaller sheet, or
       // several that together cost less (two half sheets can beat one full one).
       var kept = [];
@@ -1060,13 +1120,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       });
       r.sheets = kept;
       var cost = evalSheets(r.sheets), spare = r.sheets.length ? Math.max.apply(null, r.sheets.map(freeArea)) : 0;
-      if (!best || cost < best.cost - 1e-6 || (Math.abs(cost - best.cost) < 1e-6 && (r.sheets.length < best.sheets.length || (r.sheets.length === best.sheets.length && spare > best.spare + 1e-6)))) best = { cost: cost, sheets: r.sheets, spare: spare, run: [r.order, FITS.indexOf(fitFn), split, pref] };
+      if (!best || cost < best.cost - 1e-6 || (Math.abs(cost - best.cost) < 1e-6 && (r.sheets.length < best.sheets.length || (r.sheets.length === best.sheets.length && spare > best.spare + 1e-6)))) best = { cost: cost, sheets: r.sheets, spare: spare, order: r.order, how: how };
     }
     // `cfg.replay` packs the parts once, in the order and by the rules of another plan's winning run (its `run`): the
     // tips use it to see whether the parts as they are could already be cut that way.
     var rp = cfg.replay;
     if (rp) {
-      if (rp.order.length === items.length) keep(same, FITS[rp.fit], rp.split, rp.pref, rp.order.map(function (k) { return items[k]; }));
+      if (rp.order.length === items.length) { var again = rp.order.map(function (k) { return items[k]; }); if (rp.strip) strips(again, rp.wide); else keep(same, FITS[rp.fit], rp.split, rp.pref, again); }
       if (best) out.cost = best.cost; else out.errors.push({ pi: -1 });
       return out;
     }
@@ -1075,6 +1135,16 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       if (runs++ >= cap) break outer;
       keep(SORTS[a], FITS[b], SPLITS[c], prefs[pf]);
     }
+    // Then strip layouts, as a shop cuts plywood: the parts by width, length, area or longest side, then the same with
+    // near-equals trading places, until the strip search has done the work allowed.
+    var keys = [function (x) { return x.w; }, function (x) { return x.l; }, function (x) { return x.l * x.w; }, function (x) { return Math.max(x.l, x.w); }];
+    var sw = { n: 0, max: quick ? EFFORT.quickStrip : EFFORT.strip }, srnd = mulberry(7), main = work;
+    work = sw;
+    for (var si = 0; si < (quick ? 8 : 48) && sw.n < sw.max; si++) {
+      var noise = si < 8 ? 0 : 0.5 * srnd(), key = keys[si % 4];
+      strips(items.map(function (x) { return { x: x, k: key(x) * (1 + noise * (srnd() - 0.5)) }; }).sort(function (p, q) { return q.k - p.k; }).map(function (e) { return e.x; }), si % 8 >= 4);
+    }
+    work = main;
     // Then shake the order: big parts still go first, but near-equals trade places, until the search has
     // done the work allowed. (With one stock size, stop once no packing could use fewer sheets.)
     var area = items.reduce(function (a, x) { return a + x.l * x.w; }, 0);
@@ -1090,7 +1160,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     if (!best) { out.errors.push({ pi: -1, only: onlyHave(mat, function (p) { return stocks.some(function (st) { return !isFinite(st.left) && fitsStock({ l: p.len, w: p.wid, rot: !p.grain }, st); }); }) }); return out; }
     out.cost = best.cost;
     // The winning run, to pack the same way again: the parts' order (as places in the list of parts to place) and its rules.
-    out.run = { order: best.run[0].map(function (it) { return items.indexOf(it); }), fit: best.run[1], split: best.run[2], pref: best.run[3] };
+    out.run = Object.assign({ order: best.order.map(function (it) { return items.indexOf(it); }) }, best.how);
     out.items = best.sheets.map(function (sh) {
       return { stock: sh.st.s, price: sh.st.price, L: sh.st.L, W: sh.st.W, placed: sh.placed, root: sh.root, steps: sheetSteps(sh.root), spare: sh.free.filter(function (f) { return f.w >= 3 && f.h >= 3; }) };
     }).sort(function (a, b) { return (a.stock.have ? 1 : 0) - (b.stock.have ? 1 : 0) || b.L * b.W - a.L * a.W; });
