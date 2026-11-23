@@ -1698,6 +1698,44 @@ assert.match(await page.textContent('.saw-bar b'), /^0 of /);
   } finally { await counting.close(); }
 }
 
+// Typing a length waits for a pause before planning: a fifth of a second, or about two thirds for a material whose
+// last plan took over 80 ms. On a slow phone a ¾ plywood cabinet held each key for about a third of a second
+// planning '3', '30' and '30 1' on the way to '30 1/4'. Here every plywood plan takes 120 ms: '30 1/4' typed a key
+// every 300 ms plans once, and Enter plans a finished length at once, then moves on.
+{
+  const slow = kerfSource.replace(/function solveSheets\(mat, cfg, quick\) \{/, '$& if (!quick && !cfg.replay && P.materials.indexOf(mat) >= 0) { planned++; for (var t0 = performance.now(); performance.now() - t0 < 120;); }')
+    .replace('<script>(function () {', '<script>var planned = 0;</script>$&');
+  assert.ok(slow.includes('planned++'), 'the sheet solver isn’t where this test looks for it');
+  const sc = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  try {
+    const sp = await sc.newPage();
+    sp.on('pageerror', e => problems.push('slow plans: ' + e.message));
+    await sp.route(base, r => r.fulfill({ contentType: 'text/html; charset=utf-8', body: slow }));
+    const cab = project('Cabinet', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 34.5, wid: 23.25 }, { name: 'Shelf', qty: 2, len: 33.75, wid: 22 }])]);
+    await sp.goto(base + 'blank');
+    await sp.evaluate(d => localStorage.setItem('kerf.v1', JSON.stringify(d)), { ...saved(cab), tab: 'list' });
+    await sp.goto(base);
+    await sp.waitForSelector('#planOut > *', { state: 'attached' });
+    const len = sp.locator('.prow[data-pid] input[data-f="len"]').first();
+    await len.fill('');
+    await sp.waitForTimeout(1000);
+    await sp.evaluate(() => { planned = 0; });
+    for (const ch of '30 1/4') { await len.press(ch === ' ' ? 'Space' : ch); await sp.waitForTimeout(300); }
+    assert.equal(await sp.evaluate(() => planned), 0, 'typing a slow material’s length at a phone’s pace planned it before the length was done');
+    await sp.waitForTimeout(800);
+    assert.equal(await sp.evaluate(() => planned), 1, 'the length typed wasn’t planned once typing stopped');
+    await len.fill('');
+    await sp.waitForTimeout(1000);
+    await sp.evaluate(() => { planned = 0; });
+    await len.pressSequentially('31');
+    await len.press('Enter');
+    assert.equal(await sp.evaluate(() => planned), 1, 'Enter didn’t plan the length at once');
+    assert.equal(await sp.evaluate(() => document.activeElement.dataset.f), 'wid', 'Enter didn’t move on to the width');
+    await sp.waitForTimeout(800);
+    assert.equal(await sp.evaluate(() => planned), 1, 'the length was planned again after Enter');
+  } finally { await sc.close(); }
+}
+
 // Deleting takes two separate taps: a double tap only asks.
 {
   const keep = project('Keep me', [board('2×4', [{ len: 96, price: 4.28 }], [{ name: 'Leg', qty: 2, len: 30 }])]);

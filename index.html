@@ -1150,7 +1150,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   // Each material's plan is kept with what it was worked out from, and used again until some of that changes, so
   // renaming a part, changing the currency or editing another material plans nothing again. Every search does a set
   // amount of work, not a set time, so solving again would only find the same plan while the page waited.
-  var PLANS = {};
+  var PLANS = {}, TOOK = {}; // TOOK: how long each material's last plan took, in ms (see resolve)
   function solveAll() {
     var last = PLANS; PLANS = {};
     var mats = P.materials.map(function (m) {
@@ -1161,7 +1161,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
         got.r.items.forEach(function (it, k) { it.stock = m.stock[got.at[k]]; });
         got.r.errors.forEach(function (e) { if (e.pi >= 0) e.part = m.parts[e.pi]; });
       } else {
-        var r = solveMat(m);
+        var t0 = performance.now(), r = solveMat(m);
+        TOOK[m.id] = performance.now() - t0;
         got = { key: key, r: r, at: r.items.map(function (it) { return m.stock.indexOf(it.stock); }) };
       }
       PLANS[m.id] = got;
@@ -1247,11 +1248,20 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     ['plan', 'saw'].forEach(function (v) { if (STALE[v] && shows(v)) drawOne(v); });
     if (shows('plan') && Math.abs(planWidth() - W.plan) > 4) renderPlan();
   }
-  function resolve(soon) {
+  // Plans again after an edit: at once, or with `soon` (typing) once typing stops for a moment. A plan of a material
+  // that takes a while (`m`, the one being edited, or the slowest when it's a setting for all of them) waits longer,
+  // so a slow phone doesn't hold up the next key planning '3', '30' and '30 1' on the way to '30 1/4'. That changes
+  // when Kerf plans, never what: the plan is the same on any device.
+  var solving = false;
+  function resolve(soon, m) {
     clearTimeout(solveT);
-    var go = function () { GEN++; solveAll(); draw(); renderErrors(); findTips(GEN); };
-    if (soon) solveT = setTimeout(go, 220); else go();
+    var go = function () { GEN++; solving = false; solveAll(); draw(); renderErrors(); findTips(GEN); };
+    if (!soon) { go(); return; }
+    var took = m ? TOOK[m.id] || 0 : Math.max.apply(null, [0].concat(P.materials.map(function (q) { return TOOK[q.id] || 0; })));
+    solving = true; solveT = setTimeout(go, took > 80 ? 650 : 220);
   }
+  // A length that's finished (Enter, or on to another field) is planned at once, not after the pause for typing.
+  function resolveNow() { if (solving) resolve(); }
 
   // ---------- cut list (inputs) ----------
   var ICON = {
@@ -1343,7 +1353,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function onInput(e) {
     var el = e.target, f = el.dataset && el.dataset.f; if (!f) return;
     var m = findMat(el); if (!m) return;
-    if (f === 'mname') { m.name = el.value; touch(); resolve(true); return; }
+    if (f === 'mname') { m.name = el.value; touch(); resolve(true, m); return; }
     var p = findPart(m, el), s = findStock(m, el), v;
     if (p) {
       if (f === 'pname') p.name = el.value;
@@ -1377,13 +1387,14 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
       }
       refreshChips(m);
     }
-    touch(); resolve(true); renderTips(); // a tip for the part just edited goes at once
+    touch(); resolve(true, m); renderTips(); // a tip for the part just edited goes at once
   }
   function refreshChips(m) { var d = document.querySelector('details.stock[data-mid="' + m.id + '"] .chips'); if (d) d.innerHTML = stockSummary(m); }
   function onBlur(e) {
     var el = e.target, f = el.dataset && el.dataset.f; if (!f) return;
     var m = findMat(el); if (!m) return;
     var p = findPart(m, el), s = findStock(m, el);
+    if (f === 'len' || f === 'wid' || f === 'slen' || f === 'swid') resolveNow();
     if (p && (f === 'len' || f === 'wid') && p[f] > 0) el.value = fieldLen(p[f]);
     if (p && f === 'qty' && p.qty > 0 && el.value.trim() !== String(p.qty)) { el.value = p.qty; el.classList.remove('bad'); } // 600 becomes the 500 planned
     if (s && (f === 'slen' || f === 'swid')) { el.value = fieldLen(f === 'slen' ? s.len : s.wid, { ft: f === 'slen' && m.kind === 'board' }); nameSize(m, s, el.closest('.srow')); }
@@ -1401,6 +1412,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   function onKey(e) {
     var el = e.target, f = el.dataset && el.dataset.f;
     if (e.key !== 'Enter' || !f || e.isComposing) return;
+    if (f === 'len' || f === 'wid' || f === 'slen' || f === 'swid') resolveNow();
     var list = function (root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); };
     if (el.closest('.srow')) {
       e.preventDefault();
@@ -2040,7 +2052,7 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     document.querySelectorAll('#uSeg button').forEach(function (b) { b.addEventListener('click', function () { P.units = U = b.dataset.v; touch(); draw(); renderHead(); renderList(); resolve(); }); });
     [['sKerf', 'kerf', 0, 1], ['sTrim', 'trim', 0, 6], ['sKeep', 'keep', 0, 240]].forEach(function (a) {
       $(a[0]).addEventListener('input', function () { var v = parseLen(this.value); var ok = v >= a[2] && v <= a[3] || (this.value.trim() === '0'); this.classList.toggle('bad', !ok); if (ok) { P[a[1]] = this.value.trim() === '0' ? 0 : v; touch(); resolve(true); } });
-      $(a[0]).addEventListener('blur', function () { this.value = fmt(P[a[1]] || 0, { fine: true }); this.classList.remove('bad'); });
+      $(a[0]).addEventListener('blur', function () { resolveNow(); this.value = fmt(P[a[1]] || 0, { fine: true }); this.classList.remove('bad'); });
     });
     $('sCur').addEventListener('input', function () { P.cur = CUR = this.value.trim() || '$'; touch(); renderList(); resolve(true); });
     $('stx').addEventListener('click', closeSheet); draw();
