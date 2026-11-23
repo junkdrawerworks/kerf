@@ -1164,6 +1164,18 @@ for (const name of ['Projects', 'Shop PDF', 'Settings']) assert.equal(await page
   assert.deepEqual(await heads(), ['1 Shelves', '2 At the saw']);
 }
 
+// A screen reader gets each drawing in words: which parts go on each board and what offcut it leaves, and what each
+// sheet holds and what's left of it. The drawings themselves are left out for it.
+{
+  await open(null);
+  const plan = await page.locator('#planOut').ariaSnapshot();
+  assert.ok(plan.includes('listitem: "Board 1, 10 ft: B 48 in, B 48 in, C 21 in, leaves a 2 5/8 in offcut"') && plan.includes('listitem: "Board 8, 8 ft: A 72 in, C 21 in, leaves a 2 3/4 in offcut"'), 'the boards aren’t in words:\n' + plan);
+  assert.ok(plan.includes('paragraph: "Sheet 1, 48 in × 96 in: 4 × A Shelf 47 3/4 in × 23 3/4 in"'), 'the sheet isn’t in words:\n' + plan);
+  assert.ok(!/- img/.test(plan), 'a drawing is still read as a picture');
+  await open(saved(project('Sides', [sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }], [{ name: 'Side', qty: 2, len: 30.25, wid: 23.75 }])])));
+  assert.match(await page.locator('#planOut').ariaSnapshot(), /paragraph: "Sheet 1, 48 in × 96 in: 2 × A Side 30 1\/4 in × 23 3\/4 in; left over 65 5\/8 in × 48 in"/);
+}
+
 // Ticking a cut from the keyboard keeps focus on that cut, and Start over moves it to the first one.
 await view('saw');
 await page.locator('#sawOut .cut[data-k]').nth(1).focus();

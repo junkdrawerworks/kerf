@@ -1571,7 +1571,13 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var labelW = Math.max(40, Math.ceil(Math.max.apply(null, m.items.map(function (b) { return fmt(b.stock.len, { ft: true }).length; })) * 7.2 + 4));
     var rightW = m.items.some(function (b) { return b.stock.have; }) ? 44 : 0; // room for "yours" after a board you have
     var drawW = width - labelW - rightW, px = drawW / maxLen, rowH = 34, gap = 22, top = 24, H = top + m.items.length * (rowH + gap) - gap + 6;
-    var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + H + '" role="img" aria-label="' + esc(m.mat.name) + ' cutting diagram">' + tapeRuler(labelW, drawW, maxLen, 2);
+    // A screen reader gets the drawing as a list, a board to an item: "Board 1, 10 ft: B 48 in, B 48 in, C 21 in, leaves a
+    // 2 5/8 in offcut". The drawing itself is left out for it.
+    var said = m.items.map(function (b, bi) {
+      return '<li>Board ' + (bi + 1) + ', ' + esc(sayLen(b.stock.len, { ft: true })) + (b.stock.have ? ', yours' : '') + ': ' + (b.trim > 0 ? 'trim ' + esc(sayLen(b.trim)) + ' off each end, ' : '') +
+        b.pieces.map(function (p) { return letter(p.pi) + ' ' + esc(sayLen(p.len)); }).join(', ') + (b.offcut > 0 ? ', leaves a ' + esc(sayLen(b.offcut)) + ' offcut' + (b.offcut >= P.keep ? ' worth keeping' : '') : '') + '</li>';
+    }).join('');
+    var s = '<ol class="sr">' + said + '</ol><svg class="diag" viewBox="0 0 ' + width + ' ' + H + '" aria-hidden="true">' + tapeRuler(labelW, drawW, maxLen, 2);
     m.items.forEach(function (b, bi) {
       var y = top + bi * (rowH + gap), bw = b.stock.len * px, x = labelW;
       s += '<text class="dg-metab" x="0" y="' + (y + rowH / 2 - 7) + '">' + (bi + 1) + '</text><text class="dg-meta" x="0" y="' + (y + rowH / 2 + 8) + '">' + esc(fmt(b.stock.len, { ft: true })) + '</text>';
@@ -1609,7 +1615,15 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     var out = '';
     m.items.forEach(function (sh, si) {
       var width = Math.min(W.plan, 720), px = (width - 2) / sh.L, H = sh.W * px, top = 22;
-      var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + (H + top + 8).toFixed(1) + '" role="img" aria-label="Sheet ' + (si + 1) + ' layout" style="margin-top:' + (si ? 16 : 6) + 'px">';
+      // A screen reader gets the sheet in words instead of the drawing: "Sheet 1, 4 ft × 8 ft: 4 × A Shelf 47 3/4 in × 23 3/4
+      // in; left over 48 in × 6 in", the pieces left over 6" or more each way, as the shop PDF labels them.
+      var count = {}, order = [];
+      sh.placed.forEach(function (p) { if (!count[p.pi]) { count[p.pi] = 0; order.push(p.pi); } count[p.pi]++; });
+      var spare = sh.spare.filter(function (f) { return f.w >= 6 && f.h >= 6; });
+      out += '<p class="sr">Sheet ' + (si + 1) + ', ' + esc(sayLen(sh.W) + ' × ' + sayLen(sh.L)) + (sh.stock.have ? ', yours' : '') + ': ' + order.map(function (pi) {
+        var q = m.mat.parts[pi]; return count[pi] + ' × ' + letter(pi) + (q && q.name ? ' ' + esc(q.name) : '') + ' ' + esc(sayLen(q.len) + ' × ' + sayLen(q.wid));
+      }).join(', ') + (spare.length ? '; left over ' + spare.map(function (f) { return esc(sayLen(f.w) + ' × ' + sayLen(f.h)); }).join(' and ') : '') + '</p>';
+      var s = '<svg class="diag" viewBox="0 0 ' + width + ' ' + (H + top + 8).toFixed(1) + '" aria-hidden="true" style="margin-top:' + (si ? 16 : 6) + 'px">';
       s += '<text class="dg-metab" x="0" y="8">Sheet ' + (si + 1) + '</text><text class="dg-meta" x="62" y="8">' + esc(fmt(sh.W) + ' × ' + fmt(sh.L)) + (sh.stock.have ? ' · yours' : '') + '</text>';
       var ox = 1, oy = top;
       s += '<rect class="dg-ply" x="' + ox + '" y="' + oy + '" width="' + (sh.L * px).toFixed(1) + '" height="' + H.toFixed(1) + '"/>';
