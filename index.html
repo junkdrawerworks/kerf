@@ -1021,8 +1021,6 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     for (var pi = 0; pi < mat.parts.length; pi++) { var p = mat.parts[pi]; if (p.len > 0 && p.qty > 0 && (mat.kind !== 'sheet' || p.wid > 0) && !buys(p)) return pi; }
     return -1;
   }
-  // A board's last part comes off with no cut only when it's all that's left: nothing past it (a sliver
-  // thinner than the kerf still has to be cut away) and no far end to square up.
   // Boards cut alike in plan `m`: the same size, yours or bought, and the same parts in the same order. For each board,
   // the place of the first board it's cut like (its own, if none before it is). A board ripped into parts, and a sheet,
   // is drawn and listed on its own.
@@ -1040,6 +1038,8 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
     same.forEach(function (f, i) { var r = out[out.length - 1]; if (r && same[r[0]] === f && r[1] === i - 1) r[1] = i; else out.push([i, i]); });
     return out;
   }
+  // A board's last part comes off with no cut only when it's all that's left: nothing past it (a sliver
+  // thinner than the kerf still has to be cut away) and no far end to square up.
   function lastIsLeft(b) { return !(b.trim > 0) && b.cap - b.need < 1 / 32; }
   // An offcut is worth keeping when the length shown for it (to the sixteenth, or the half millimetre) is at least the
   // one shown for Keep offcuts over: a 300 mm offcut that works out a hair short of 300 mm is still 300 mm.
