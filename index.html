@@ -1551,12 +1551,14 @@ textarea{width:100%;min-height:110px;font:13px var(--mono);background:var(--surf
   }
 
   // ---------- drawings ----------
+  // Wavy lines along the grain, each curve kept inside the part (its bend as well as its ends), so none runs past the end
+  // of a board or into the part beside it.
   function grainPaths(x, y, w, h, seed) {
-    var r = mulberry(seed), d = '', rows = Math.max(1, Math.floor(h / 7));
+    var r = mulberry(seed), d = '', rows = Math.max(1, Math.floor(h / 7)), inY = function (v) { return Math.max(y + 0.5, Math.min(y + h - 0.5, v)).toFixed(1); };
     for (var i = 0; i < rows; i++) {
       var yy = y + (i + 0.5 + (r() - 0.5) * 0.6) * h / rows, amp = 0.6 + r() * 1.2, ph = r() * 6;
       d += 'M' + x.toFixed(1) + ' ' + yy.toFixed(1);
-      for (var xx = x + 14; xx <= x + w + 14; xx += 14) d += ' Q' + (xx - 7).toFixed(1) + ' ' + (yy + Math.sin(xx / 23 + ph) * amp * 2).toFixed(1) + ' ' + Math.min(xx, x + w).toFixed(1) + ' ' + (yy + Math.sin(xx / 31 + ph) * amp).toFixed(1);
+      for (var xx = x + 14; xx <= x + w + 14; xx += 14) d += ' Q' + Math.min(xx - 7, x + w).toFixed(1) + ' ' + inY(yy + Math.sin(xx / 23 + ph) * amp * 2) + ' ' + Math.min(xx, x + w).toFixed(1) + ' ' + inY(yy + Math.sin(xx / 31 + ph) * amp);
     }
     return d;
   }

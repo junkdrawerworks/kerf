@@ -1168,6 +1168,24 @@ assert.equal(await page.$eval('#planOut div.sec', d => getComputedStyle(d).margi
   await page.setViewportSize({ width: 390, height: 844 });
 }
 
+// The grain stays on its board or part: its curves used to bulge past the end of a board by up to 2.6 px on a laptop,
+// and showed as tan hooks past each 8′ board on a phone with one on hand.
+{
+  const studs = [{ len: 96, price: 4.28 }, { len: 120, price: 6.38 }, { len: 144, price: 7.68 }, { len: 192, price: 10.98 }];
+  const example = (...more) => project('Shelves', [board('2×4', [...studs, ...more], [{ name: 'Leg', qty: 4, len: 72 }, { name: 'Front & back rail', qty: 8, len: 48 }, { name: 'Side rail', qty: 8, len: 21 }]),
+    sheet('¾ plywood', [{ len: 96, wid: 48, price: 58 }, { len: 48, wid: 48, price: 34 }, { len: 48, wid: 24, price: 21 }], [{ name: 'Shelf', qty: 4, len: 47.75, wid: 23.75 }])]);
+  for (const job of [example(), example({ len: 96, have: 1 })]) for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await open(saved(job));
+    const over = await page.$$eval('#planOut path.dg-grain', ps => ps.map(p => {
+      const a = p.getBBox(), b = p.previousElementSibling.getBBox();
+      return Math.max(b.x - a.x, a.x + a.width - b.x - b.width, b.y - a.y, a.y + a.height - b.y - b.height);
+    }).filter(o => o > 0.5).map(o => o.toFixed(1)));
+    assert.deepEqual(over, [], `the grain runs past its wood at ${width} wide`);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 // A board you already have is labelled "yours" inside its drawing, not cut off past the edge.
 await open(saved(project('Yours', [board('2×4', [{ len: 96, price: 4.28 }, { len: 96, have: 1 }], [{ name: 'Leg', qty: 3, len: 72 }])])));
 assert.ok(await page.evaluate(() => {
